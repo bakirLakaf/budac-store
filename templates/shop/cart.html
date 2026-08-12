@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}سلة المشتريات — {{ store_name }}{% endblock %}
+{% block content %}
+
+<section class="cart-page">
+    <div class="container">
+        <h1 class="page-heading">سلة المشتريات</h1>
+
+        {% if lines %}
+        <div class="cart-layout">
+            <div class="cart-lines">
+                {% for line in lines %}
+                <div class="cart-line {{ 'has-issue' if line.exceeds_stock }}">
+                    <div class="cart-line-image">
+                        {% if line.image_filename %}
+                            {% set folder = 'offers' if line.kind == 'offer' else 'products' %}
+                            <img src="{{ url_for('static', filename='img/' + folder + '/' + (line.image_filename | thumb)) }}" alt="" loading="lazy">
+                        {% else %}
+                            <span class="ph-monogram">{{ line.name[0] }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="cart-line-info">
+                        {% if line.kind == 'offer' %}
+                            <span class="line-tag">باقة عرض</span>
+                            <a href="{{ url_for('shop.offer_detail', slug=line.slug) }}" class="cart-line-name">{{ line.name }}</a>
+                        {% else %}
+                            <a href="{{ url_for('shop.product_detail', slug=line.slug) }}" class="cart-line-name">{{ line.name }}</a>
+                            {% if line.variant_label %}<p class="cart-line-variant">{{ line.variant_label }}</p>{% endif %}
+                        {% endif %}
+                        <p class="cart-line-unit">{{ line.unit_price_display }} / الوحدة</p>
+                    </div>
+
+                    <form method="post" action="{{ url_for('cart.update') }}" class="cart-qty-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="key" value="{{ line.key }}">
+                        <input type="number" name="quantity" value="{{ line.quantity }}" min="1" max="50" class="qty-field">
+                        <button type="submit" class="btn-mini">تحديث</button>
+                    </form>
+
+                    <div class="cart-line-total">{{ line.line_total_display }}</div>
+
+                    <form method="post" action="{{ url_for('cart.remove') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="key" value="{{ line.key }}">
+                        <button type="submit" class="btn-remove" title="حذف">×</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if upsells %}
+            <div class="upsell-box">
+                <h3 class="upsell-title">💡 يمكن يعجبك معاهم</h3>
+                <div class="upsell-items">
+                    {% for u in upsells %}
+                    <div class="upsell-item">
+                        <a href="{{ url_for('shop.product_detail', slug=u.product.slug) }}" class="upsell-image">
+                            {% if u.product.image_filename %}
+                                <img src="{{ url_for('static', filename='img/products/' + (u.product.image_filename | thumb)) }}" alt="" loading="lazy">
+                            {% else %}
+                                <span class="ph-monogram">{{ u.product.name[0] }}</span>
+                            {% endif %}
+                        </a>
+
+                        <div class="upsell-info">
+                            <a href="{{ url_for('shop.product_detail', slug=u.product.slug) }}" class="upsell-name">{{ u.product.name }}</a>
+                            <p class="upsell-price">
+                                {{ "{:,}".format(u.final_price) }} دج
+                                {% if u.discount_percent %}
+                                    <span class="upsell-was">{{ u.product.price_display }}</span>
+                                    <span class="upsell-badge">-{{ u.discount_percent }}%</span>
+                                {% endif %}
+                            </p>
+                        </div>
+
+                        <form method="post" action="{{ url_for('cart.add') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="kind" value="product">
+                            <input type="hidden" name="item_id" value="{{ u.product.id }}">
+                            <input type="hidden" name="quantity" value="1">
+                            <button type="submit" class="btn-mini">+ زيد</button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <aside class="cart-summary">
+                <h2 class="summary-title">ملخص الطلبية</h2>
+
+                <form method="post" action="{{ url_for('cart.apply_coupon') }}" class="coupon-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="text" name="coupon_code" placeholder="كود الخصم"
+                           value="{{ coupon.code if coupon else '' }}">
+                    <button type="submit" class="btn-mini">تطبيق</button>
+                </form>
+
+                {% if coupon_error %}
+                    <p class="coupon-note coupon-error">{{ coupon_error }}</p>
+                {% endif %}
+
+                {% if coupon %}
+                <div class="coupon-applied">
+                    <span>✓ {{ coupon.code }} ({{ coupon.value_display }})</span>
+                    <form method="post" action="{{ url_for('cart.remove_coupon') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn-link">إلغاء</button>
+                    </form>
+                </div>
+                {% endif %}
+
+                <div class="summary-row">
+                    <span>المنتجات</span>
+                    <span>{{ "{:,}".format(subtotal) }} دج</span>
+                </div>
+
+                {% if discount %}
+                <div class="summary-row summary-discount">
+                    <span>الخصم</span>
+                    <span>-{{ "{:,}".format(discount) }} دج</span>
+                </div>
+                {% endif %}
+
+                <div class="summary-row summary-muted">
+                    <span>التوصيل</span>
+                    <span>يُحسب فالخطوة الجاية</span>
+                </div>
+
+                <div class="summary-row summary-total">
+                    <span>المجموع</span>
+                    <span>{{ "{:,}".format(subtotal - discount) }} دج +</span>
+                </div>
+
+                {% if stock_issues %}
+                    <p class="checkout-blocked">عدّل الكميات المعلّمة قبل ما تكمل</p>
+                    <button class="btn-primary btn-block" disabled>متابعة الطلب</button>
+                {% else %}
+                    <a href="{{ url_for('cart.checkout') }}" class="btn-primary btn-block">متابعة الطلب</a>
+                {% endif %}
+
+                <a href="{{ url_for('shop.home') }}" class="continue-link">← كمّل التسوق</a>
+            </aside>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>السلة فارغة.</p>
+            <a href="{{ url_for('shop.home') }}" class="btn-primary">تصفح المنتجات</a>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+{% endblock %}

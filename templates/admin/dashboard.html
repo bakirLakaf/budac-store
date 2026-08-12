@@ -1,0 +1,100 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">نظرة عامة</h1>
+
+<div class="stat-grid">
+    <div class="stat-card {{ 'stat-highlight' if pending_orders }}">
+        <span class="stat-value">{{ pending_orders }}</span>
+        <span class="stat-label">طلبية جديدة</span>
+        {% if pending_orders %}<span class="stat-note">تحتاج تأكيد</span>{% endif %}
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ open_orders }}</span>
+        <span class="stat-label">طلبية نشطة</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ "{:,}".format(delivered_revenue) }}</span>
+        <span class="stat-label">إيرادات مسلّمة (دج)</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ active_products }}</span>
+        <span class="stat-label">منتج مفعّل</span>
+        {% if total_products > active_products %}
+            <span class="stat-note">{{ total_products - active_products }} معطّل</span>
+        {% endif %}
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ total_categories }}</span>
+        <span class="stat-label">تصنيف</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ active_offers }}</span>
+        <span class="stat-label">عرض خاص شغال</span>
+    </div>
+</div>
+
+{% if abandoned_new or pending_reviews_count or products_without_images or uncategorized %}
+<h2 class="section-title">يحتاج انتباهك</h2>
+<div class="alert-grid">
+    {% if abandoned_new %}
+    <div class="alert-card alert-money">
+        <strong>💰 {{ abandoned_new }} سلة متروكة</strong>
+        <p>قيمة محتملة: <strong>{{ "{:,}".format(abandoned_value) }} دج</strong></p>
+        <p class="muted-cell">زبائن بداو الطلب وما كملوش — مكالمة ترجّع بزاف منهم.</p>
+        <a href="{{ url_for('admin.abandoned_list') }}">شوفهم ←</a>
+    </div>
+    {% endif %}
+
+    {% if pending_reviews_count %}
+    <div class="alert-card alert-warning">
+        <strong>{{ pending_reviews_count }} تقييم ينتظر موافقتك</strong>
+        <p class="muted-cell">ما يبانوش فالمتجر حتى توافق.</p>
+        <a href="{{ url_for('admin.reviews_list') }}">راجعهم ←</a>
+    </div>
+    {% endif %}
+    {% if products_without_images %}
+    <div class="alert-card alert-warning">
+        <strong>{{ products_without_images }} منتج بلا صورة</strong>
+        <p>المنتجات بلا صور تبان ضعيفة وتقلل المبيعات.</p>
+        <a href="{{ url_for('admin.products_list') }}">راجع المنتجات ←</a>
+    </div>
+    {% endif %}
+
+    {% if uncategorized %}
+    <div class="alert-card alert-warning">
+        <strong>{{ uncategorized }} منتج بلا تصنيف</strong>
+        <p>ما يبانوش كي الزبون يفلتر حسب التصنيف.</p>
+        <a href="{{ url_for('admin.products_list') }}">صنّفهم ←</a>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if recent_orders %}
+<h2 class="section-title">آخر الطلبيات</h2>
+<table class="admin-table">
+    <thead><tr><th>الرقم</th><th>الزبون</th><th>الولاية</th><th>المجموع</th><th>الحالة</th></tr></thead>
+    <tbody>
+        {% for o in recent_orders %}
+        <tr>
+            <td><a href="{{ url_for('admin.order_detail', order_id=o.id) }}" class="row-link">{{ o.order_number }}</a></td>
+            <td>{{ o.customer_name }}</td>
+            <td>{{ o.wilaya_name }}</td>
+            <td><strong>{{ o.total_display }}</strong></td>
+            <td><span class="status-pill status-{{ o.status }}">{{ o.status_label }}</span></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<h2 class="section-title">إجراءات سريعة</h2>
+<div class="quick-actions">
+    <a href="{{ url_for('admin.product_form') }}" class="btn-admin">+ منتج جديد</a>
+    <a href="{{ url_for('admin.offer_form') }}" class="btn-admin btn-gold">+ عرض خاص</a>
+    <a href="{{ url_for('admin.coupons_list') }}" class="btn-admin btn-ghost">+ كوبون خصم</a>
+    <a href="{{ url_for('admin.categories_list') }}" class="btn-admin btn-ghost">إدارة التصنيفات</a>
+</div>
+
+{% endblock %}

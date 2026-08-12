@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ store_name }} — {{ store_tagline }}{% endblock %}</title>
+
+    {# ---------- SEO + المشاركة الاجتماعية ---------- #}
+    <meta name="description" content="{% block meta_description %}{{ store_name }} — متجر جزائري لمستلزمات الديكور والحرف اليدوية. توصيل لكل الولايات، الدفع عند الاستلام.{% endblock %}">
+    <link rel="canonical" href="{{ request.url }}">
+
+    {# Open Graph: يخلي الرابط يبان بصورة وعنوان كي يتشارك فواتساب وفيسبوك #}
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:site_name" content="{{ store_name }}">
+    <meta property="og:title" content="{% block og_title %}{{ store_name }} — ديكور و إكسسوارات{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}متجر جزائري لمستلزمات الديكور والحرف اليدوية. توصيل لكل الولايات، الدفع عند الاستلام.{% endblock %}">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:image" content="{% block og_image %}{{ url_for('static', filename='img/brand/logo.png', _external=True) }}{% endblock %}">
+    <meta property="og:locale" content="ar_DZ">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    {# الخطوط: قلّلنا الأوزان من 6 لـ4 (كل وزن = ملف عربي ~100 كيلو).
+       والتحميل غير معطّل للعرض: الصفحة تبان فورًا بخط النظام، والخط الجميل
+       يبدّلو كي يوصل — بدل ما الزائر يشوف صفحة بيضاء 2 ثواني. #}
+    <link rel="preload" as="style"
+          href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Tajawal:wght@500;700&display=swap">
+    <link rel="stylesheet" media="print" onload="this.media='all'"
+          href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Tajawal:wght@500;700&display=swap">
+    <noscript>
+        <link rel="stylesheet"
+              href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Tajawal:wght@500;700&display=swap">
+    </noscript>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
+
+    {# ---------- بيكسل فيسبوك (يتحمّل فقط إذا معمّر فالإعدادات) ---------- #}
+    {% if fb_pixel_id %}
+    <script>
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+    n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+    document,'script','https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', '{{ fb_pixel_id }}');
+    fbq('track', 'PageView');
+    </script>
+    <noscript><img height="1" width="1" style="display:none"
+        src="https://www.facebook.com/tr?id={{ fb_pixel_id }}&ev=PageView&noscript=1"/></noscript>
+    {% endif %}
+
+    {# ---------- بيكسل تيك توك ---------- #}
+    {% if tiktok_pixel_id %}
+    <script>
+    !function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];
+    ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"];
+    ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};
+    for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);
+    ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e};
+    ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js";
+    ttq._i=ttq._i||{};ttq._i[e]=[];ttq._i[e]._u=r;ttq._t=ttq._t||{};ttq._t[e]=+new Date;
+    ttq._o=ttq._o||{};ttq._o[e]=n||{};var o=d.createElement("script");o.type="text/javascript";
+    o.async=!0;o.src=r+"?sdkid="+e+"&lib="+t;var a=d.getElementsByTagName("script")[0];
+    a.parentNode.insertBefore(o,a)};
+    ttq.load('{{ tiktok_pixel_id }}');
+    ttq.page();
+    }(window,document,'ttq');
+    </script>
+    {% endif %}
+</head>
+<body>
+
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="{{ url_for('shop.home') }}" class="logo">
+                <img src="{{ url_for('static', filename='img/brand/logo.png') }}"
+                     alt="{{ store_name }}" class="logo-img" width="445" height="217">
+                <span class="logo-tagline">للديكور و الأكسسوارات</span>
+            </a>
+
+            <form method="get" action="{{ url_for('shop.search') }}" class="header-search" role="search">
+                <input type="search" name="q" value="{{ request.args.get('q', '') }}"
+                       placeholder="على ماذا تبحث؟" aria-label="بحث فالمنتجات">
+                <button type="submit" aria-label="بحث">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+                    </svg>
+                </button>
+            </form>
+
+            <nav class="header-nav">
+                <a href="{{ url_for('shop.home') }}">المنتجات</a>
+                <a href="{{ url_for('cart.track_order') }}">تتبّع طلبيتك</a>
+                <a href="{{ url_for('cart.view_cart') }}" class="cart-link" aria-label="السلة">
+                    <svg class="cart-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M6 8h12l-1 12.5a1 1 0 0 1-1 .9H8a1 1 0 0 1-1-.9L6 8Z"/>
+                        <path d="M9 8V6a3 3 0 0 1 6 0v2"/>
+                    </svg>
+                    <span class="cart-count {{ 'has-items' if cart_count }}">{{ cart_count }}</span>
+                </a>
+            </nav>
+        </div>
+        <div class="scallop-divider" aria-hidden="true"></div>
+    </header>
+
+    <main>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="container flash-container">
+                {% for category, message in messages %}
+                    <div class="flash flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <p class="footer-brand">{{ store_name }} — {{ store_tagline }}</p>
+            <p class="footer-meta">التوصيل لكل ولايات الجزائر · الدفع عند الاستلام</p>
+        </div>
+    </footer>
+
+    <footer class="site-footer">
+        <div class="footer-intro">
+            <div class="container">
+                <p class="footer-intro-title">{{ store_name }} — ديكور و إكسسوارات</p>
+                <p class="footer-intro-sub">التوصيل لكل ولايات الجزائر · الدفع عند الاستلام</p>
+            </div>
+        </div>
+
+        <div class="container footer-grid">
+            <div class="footer-col footer-brand">
+                <img src="{{ url_for('static', filename='img/brand/logo.png') }}"
+                     alt="{{ store_name }}" class="footer-logo" width="445" height="217" loading="lazy">
+                <p class="footer-tagline">للديكور و الأكسسوارات</p>
+                <p class="footer-about">
+                    متجر جزائري متخصص فمستلزمات الديكور والحرف اليدوية — أشرطة المرايا،
+                    الإكسسوارات، ومواد التشطيب. جودة مضمونة وتوصيل لكل الولايات.
+                </p>
+            </div>
+
+            <div class="footer-col">
+                <h3 class="footer-heading">تسوّق</h3>
+                <ul class="footer-links">
+                    <li><a href="{{ url_for('shop.home') }}">كل المنتجات</a></li>
+                    <li><a href="{{ url_for('shop.home') }}#offers">العروض الخاصة</a></li>
+                    <li><a href="{{ url_for('shop.home') }}#categories">التصنيفات</a></li>
+                    <li><a href="{{ url_for('cart.view_cart') }}">سلة المشتريات</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-col">
+                <h3 class="footer-heading">خدمة الزبائن</h3>
+                <ul class="footer-links">
+                    <li><a href="{{ url_for('cart.track_order') }}">تتبّع طلبيتك</a></li>
+                    <li><a href="{{ url_for('shop.page', slug='shipping') }}">التوصيل والأسعار</a></li>
+                    <li><a href="{{ url_for('shop.page', slug='returns') }}">الإرجاع والاستبدال</a></li>
+                    <li><a href="{{ url_for('shop.page', slug='about') }}">من نحن</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-col">
+                <h3 class="footer-heading">تواصل معنا</h3>
+                <ul class="footer-links footer-contact">
+                    <li>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                            <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/>
+                        </svg>
+                        <a href="tel:+213676672334" dir="ltr">0676 67 23 34</a>
+                    </li>
+                    <li>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                            <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-4-1L3 20l1.2-4.9A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z"/>
+                        </svg>
+                        <a href="https://wa.me/213676672334" target="_blank" rel="noopener">واتساب</a>
+                    </li>
+                    <li class="footer-payment">💵 الدفع عند الاستلام</li>
+                    <li class="footer-payment">🚚 توصيل لكل 58 ولاية</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <div class="container">
+                <p>جميع الحقوق محفوظة لدى {{ store_name }} © {{ current_year }}</p>
+            </div>
+        </div>
+    </footer>
+
+    {# زر واتساب عائم — فالجزائر هو قناة التواصل الأساسية.
+       الرسالة تتعمّر تلقائيًا حسب الصفحة اللي فيها الزبون. #}
+    <a href="https://wa.me/{{ whatsapp_number }}?text={{ whatsapp_message | urlencode }}"
+       class="wa-float" target="_blank" rel="noopener" aria-label="راسلنا على واتساب">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+            <path d="M17.5 14.4c-.3-.1-1.8-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.1-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5 4.5.7.3 1.2.5 1.7.6.7.2 1.3.2 1.8.1.6-.1 1.8-.7 2-1.4.3-.7.3-1.3.2-1.4-.1-.1-.3-.2-.5-.3z"/>
+            <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3.1.8.8-3-.2-.3a8.2 8.2 0 1 1 7.2 3.9z"/>
+        </svg>
+        <span class="wa-float-label">راسلنا</span>
+    </a>
+
+    <script src="{{ url_for('static', filename='js/site.js') }}" defer></script>
+</body>
+</html>

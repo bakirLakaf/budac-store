@@ -1,0 +1,125 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">كوبونات الخصم <span class="count-pill">{{ coupons|length }}</span></h1>
+
+<div class="form-grid">
+    <div class="form-col">
+        {% if coupons %}
+        <table class="admin-table">
+            <thead><tr><th>الكود</th><th>النوع</th><th>القيمة</th><th>حد أدنى</th><th>الاستعمال</th><th>ينتهي</th><th></th></tr></thead>
+            <tbody>
+                {% for c in coupons %}
+                <tr class="{{ 'row-muted' if not c.is_active or c.is_exhausted }}">
+                    <td><code class="coupon-code">{{ c.code }}</code></td>
+                    <td>{{ c.type_label }}</td>
+                    <td><strong>{{ c.value_display }}</strong>
+                        {% if c.max_discount %}<br><small class="muted-cell">سقف {{ "{:,}".format(c.max_discount) }} دج</small>{% endif %}
+                    </td>
+                    <td>{% if c.min_order_amount %}{{ "{:,}".format(c.min_order_amount) }} دج{% else %}—{% endif %}</td>
+                    <td>
+                        {{ c.used_count }}{% if c.usage_limit %} / {{ c.usage_limit }}{% endif %}
+                        {% if c.is_exhausted %}<br><span class="tag tag-danger">استُنفد</span>{% endif %}
+                    </td>
+                    <td>{{ c.ends_at.strftime('%Y-%m-%d') if c.ends_at else '—' }}</td>
+                    <td class="row-actions">
+                        <form method="post" action="{{ url_for('admin.coupon_toggle', coupon_id=c.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn-admin btn-sm {{ 'btn-ghost' if c.is_active else '' }}">
+                                {{ 'تعطيل' if c.is_active else 'تفعيل' }}
+                            </button>
+                        </form>
+                        <form method="post" action="{{ url_for('admin.coupon_delete', coupon_id=c.id) }}"
+                              onsubmit="return confirm('تمسح الكوبون «{{ c.code }}»؟')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn-admin btn-sm btn-danger">حذف</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-box"><p>ماكاين حتى كوبون بعد.</p></div>
+        {% endif %}
+    </div>
+
+    <div class="form-col">
+        <h2 class="section-title">كوبون جديد</h2>
+        <form method="post" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="field">
+                <span>الكود *</span>
+                <input type="text" name="code" required placeholder="مثلاً: BUDAC10" style="text-transform: uppercase">
+            </label>
+
+            <label class="field">
+                <span>نوع الخصم *</span>
+                <select name="discount_type" id="typeSelect">
+                    <option value="{{ Coupon.TYPE_PERCENT }}">نسبة مئوية (%)</option>
+                    <option value="{{ Coupon.TYPE_FIXED }}">مبلغ ثابت (دج)</option>
+                    <option value="{{ Coupon.TYPE_FREE_SHIPPING }}">توصيل مجاني</option>
+                </select>
+            </label>
+
+            <label class="field" id="valueField">
+                <span>القيمة *</span>
+                <input type="number" name="value" min="0" value="10">
+                <small class="hint" id="valueHint">النسبة من 1 لـ100</small>
+            </label>
+
+            <label class="field" id="maxDiscountField">
+                <span>سقف الخصم (اختياري)</span>
+                <input type="number" name="max_discount" min="0" placeholder="مثلاً 1000">
+                <small class="hint">يمنع خصم كبير بزاف على الطلبيات الكبيرة</small>
+            </label>
+
+            <label class="field">
+                <span>الحد الأدنى للطلبية (دج)</span>
+                <input type="number" name="min_order_amount" min="0" value="0">
+            </label>
+
+            <label class="field">
+                <span>عدد مرات الاستعمال (اختياري)</span>
+                <input type="number" name="usage_limit" min="1" placeholder="بلا حد إذا خليتو فارغ">
+            </label>
+
+            <div class="field-row">
+                <label class="field"><span>يبدأ</span><input type="date" name="starts_at"></label>
+                <label class="field"><span>ينتهي</span><input type="date" name="ends_at"></label>
+            </div>
+
+            <button type="submit" class="btn-admin btn-block">إنشاء الكوبون</button>
+        </form>
+    </div>
+</div>
+
+<script>
+// نخبيو الحقول اللي ما عندهاش معنى حسب النوع المختار
+(function () {
+    var typeSelect = document.getElementById('typeSelect');
+    var valueField = document.getElementById('valueField');
+    var maxField = document.getElementById('maxDiscountField');
+    var hint = document.getElementById('valueHint');
+    var valueInput = valueField.querySelector('input');
+
+    function sync() {
+        var t = typeSelect.value;
+        if (t === '{{ Coupon.TYPE_FREE_SHIPPING }}') {
+            valueField.style.display = 'none';
+            maxField.style.display = 'none';
+            valueInput.required = false;
+            valueInput.value = 0;
+        } else {
+            valueField.style.display = '';
+            valueInput.required = true;
+            maxField.style.display = (t === '{{ Coupon.TYPE_PERCENT }}') ? '' : 'none';
+            hint.textContent = (t === '{{ Coupon.TYPE_PERCENT }}') ? 'النسبة من 1 لـ100' : 'المبلغ بالدينار';
+        }
+    }
+    typeSelect.addEventListener('change', sync);
+    sync();
+})();
+</script>
+
+{% endblock %}

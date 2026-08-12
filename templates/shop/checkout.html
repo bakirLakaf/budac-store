@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}إتمام الطلب — {{ store_name }}{% endblock %}
+{% block content %}
+
+<section class="checkout-page">
+    <div class="container">
+        <h1 class="page-heading">إتمام الطلب</h1>
+
+        <form method="post" class="checkout-layout">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="checkout-form-col">
+                <h2 class="summary-title">معلوماتك</h2>
+
+                <label class="field">
+                    <span>الاسم واللقب *</span>
+                    <input type="text" name="name" required value="{{ form.get('name', '') }}">
+                </label>
+
+                <label class="field">
+                    <span>رقم الهاتف *</span>
+                    <input type="tel" name="phone" required inputmode="tel" value="{{ form.get('phone', '') }}"
+                           placeholder="0X XX XX XX XX">
+                </label>
+
+                <h2 class="summary-title">التوصيل</h2>
+
+                <label class="field">
+                    <span>شركة التوصيل *</span>
+                    <select name="carrier_code" id="carrierSelect" required>
+                        <option value="">اختر شركة التوصيل</option>
+                        {% for c in carriers %}
+                        <option value="{{ c.code }}" {{ 'selected' if form.get('carrier_code') == c.code }}>{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="field">
+                    <span>الولاية *</span>
+                    <select name="wilaya_code" id="wilayaSelect" required>
+                        <option value="">اختر الولاية</option>
+                        {% for w in wilayas %}
+                        <option value="{{ w.code }}" {{ 'selected' if form.get('wilaya_code') == w.code }}>{{ w.code }} ~ {{ w.name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="field">
+                    <span>نوع التوصيل *</span>
+                    <select name="delivery_type" id="deliveryTypeSelect" required>
+                        <option value="home" {{ 'selected' if form.get('delivery_type', 'home') == 'home' }}>التوصيل للمنزل</option>
+                        <option value="office" {{ 'selected' if form.get('delivery_type') == 'office' }}>التوصيل لمكتب الشركة</option>
+                    </select>
+                </label>
+
+                <label class="field" id="communeField">
+                    <span>البلدية</span>
+                    <input type="text" name="commune" value="{{ form.get('commune', '') }}" placeholder="اكتب اسم بلديتك">
+                </label>
+
+                <label class="field">
+                    <span>عنوان دقيق / نقطة دالة (اختياري)</span>
+                    <input type="text" name="address_note" value="{{ form.get('address_note', '') }}"
+                           placeholder="مثلاً: قرب مسجد X، عمارة رقم Y">
+                </label>
+
+                <label class="field">
+                    <span>ملاحظة للطلبية (اختياري)</span>
+                    <textarea name="note" rows="3">{{ form.get('note', '') }}</textarea>
+                </label>
+            </div>
+
+            <aside class="checkout-summary">
+                <h2 class="summary-title">طلبيتك</h2>
+
+                <ul class="checkout-items">
+                    {% for line in lines %}
+                    <li>
+                        <span class="ci-name">
+                            {{ line.name }}
+                            {% if line.variant_label %}<small>({{ line.variant_label }})</small>{% endif %}
+                            <span class="ci-qty">×{{ line.quantity }}</span>
+                        </span>
+                        <span class="ci-price">{{ line.line_total_display }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <div class="summary-row">
+                    <span>المنتجات</span>
+                    <span>{{ "{:,}".format(subtotal) }} دج</span>
+                </div>
+
+                {% if coupon %}
+                {% set d = coupon.compute_discount(subtotal) %}
+                <div class="summary-row summary-discount">
+                    <span>خصم ({{ coupon.code }})</span>
+                    <span data-discount="{{ d[0] }}">-{{ "{:,}".format(d[0]) }} دج</span>
+                </div>
+                {% endif %}
+
+                <div class="summary-row">
+                    <span>التوصيل</span>
+                    <span id="shippingDisplay">اختر الولاية والشركة</span>
+                </div>
+
+                <div class="summary-row summary-total">
+                    <span>المجموع</span>
+                    <span id="totalDisplay">{{ "{:,}".format(subtotal - (coupon.compute_discount(subtotal)[0] if coupon else 0)) }} دج</span>
+                </div>
+
+                <p class="payment-note">💵 الدفع عند الاستلام</p>
+
+                <button type="submit" class="btn-primary btn-block" id="submitBtn">أكّد الطلبية</button>
+                <a href="{{ url_for('cart.view_cart') }}" class="continue-link">← رجوع للسلة</a>
+            </aside>
+        </form>
+    </div>
+</section>
+
+<script>
+(function () {
+    var carrier = document.getElementById('carrierSelect');
+    var wilaya = document.getElementById('wilayaSelect');
+    var deliveryType = document.getElementById('deliveryTypeSelect');
+    var shippingDisplay = document.getElementById('shippingDisplay');
+    var totalDisplay = document.getElementById('totalDisplay');
+    var communeField = document.getElementById('communeField');
+    var submitBtn = document.getElementById('submitBtn');
+
+    var subtotal = {{ subtotal }};
+    var discount = {{ coupon.compute_discount(subtotal)[0] if coupon else 0 }};
+
+    function formatDZD(n) {
+        return n.toLocaleString('en-US') + ' دج';
+    }
+
+    // البلدية ضرورية للتوصيل للمنزل فقط — نوضحو هذا بصريًا
+    function syncCommuneField() {
+        var isHome = deliveryType.value === 'home';
+        communeField.querySelector('span').textContent = isHome ? 'البلدية *' : 'البلدية (اختياري)';
+        communeField.querySelector('input').required = isHome;
+    }
+
+    function updateShipping() {
+        if (!carrier.value || !wilaya.value) {
+            shippingDisplay.textContent = 'اختر الولاية والشركة';
+            totalDisplay.textContent = formatDZD(subtotal - discount);
+            submitBtn.disabled = false;
+            return;
+        }
+
+        shippingDisplay.textContent = '...';
+
+        var url = '{{ url_for("cart.api_shipping_price") }}'
+            + '?carrier=' + encodeURIComponent(carrier.value)
+            + '&wilaya=' + encodeURIComponent(wilaya.value)
+            + '&type=' + encodeURIComponent(deliveryType.value);
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                shippingDisplay.textContent = data.display;
+
+                if (data.ok) {
+                    shippingDisplay.classList.remove('shipping-error');
+                    totalDisplay.textContent = formatDZD(subtotal - discount + (data.price || 0));
+                    submitBtn.disabled = false;
+                } else {
+                    // التوصيل غير متوفر — نمنعو الإرسال باش الزبون ما يضيعش وقتو
+                    shippingDisplay.classList.add('shipping-error');
+                    totalDisplay.textContent = '—';
+                    submitBtn.disabled = true;
+                }
+            })
+            .catch(function () {
+                shippingDisplay.textContent = 'تعذّر حساب التوصيل';
+                submitBtn.disabled = false;  // ما نمنعوش الطلب بسبب مشكلة شبكة
+            });
+    }
+
+    /* ════════ حفظ تقدم الزبون (استرجاع السلات المتروكة) ════════
+       نبعثو الاسم والهاتف للسيرفر بمجرد ما يكملهم — قبل ما يضغط "أكّد".
+       بلا هذا، الزبون اللي يخرج قبل التأكيد يضيع كليًا وما نعرفوش مين كان. */
+    (function () {
+        var nameInput = document.querySelector('input[name="name"]');
+        var phoneInput = document.querySelector('input[name="phone"]');
+        var communeInput = document.querySelector('input[name="commune"]');
+        if (!nameInput || !phoneInput) return;
+
+        var saveTimer = null;
+        var lastSaved = "";
+
+        function saveProgress() {
+            var phone = phoneInput.value.trim();
+            var digits = phone.replace(/\D/g, "");
+            if (digits.length < 9) return;   // رقم ناقص — ما نسجّلوش بيانات بلا فايدة
+
+            var wilayaText = wilaya.options[wilaya.selectedIndex]
+                ? wilaya.options[wilaya.selectedIndex].text : "";
+
+            var payload = {
+                name: nameInput.value.trim(),
+                phone: phone,
+                wilaya_name: wilayaText,
+                commune: communeInput ? communeInput.value.trim() : ""
+            };
+
+            var signature = JSON.stringify(payload);
+            if (signature === lastSaved) return;   // ما تبدّل والو — ما نبعثوش من جديد
+            lastSaved = signature;
+
+            fetch("{{ url_for('cart.api_save_progress') }}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token() }}"
+                },
+                body: signature
+            }).catch(function () { /* فشل الشبكة — ما نزعجوش الزبون */ });
+        }
+
+        // نستنّاو 1.5 ثانية بعد آخر كتابة — باش ما نبعثوش طلب مع كل حرف
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(saveProgress, 1500);
+        }
+
+        [nameInput, phoneInput, communeInput].forEach(function (el) {
+            if (el) el.addEventListener("input", scheduleSave);
+        });
+        [carrier, wilaya, deliveryType].forEach(function (el) {
+            el.addEventListener("change", scheduleSave);
+        });
+
+        // محاولة أخيرة كي يحاول يخرج من الصفحة
+        window.addEventListener("pagehide", saveProgress);
+    })();
+
+    [carrier, wilaya, deliveryType].forEach(function (el) {
+        el.addEventListener('change', updateShipping);
+    });
+    deliveryType.addEventListener('change', syncCommuneField);
+
+    syncCommuneField();
+    updateShipping();
+})();
+</script>
+
+{% endblock %}

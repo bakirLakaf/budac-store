@@ -1,0 +1,210 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<div class="page-head">
+    <h1 class="page-title">{{ 'تعديل: ' + product.name if product else 'منتج جديد' }}</h1>
+    <a href="{{ url_for('admin.products_list') }}" class="btn-admin btn-ghost">← رجوع للقائمة</a>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+        <div class="form-col">
+            <h2 class="section-title">المعلومات الأساسية</h2>
+
+            <label class="field">
+                <span>اسم المنتج *</span>
+                <input type="text" name="name" required value="{{ product.name if product else '' }}">
+            </label>
+
+            <label class="field">
+                <span>الرابط (slug)</span>
+                <input type="text" name="slug" value="{{ product.slug if product else '' }}"
+                       placeholder="يتولد تلقائيًا من الاسم إذا خليتو فارغ">
+            </label>
+
+            <label class="field">
+                <span>التصنيف</span>
+                <select name="category_id">
+                    <option value="">— بلا تصنيف —</option>
+                    {% for c in categories %}
+                    <option value="{{ c.id }}" {{ 'selected' if product and product.category_id == c.id }}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <div class="field-row">
+                <label class="field">
+                    <span>السعر (دج) *</span>
+                    <input type="number" name="price" min="0" required value="{{ product.price if product else '' }}">
+                </label>
+                <label class="field">
+                    <span>السعر قبل التخفيض</span>
+                    <input type="number" name="compare_at_price" min="0"
+                           value="{{ product.compare_at_price if product and product.compare_at_price else '' }}"
+                           placeholder="خليه فارغ إذا ماكانش عرض">
+                </label>
+            </div>
+
+
+
+            <label class="field">
+                <span>الوصف</span>
+                <textarea name="description" rows="8"
+                          placeholder="تقدر تكتب HTML — يتحول تلقائيًا لنص واضح فالمتجر">{{ product.description_html if product and product.description_html else (product.description if product else '') }}</textarea>
+            </label>
+
+            <label class="checkbox-field">
+                <input type="checkbox" name="is_active" {{ 'checked' if not product or product.is_active }}>
+                <span>مفعّل (يبان فالمتجر)</span>
+            </label>
+
+            <details class="calc-settings" {{ 'open' if product and product.calculator_type }}>
+                <summary>حاسبة الكمية (اختيارية)</summary>
+
+                <p class="hint">
+                    للمنتجات اللي تتباع بالمتر. الزبون يعطي مقاس الحاجة، والموقع
+                    يحسبلو شحال يحتاج — يقلل التردد ويزيد الطلبات.
+                </p>
+
+                <label class="field">
+                    <span>نوع الحاسبة</span>
+                    <select name="calculator_type" id="calcTypeSelect">
+                        <option value="">— بلا حاسبة —</option>
+                        <option value="perimeter" {{ 'selected' if product and product.calculator_type == 'perimeter' }}>
+                            محيط (أشرطة، سفيفة، حواف)
+                        </option>
+                        <option value="area" {{ 'selected' if product and product.calculator_type == 'area' }}>
+                            مساحة (ورق لاصق)
+                        </option>
+                    </select>
+                </label>
+
+                <label class="field" id="rollLengthField">
+                    <span>طول اللفة (متر)</span>
+                    <input type="number" name="roll_length_m" step="0.1" min="0"
+                           value="{{ product.roll_length_m if product and product.roll_length_m else '' }}"
+                           placeholder="مثلاً: 5">
+                    <small class="hint">باش نقولو للزبون شحال لفة يحتاج</small>
+                </label>
+
+                <label class="field" id="rollWidthField">
+                    <span>عرض اللفة (متر) *</span>
+                    <input type="number" name="roll_width_m" step="0.1" min="0"
+                           value="{{ product.roll_width_m if product and product.roll_width_m else '' }}"
+                           placeholder="1 أو 1.2">
+                    <small class="hint">ضروري لحاسبة المساحة</small>
+                </label>
+
+                <label class="field">
+                    <span>هامش الأمان (%)</span>
+                    <input type="number" name="calculator_margin" min="0" max="50"
+                           value="{{ product.calculator_margin if product else 10 }}">
+                    <small class="hint">يُزاد على الحساب للقص والأخطاء</small>
+                </label>
+            </details>
+
+            <script>
+            (function () {
+                var sel = document.getElementById("calcTypeSelect");
+                var lenField = document.getElementById("rollLengthField");
+                var widField = document.getElementById("rollWidthField");
+                if (!sel) return;
+
+                function sync() {
+                    lenField.style.display = sel.value === "perimeter" ? "" : "none";
+                    widField.style.display = sel.value === "area" ? "" : "none";
+                }
+                sel.addEventListener("change", sync);
+                sync();
+            })();
+            </script>
+
+            <button type="submit" class="btn-admin btn-block">حفظ المنتج</button>
+        </div>
+
+        <div class="form-col">
+            <h2 class="section-title">الصور</h2>
+
+            {% if product and product.images %}
+            <div class="image-manager">
+                {% for img in product.images %}
+                {% set is_main = img.image_filename == product.image_filename %}
+                <div class="image-item {{ 'is-main' if is_main }}">
+                    <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}" alt="">
+
+                    {% if is_main %}
+                        <span class="image-main-tag">★ رئيسية</span>
+                    {% endif %}
+
+                    <div class="image-item-actions">
+                        {% if not is_main %}
+                        <form method="post" action="{{ url_for('admin.product_image_make_main', product_id=product.id, image_id=img.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="img-btn img-btn-main" title="اجعلها الصورة الرئيسية">★</button>
+                        </form>
+                        {% endif %}
+
+                        <form method="post" action="{{ url_for('admin.product_image_delete', product_id=product.id, image_id=img.id) }}"
+                              onsubmit="return confirm('تمسح هاد الصورة؟')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="img-btn img-btn-del" title="حذف">×</button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="hint">
+                مرّر الماوس على الصورة: <strong>★</strong> يخليها الرئيسية، <strong>×</strong> يحذفها.
+            </p>
+            {% endif %}
+
+            <label class="field">
+                <span>زيد صور (تقدر تختار أكثر من وحدة)</span>
+                <input type="file" name="images" accept="image/*" multiple>
+                <small class="hint">JPG / PNG / WebP — الحد الأقصى 5 ميغا للصورة</small>
+            </label>
+        </div>
+    </div>
+</form>
+
+{% if product %}
+<hr class="divider">
+
+<h2 class="section-title">التنويعات (ألوان / مقاسات)</h2>
+
+{% if product.variants %}
+<table class="admin-table">
+    <thead><tr><th>التنويعة</th><th>السعر</th><th>SKU</th><th>افتراضية</th><th></th></tr></thead>
+    <tbody>
+        {% for v in product.variants %}
+        <tr>
+            <td>{{ v.label }}</td>
+            <td>{{ v.price_display }}</td>
+            <td>{{ v.sku or '—' }}</td>
+            <td>{{ '✓' if v.is_default else '' }}</td>
+            <td>
+                <form method="post" action="{{ url_for('admin.variant_delete', variant_id=v.id) }}"
+                      onsubmit="return confirm('تمسح التنويعة «{{ v.label }}»؟')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-admin btn-sm btn-danger">حذف</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="hint">ماكاين حتى تنويعة. إذا المنتج عندو ألوان/مقاسات مختلفة، زيدهم هنا.</p>
+{% endif %}
+
+<form method="post" action="{{ url_for('admin.variant_add', product_id=product.id) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" name="label" placeholder="اسم التنويعة (مثلاً: دوري)" required>
+    <input type="number" name="price" placeholder="سعر خاص (اختياري)" min="0">
+    <input type="text" name="sku" placeholder="SKU (اختياري)">
+    <button type="submit" class="btn-admin btn-sm">+ زيد تنويعة</button>
+</form>
+{% endif %}
+
+{% endblock %}

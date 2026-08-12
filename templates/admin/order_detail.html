@@ -1,0 +1,129 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<div class="page-head">
+    <h1 class="page-title">
+        {{ order.order_number }}
+        <span class="status-pill status-{{ order.status }}">{{ order.status_label }}</span>
+    </h1>
+    <a href="{{ url_for('admin.orders_list') }}" class="btn-admin btn-ghost">← كل الطلبيات</a>
+</div>
+
+<div class="form-grid">
+    <div class="form-col">
+        <h2 class="section-title">المنتجات</h2>
+        <table class="admin-table">
+            <thead><tr><th></th><th>المنتج</th><th>سعر الوحدة</th><th>الكمية</th><th>المجموع</th></tr></thead>
+            <tbody>
+                {% for item in order.items %}
+                <tr>
+                    <td>
+                        {% if item.image_filename %}
+                        {% set folder = 'offers' if item.offer_id else 'products' %}
+                        <img class="thumb-sm" src="{{ url_for('static', filename='img/' + folder + '/' + (item.image_filename | thumb)) }}" alt="">
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ item.item_name }}
+                        {% if item.variant_label %}<br><small class="muted-cell">{{ item.variant_label }}</small>{% endif %}
+                        {% if item.offer_id %}<span class="tag tag-gold">باقة</span>{% endif %}
+                    </td>
+                    <td>{{ "{:,}".format(item.unit_price) }} دج</td>
+                    <td>{{ item.quantity }}</td>
+                    <td><strong>{{ item.line_total_display }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="order-totals">
+            <div class="summary-row"><span>المنتجات</span><span>{{ "{:,}".format(order.subtotal) }} دج</span></div>
+            {% if order.discount_amount %}
+            <div class="summary-row summary-discount"><span>خصم ({{ order.coupon_code }})</span><span>-{{ "{:,}".format(order.discount_amount) }} دج</span></div>
+            {% endif %}
+            <div class="summary-row">
+                <span>التوصيل ({{ order.carrier_name or '—' }})</span>
+                <span>{% if order.shipping_discount %}<s>{{ "{:,}".format(order.shipping_price) }}</s> مجاني{% else %}{{ "{:,}".format(order.shipping_price) }} دج{% endif %}</span>
+            </div>
+            <div class="summary-row summary-total"><span>المجموع</span><span>{{ order.total_display }}</span></div>
+        </div>
+    </div>
+
+    <div class="form-col">
+        <h2 class="section-title">الزبون والتوصيل</h2>
+        <div class="info-card">
+            <div class="info-row"><span>الاسم</span><strong>{{ order.customer_name }}</strong></div>
+            <div class="info-row"><span>الهاتف</span><strong dir="ltr">{{ order.customer_phone }}</strong></div>
+            <div class="info-row"><span>الولاية</span><strong>{{ order.wilaya_code }} ~ {{ order.wilaya_name }}</strong></div>
+            {% if order.commune %}<div class="info-row"><span>البلدية</span><strong>{{ order.commune }}</strong></div>{% endif %}
+            <div class="info-row"><span>نوع التوصيل</span><strong>{{ order.delivery_type_label }}</strong></div>
+            <div class="info-row"><span>الشركة</span><strong>{{ order.carrier_name or '—' }}</strong></div>
+            {% if order.address_note %}<div class="info-row"><span>عنوان دقيق</span><strong>{{ order.address_note }}</strong></div>{% endif %}
+            <div class="info-row"><span>تاريخ الطلب</span><strong>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</strong></div>
+        </div>
+
+        {% if order.customer_note %}
+        <div class="hint-block"><strong>ملاحظة الزبون:</strong><br>{{ order.customer_note }}</div>
+        {% endif %}
+
+        <h2 class="section-title">شركة التوصيل</h2>
+        <div class="carrier-panel">
+            {% if order.tracking_number %}
+                <div class="info-row">
+                    <span>رقم التتبّع</span>
+                    <strong class="tracking-num">{{ order.tracking_number }}</strong>
+                </div>
+                {% if order.carrier_state %}
+                <div class="info-row">
+                    <span>الحالة عندهم</span>
+                    <strong>{{ order.carrier_state }}</strong>
+                </div>
+                {% endif %}
+
+                <form method="post" action="{{ url_for('admin.order_refresh_tracking', order_id=order.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-admin btn-sm btn-ghost">حدّث الحالة</button>
+                </form>
+            {% else %}
+                <p class="hint">هاد الطلبية ما تبعثاتش لشركة التوصيل بعد.</p>
+
+                <form method="post" action="{{ url_for('admin.order_send_to_carrier', order_id=order.id) }}"
+                      onsubmit="return confirm('تبعث هاد الطلبية لـZR Express؟')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-admin btn-block">📦 ابعث لـZR Express</button>
+                </form>
+
+                <p class="hint">
+                    يحتاج مفاتيح ZR فـ.env —
+                    <a href="{{ url_for('admin.integrations') }}">شوف التكاملات</a>
+                </p>
+            {% endif %}
+        </div>
+
+        <h2 class="section-title">تغيير الحالة</h2>
+        <form method="post" action="{{ url_for('admin.order_update_status', order_id=order.id) }}" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="field">
+                <span>الحالة</span>
+                <select name="status">
+                    {% for code, label in status_labels.items() %}
+                    <option value="{{ code }}" {{ 'selected' if order.status == code }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label class="field">
+                <span>ملاحظة داخلية (ما يشوفهاش الزبون)</span>
+                <textarea name="admin_note" rows="3">{{ order.admin_note or '' }}</textarea>
+            </label>
+
+            <p class="hint">
+                ⚠️ الإلغاء يرجّع المخزون تلقائيًا. وإرجاع طلبية ملغاة يخصمو من جديد.
+            </p>
+
+            <button type="submit" class="btn-admin btn-block">حفظ</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

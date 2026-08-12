@@ -1,0 +1,129 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<div class="page-head">
+    <h1 class="page-title">{{ 'تعديل: ' + offer.title if offer else 'عرض خاص جديد' }}</h1>
+    <a href="{{ url_for('admin.offers_list') }}" class="btn-admin btn-ghost">← رجوع</a>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+        <div class="form-col">
+            <h2 class="section-title">تفاصيل العرض</h2>
+
+            <label class="field">
+                <span>العنوان *</span>
+                <input type="text" name="title" required value="{{ offer.title if offer else '' }}"
+                       placeholder="مثلاً: باقة تزيين المرايا">
+            </label>
+
+            <label class="field">
+                <span>سطر وصف قصير</span>
+                <input type="text" name="subtitle" value="{{ offer.subtitle if offer and offer.subtitle else '' }}"
+                       placeholder="مثلاً: كل ما تحتاجو لتزيين مراياتك فباقة وحدة">
+            </label>
+
+            <label class="field">
+                <span>الرابط (slug)</span>
+                <input type="text" name="slug" value="{{ offer.slug if offer else '' }}" placeholder="يتولد تلقائيًا">
+            </label>
+
+            <label class="field">
+                <span>سعر الباقة (دج) *</span>
+                <input type="number" name="bundle_price" min="0" required
+                       value="{{ offer.bundle_price if offer else '' }}">
+                <small class="hint">خليه أقل من مجموع أسعار المنتجات باش يبان التوفير</small>
+            </label>
+
+            <div class="field-row">
+                <label class="field">
+                    <span>يبدأ من (اختياري)</span>
+                    <input type="date" name="starts_at" value="{{ offer.starts_at.strftime('%Y-%m-%d') if offer and offer.starts_at else '' }}">
+                </label>
+                <label class="field">
+                    <span>ينتهي فـ (اختياري)</span>
+                    <input type="date" name="ends_at" value="{{ offer.ends_at.strftime('%Y-%m-%d') if offer and offer.ends_at else '' }}">
+                </label>
+            </div>
+
+            <label class="field">
+                <span>ترتيب الظهور</span>
+                <input type="number" name="sort_order" value="{{ offer.sort_order if offer else 0 }}">
+                <small class="hint">الرقم الأصغر يبان أولاً</small>
+            </label>
+
+            <label class="field">
+                <span>صورة البانر</span>
+                <input type="file" name="banner" accept="image/*">
+                {% if offer and offer.banner_filename %}
+                    <img class="banner-preview" src="{{ url_for('static', filename='img/offers/' + offer.banner_filename) }}" alt="">
+                {% endif %}
+            </label>
+
+            <label class="field">
+                <span>الوصف</span>
+                <textarea name="description" rows="4">{{ offer.description if offer and offer.description else '' }}</textarea>
+            </label>
+
+            <label class="checkbox-field">
+                <input type="checkbox" name="is_active" {{ 'checked' if not offer or offer.is_active }}>
+                <span>مفعّل</span>
+            </label>
+        </div>
+
+        <div class="form-col">
+            <h2 class="section-title">منتجات الباقة</h2>
+            <p class="hint">اختر المنتجات وحدد الكمية من كل واحد.</p>
+
+            <div class="offer-products">
+                {% set selected = {} %}
+                {% if offer %}
+                    {% for item in offer.items %}
+                        {% set _ = selected.update({item.product_id: item.quantity}) %}
+                    {% endfor %}
+                {% endif %}
+
+                {% for p in all_products %}
+                <label class="offer-product-row">
+                    <input type="checkbox" name="product_ids" value="{{ p.id }}"
+                           {{ 'checked' if p.id in selected }}>
+                    <span class="offer-product-name">{{ p.name }}</span>
+                    <span class="offer-product-price">{{ p.price_display }}</span>
+                    <input type="number" name="quantities" min="1" value="{{ selected.get(p.id, 1) }}"
+                           class="qty-input" title="الكمية">
+                </label>
+                {% endfor %}
+            </div>
+
+            {% if offer and offer.items %}
+            <div class="offer-summary">
+                <p>مجموع الأسعار: <strong>{{ offer.original_total_display }}</strong></p>
+                <p>سعر الباقة: <strong>{{ offer.bundle_price_display }}</strong></p>
+                <p class="offer-savings">التوفير: {{ "{:,}".format(offer.savings) }} دج ({{ offer.savings_percent }}%)</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <button type="submit" class="btn-admin btn-block">حفظ العرض</button>
+</form>
+
+<script>
+// ⚠️ ملاحظة تقنية: خانات الكمية تتبعث كلها للسيرفر (حتى غير المختارة)، لكن السيرفر
+// ياخذ الكمية فقط للمنتجات المختارة، حسب ترتيبهم. باش الترتيب يبقى متطابق، نعطّلو
+// خانة الكمية إذا المنتج ماشي مختار — العناصر المعطّلة ما تتبعثش أصلاً.
+document.querySelectorAll('.offer-product-row').forEach(function (row) {
+    var checkbox = row.querySelector('input[type="checkbox"]');
+    var qty = row.querySelector('.qty-input');
+
+    function sync() {
+        qty.disabled = !checkbox.checked;
+        row.classList.toggle('is-selected', checkbox.checked);
+    }
+    checkbox.addEventListener('change', sync);
+    sync();
+});
+</script>
+
+{% endblock %}
