@@ -108,6 +108,41 @@ def create_app():
             "cart_count": cart_count,
         }
 
+    # ---------- صفحات الخطأ ----------
+    # ⚠️ بلاهم، الزائر يشوف صفحة بيضاء بالإنجليزية "Not Found" — يظن الموقع
+    # مكسور ويخرج. صفحة عربية بزر رجوع تحافظ عليه.
+    from flask import render_template
+
+    @app.errorhandler(404)
+    def page_not_found(e):
+        return render_template(
+            "shop/error.html",
+            code=404,
+            title="ما لقيناش هاد الصفحة",
+            message="يمكن الرابط قديم ولا فيه غلطة. جرّب من الصفحة الرئيسية.",
+        ), 404
+
+    @app.errorhandler(500)
+    def server_error(e):
+        # ⚠️ نرجّعو الجلسة للوراء: إذا الخطأ صرا فوسط عملية قاعدة بيانات،
+        # الجلسة تبقى معطّلة وكل طلب بعدها يفشل حتى نديرو rollback.
+        db.session.rollback()
+        return render_template(
+            "shop/error.html",
+            code=500,
+            title="صرا مشكل عندنا",
+            message="راسلنا على واتساب وحنا نكملو معاك الطلبية يدويًا.",
+        ), 500
+
+    @app.errorhandler(413)
+    def too_large(e):
+        return render_template(
+            "shop/error.html",
+            code=413,
+            title="الملف كبير بزاف",
+            message="الحد الأقصى 5 ميغا للصورة.",
+        ), 413
+
     return app
 
 

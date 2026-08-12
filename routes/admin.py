@@ -67,12 +67,66 @@ def login_required(view):
     return wrapped
 
 
+# ⚠️ حماية من تخمين كلمة السر (brute force).
+# بلاها، أي واحد يقدر يجرّب آلاف كلمات السر فدقائق ويدخل للوحة التحكم.
+# نخزّنو المحاولات فالذاكرة: بسيط وكافي لمتجر بسيرفر واحد.
+# (لو كبر المشروع لعدة سيرفرات، ينتقل لـRedis.)
+_LOGIN_ATTEMPTS = {}
+MAX_LOGIN_ATTEMPTS = 6
+LOCKOUT_SECONDS = 900  # 15 دقيقة
+
+
+def _login_blocked(ip):
+    """واش هاد الـIP محظور مؤقتًا؟ يرجع عدد الثواني الباقية، أو 0."""
+    from time import time
+
+    record = _LOGIN_ATTEMPTS.get(ip)
+    if not record:
+        return 0
+
+    count, first_try = record
+
+    # المهلة فاتت → ننساو المحاولات القديمة
+    if time() - first_try > LOCKOUT_SECONDS:
+        _LOGIN_ATTEMPTS.pop(ip, None)
+        return 0
+
+    if count >= MAX_LOGIN_ATTEMPTS:
+        return int(LOCKOUT_SECONDS - (time() - first_try))
+
+    return 0
+
+
+def _record_failed_login(ip):
+    from time import time
+
+    count, first_try = _LOGIN_ATTEMPTS.get(ip, (0, time()))
+    _LOGIN_ATTEMPTS[ip] = (count + 1, first_try)
+
+    # تنظيف: ما نخليوش القاموس يكبر بلا حدود
+    if len(_LOGIN_ATTEMPTS) > 500:
+        now = time()
+        for key in [k for k, v in _LOGIN_ATTEMPTS.items() if now - v[1] > LOCKOUT_SECONDS]:
+            _LOGIN_ATTEMPTS.pop(key, None)
+
+
 @admin_bp.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("admin_id"):
         return redirect(url_for("admin.dashboard"))
 
     if request.method == "POST":
+        ip = request.remote_addr or "unknown"
+
+        blocked_for = _login_blocked(ip)
+        if blocked_for:
+            minutes = max(1, blocked_for // 60)
+            flash(
+                f"محاولات كثيرة بزاف. عاود جرّب بعد {minutes} دقيقة.",
+                "error",
+            )
+            return render_template("admin/login.html")
+
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
 
@@ -86,12 +140,15 @@ def login():
             user.last_login_at = datetime.utcnow()
             db.session.commit()
 
+            _LOGIN_ATTEMPTS.pop(ip, None)  # دخول ناجح → نصفّرو العداد
+
             next_page = request.args.get("next")
             # نتأكدو أن الوجهة داخلية فقط (حماية من open redirect)
             if next_page and next_page.startswith("/"):
                 return redirect(next_page)
             return redirect(url_for("admin.dashboard"))
 
+        _record_failed_login(ip)
         flash("اسم المستخدم أو كلمة السر غير صحيحة", "error")
 
     return render_template("admin/login.html")

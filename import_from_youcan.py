@@ -48,8 +48,15 @@ HTTP_HEADERS = {
     "Accept": "application/json",
 }
 
-IMAGES_DIR = os.path.join("static", "img", "products")
-CATEGORY_IMAGES_DIR = os.path.join("static", "img", "categories")
+# ⚠️ 🔴 إصلاح حرج: لازم نحترمو UPLOAD_ROOT.
+# قبل، السكريبت كان يكتب فـstatic/img/products مباشرة — وعلى Railway هذا
+# قرص مؤقت، يعني **كل الصور المستوردة تنمسح عند أول إعادة نشر**.
+# دابا نستعملو نفس الدالة اللي يستعملها الأدمن (get_upload_dir)، فالصور
+# تروح للقرص الدائم (Volume) إذا UPLOAD_ROOT معمّر، وإلا لـstatic كيما قبل.
+from services.images import get_upload_dir
+
+IMAGES_DIR = get_upload_dir("products")
+CATEGORY_IMAGES_DIR = get_upload_dir("categories")
 
 # نجمعو بيانات كل المنتجات للتشخيص — ماشي غير الأول.
 # السبب: المشاكل عادة ما تكونش فكل المنتجات. منتج عندو variants ومنتج لا،

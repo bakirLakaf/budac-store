@@ -99,7 +99,7 @@ class Product(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
-    slug = db.Column(db.String(220), nullable=False, unique=True)  # يستعمل فالرابط: /product/<slug>
+    slug = db.Column(db.String(220), nullable=False, unique=True, index=True)  # يستعمل فالرابط: /product/<slug>
 
     description = db.Column(db.Text, nullable=True)  # نص واضح (بلا وسوم HTML) — يستعمل للعرض
     description_html = db.Column(db.Text, nullable=True)  # النسخة الأصلية بالـHTML (احتياط/مرجع)
@@ -107,7 +107,7 @@ class Product(db.Model):
     price = db.Column(db.Integer, nullable=False)  # بالدينار الجزائري، رقم صحيح (بلا فواصل)
     compare_at_price = db.Column(db.Integer, nullable=True)  # السعر قبل التخفيض — يبين شارة "عرض"
 
-    category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True)
+    category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True, index=True)
     color_variant = db.Column(db.String(120), nullable=True)  # قديم — يبقى للتوافق، الأفضل نستعملو variants
 
     # ---------- حاسبة الكمية ----------
