@@ -1,7 +1,7 @@
 /* ============================================================
    BUDAC — نظام التصميم
    ألوان: بنفسجي دافئ غامق + ذهبي مطفي + كريمي دافئ + وردي غبار
-   خطوط: Aref Ruqaa (عناوين، بلمسة خطاطة) + IBM Plex Sans Arabic (كل الباقي)
+   خطوط: Tajawal (عناوين) + IBM Plex Sans Arabic (كل الباقي)
    ============================================================ */
 
 :root {
@@ -17,7 +17,7 @@
     --color-sage: #7C8B6F;
     --color-border: #E7DFCF;
 
-    --font-display: "Aref Ruqaa", serif;
+    --font-display: "Tajawal", "IBM Plex Sans Arabic", sans-serif;
     --font-body: "IBM Plex Sans Arabic", sans-serif;
 
     --radius-md: 14px;
@@ -2111,4 +2111,362 @@ a:focus-visible, button:focus-visible {
     .calc-fields { flex-direction: column; }
     .surface-row { flex-wrap: wrap; }
     .calc-field-sm { max-width: 100%; flex: 1; }
+}
+
+/* ════════════════════════════════════════════════════════════
+   تحديثات v15
+   ════════════════════════════════════════════════════════════ */
+
+/* ---------- 1) الخط: بدّلنا Aref Ruqaa بـTajawal فكل العناوين ----------
+   السبب: Aref Ruqaa خط خطاطة، جميل لكن صعب القراءة فالعناوين الطويلة
+   وخصوصًا على شاشة الهاتف. Tajawal واضح ومازال أنيق. */
+:root {
+    --font-display: "Tajawal", "IBM Plex Sans Arabic", sans-serif;
+}
+.hero-title,
+.section-heading,
+.footer-intro-title,
+.footer-heading,
+.success-title {
+    font-weight: 800;
+    letter-spacing: -0.2px;
+}
+
+/* ---------- 2) شريط البحث: قطعة واحدة متناسقة ----------
+   المشكلة القديمة: نصف قطر الزوايا ما كانش يتقلب مع RTL، فجهة تبان دائرية
+   والجهة الأخرى قائمة. الحل: غلاف واحد دائري، والزر دائرة داخلو. */
+.header-search {
+    position: relative;
+    align-items: center;
+    height: 46px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1.5px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    overflow: hidden;
+    transition: background 0.15s, border-color 0.15s;
+}
+.header-search:focus-within {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: var(--color-gold);
+}
+.header-search input {
+    height: 100%;
+    padding: 0 20px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+.header-search input:focus {
+    outline: none;
+    background: transparent;
+    border-color: transparent;
+}
+.header-search button {
+    width: 38px;
+    height: 38px;
+    margin-inline-end: 4px;
+    border: none;
+    border-radius: 50%;
+    background: var(--color-gold);
+    color: var(--color-primary);
+}
+
+/* ---------- 3) التصنيفات: بطاقات أفقية ----------
+   بدل دوائر كبيرة فوسط الصفحة، ولّت بطاقات صف-صف: صورة صغيرة + الاسم
+   جنبها. أسهل للقراءة، والأسماء الطويلة ما تتقصّش. */
+.categories-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+}
+.category-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    text-align: start;
+    padding: 10px 14px 10px 10px;
+    background: var(--color-surface);
+    border: 1.5px solid var(--color-border);
+    border-radius: 999px;
+    transition: transform 0.15s ease, border-color 0.15s, box-shadow 0.15s;
+}
+.category-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--color-gold);
+    box-shadow: 0 10px 24px -14px rgba(46, 26, 71, 0.5);
+}
+.category-card-image {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    aspect-ratio: auto;
+    margin-bottom: 0;
+    border: none;
+}
+.category-card:hover .category-card-image {
+    border: none;
+    box-shadow: none;
+}
+.category-card-name {
+    flex: 1;
+    font-size: 14.5px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.category-card-arrow {
+    color: var(--color-gold);
+    font-size: 24px;
+    line-height: 1;
+    opacity: 0.65;
+    transition: transform 0.15s, opacity 0.15s;
+}
+.category-card:hover .category-card-arrow {
+    opacity: 1;
+    transform: translateX(-3px);
+}
+
+/* ---------- 4) قسم "وصل حديثًا": خلفية متدرّجة ---------- */
+.strip-newest {
+    background: linear-gradient(180deg, #FBF6EE 0%, #F5EDE0 45%, #FBF6EE 100%);
+    border-block: 1px solid rgba(201, 162, 39, 0.18);
+}
+
+/* ---------- 5) الفوتر: كتلة واحدة بلون واحد ----------
+   حذفنا الفوتر المكرر، والمقدمة ولّت جزء من نفس الفوتر (بلا خلفية أغمق). */
+.footer-intro {
+    background: transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 34px 0 24px;
+}
+
+/* ---------- 6) أيقونات السوشل ميديا ---------- */
+.footer-social {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+}
+.social-btn {
+    width: 46px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.09);
+    border: 1.5px solid rgba(255, 255, 255, 0.16);
+    color: #fff;
+    transition: transform 0.15s, background 0.15s, border-color 0.15s;
+}
+.social-btn:hover {
+    transform: translateY(-3px);
+    border-color: transparent;
+}
+.social-fb:hover { background: #1877F2; }
+.social-ig:hover { background: linear-gradient(45deg, #F58529, #DD2A7B, #8134AF); }
+.social-tt:hover { background: #010101; }
+
+/* ---------- 7) زر السلة العائم ---------- */
+.cart-float {
+    position: fixed;
+    bottom: 88px;                    /* فوق زر واتساب بالضبط */
+    inset-inline-start: 22px;
+    z-index: 900;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: var(--color-gold-soft);
+    cursor: pointer;
+    box-shadow: 0 8px 24px -8px rgba(46, 26, 71, 0.75);
+    transition: transform 0.15s ease;
+}
+.cart-float:hover { transform: translateY(-3px); }
+
+.cart-float-count {
+    position: absolute;
+    top: -4px;
+    inset-inline-end: -4px;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #6B6B6B;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+}
+.cart-float-count.has-items { background: var(--color-gold); color: var(--color-primary); }
+
+/* ---------- 8) لوحة السلة الجانبية ---------- */
+.cart-drawer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 950;
+    background: rgba(34, 28, 43, 0.5);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+.cart-drawer-overlay.is-open { opacity: 1; }
+
+.cart-drawer {
+    position: fixed;
+    top: 0;
+    inset-inline-end: 0;
+    z-index: 960;
+    width: min(420px, 100%);
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-bg);
+    box-shadow: -18px 0 40px -20px rgba(0, 0, 0, 0.4);
+    transform: translateX(-100%);        /* RTL: اللوحة على اليمين */
+    transition: transform 0.25s ease;
+}
+[dir="rtl"] .cart-drawer { transform: translateX(100%); }
+.cart-drawer.is-open,
+[dir="rtl"] .cart-drawer.is-open { transform: translateX(0); }
+
+.cart-drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px;
+    background: var(--color-primary);
+    color: #fff;
+}
+.cart-drawer-head h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 800;
+}
+.cart-drawer-close {
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+.cart-drawer-close:hover { background: rgba(255, 255, 255, 0.22); }
+
+.cart-drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+.cart-drawer-loading,
+.cart-drawer-empty {
+    text-align: center;
+    color: var(--color-ink-soft);
+    padding: 40px 10px;
+}
+
+.cd-line {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+.cd-line-img {
+    width: 62px;
+    height: 62px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    object-fit: cover;
+    background: #F1EBE0;
+}
+.cd-line-info { flex: 1; min-width: 0; }
+.cd-line-name {
+    margin: 0 0 2px;
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.cd-line-variant { margin: 0 0 6px; font-size: 12px; color: var(--color-ink-soft); }
+.cd-line-price { margin: 0; font-size: 13px; font-weight: 700; color: var(--color-primary); }
+
+.cd-line-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+.cd-qty-btn {
+    width: 28px;
+    height: 28px;
+    border: 1.5px solid var(--color-border);
+    border-radius: 8px;
+    background: #F7F4EE;
+    color: var(--color-primary);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+}
+.cd-qty-btn:hover { background: var(--color-gold-soft); }
+.cd-qty-val { min-width: 26px; text-align: center; font-weight: 700; font-size: 14px; }
+.cd-remove {
+    margin-inline-start: auto;
+    border: none;
+    background: none;
+    color: #B3261E;
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.cart-drawer-foot {
+    padding: 16px;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+}
+.cart-drawer-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 15px;
+    margin-bottom: 4px;
+}
+.cart-drawer-total strong { font-size: 20px; color: var(--color-primary); }
+.cart-drawer-note { margin: 0 0 12px; font-size: 12px; color: var(--color-ink-soft); }
+.cart-drawer-checkout { display: block; text-align: center; width: 100%; }
+.cart-drawer-link {
+    display: block;
+    text-align: center;
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--color-primary);
+}
+
+body.drawer-open { overflow: hidden; }
+
+/* ---------- تجاوب ---------- */
+@media (max-width: 768px) {
+    .categories-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .category-card { padding: 8px 10px 8px 8px; gap: 10px; }
+    .category-card-image { width: 46px; height: 46px; }
+    .category-card-name { font-size: 12.5px; }
+    .category-card-arrow { display: none; }
+    .footer-social { justify-content: flex-start; }
+}
+@media (max-width: 480px) {
+    .categories-grid { grid-template-columns: 1fr; }
+    .category-card-name { font-size: 14px; }
+    .cart-float { bottom: 78px; inset-inline-start: 16px; width: 52px; height: 52px; }
 }

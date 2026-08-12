@@ -72,7 +72,7 @@
     <div class="container hero-inner">
         <h1 class="hero-title">كل ما يحتاجه ديكورك<br>في مكان واحد</h1>
         <p class="hero-subtitle">
-            أشرطة المرايا، الإكسسوارات، ومواد التشطيب — بجودة مضمونة
+            أشرطة المرايا، الإكسسوارات، وكلش اللي تحتاجو للتزيين — بجودة مضمونة
             وتوصيل لكل ولايات الجزائر
         </p>
         <a href="#products" class="btn-primary btn-hero">تصفّح المنتجات</a>
@@ -165,6 +165,7 @@
                     {% endif %}
                 </div>
                 <span class="category-card-name">{{ cat.name }}</span>
+                <span class="category-card-arrow" aria-hidden="true">‹</span>
             </a>
             {% endfor %}
         </div>
@@ -191,7 +192,7 @@
 {% endif %}
 
 {% if newest %}
-<section class="strip-section reveal">
+<section class="strip-section strip-newest reveal">
     <div class="container">
         <div class="section-head section-head-row">
             <div>

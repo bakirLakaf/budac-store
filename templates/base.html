@@ -7,6 +7,7 @@
 
     {# ---------- SEO + المشاركة الاجتماعية ---------- #}
     <meta name="description" content="{% block meta_description %}{{ store_name }} — متجر جزائري لمستلزمات الديكور والحرف اليدوية. توصيل لكل الولايات، الدفع عند الاستلام.{% endblock %}">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="canonical" href="{{ request.url }}">
 
     {# Open Graph: يخلي الرابط يبان بصورة وعنوان كي يتشارك فواتساب وفيسبوك #}
@@ -26,12 +27,12 @@
        والتحميل غير معطّل للعرض: الصفحة تبان فورًا بخط النظام، والخط الجميل
        يبدّلو كي يوصل — بدل ما الزائر يشوف صفحة بيضاء 2 ثواني. #}
     <link rel="preload" as="style"
-          href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Tajawal:wght@500;700&display=swap">
+          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Tajawal:wght@500;700;800&display=swap">
     <link rel="stylesheet" media="print" onload="this.media='all'"
-          href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Tajawal:wght@500;700&display=swap">
+          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Tajawal:wght@500;700;800&display=swap">
     <noscript>
         <link rel="stylesheet"
-              href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Tajawal:wght@500;700&display=swap">
+              href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Tajawal:wght@500;700;800&display=swap">
     </noscript>
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -121,13 +122,6 @@
     </main>
 
     <footer class="site-footer">
-        <div class="container footer-inner">
-            <p class="footer-brand">{{ store_name }} — {{ store_tagline }}</p>
-            <p class="footer-meta">التوصيل لكل ولايات الجزائر · الدفع عند الاستلام</p>
-        </div>
-    </footer>
-
-    <footer class="site-footer">
         <div class="footer-intro">
             <div class="container">
                 <p class="footer-intro-title">{{ store_name }} — ديكور و إكسسوارات</p>
@@ -141,8 +135,8 @@
                      alt="{{ store_name }}" class="footer-logo" width="445" height="217" loading="lazy">
                 <p class="footer-tagline">للديكور و الأكسسوارات</p>
                 <p class="footer-about">
-                    متجر جزائري متخصص فمستلزمات الديكور والحرف اليدوية — أشرطة المرايا،
-                    الإكسسوارات، ومواد التشطيب. جودة مضمونة وتوصيل لكل الولايات.
+                    متجر جزائري متخصص فلوازم الديكور والحرف اليدوية — أشرطة المرايا،
+                    الإكسسوارات، وكلش اللي تحتاجو للتزيين. جودة مضمونة وتوصيل لكل الولايات.
                 </p>
             </div>
 
@@ -184,6 +178,30 @@
                     <li class="footer-payment">💵 الدفع عند الاستلام</li>
                     <li class="footer-payment">🚚 توصيل لكل 58 ولاية</li>
                 </ul>
+
+                {# روابط الصفحات الاجتماعية — أيقونات كبيرة وواضحة #}
+                <div class="footer-social">
+                    <a href="https://www.facebook.com/budac04" target="_blank" rel="noopener"
+                       class="social-btn social-fb" aria-label="فيسبوك">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                            <path d="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 22 12Z"/>
+                        </svg>
+                    </a>
+                    <a href="https://www.instagram.com/budac_04" target="_blank" rel="noopener"
+                       class="social-btn social-ig" aria-label="إنستغرام">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="22" height="22">
+                            <rect x="3" y="3" width="18" height="18" rx="5"/>
+                            <circle cx="12" cy="12" r="4"/>
+                            <circle cx="17.2" cy="6.8" r="1.2" fill="currentColor" stroke="none"/>
+                        </svg>
+                    </a>
+                    <a href="https://www.tiktok.com/@bueaty_decor" target="_blank" rel="noopener"
+                       class="social-btn social-tt" aria-label="تيك توك">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                            <path d="M16.5 2h-3v13.2a2.6 2.6 0 1 1-2.1-2.6V9.5a5.8 5.8 0 1 0 5.1 5.7V9.1a6.8 6.8 0 0 0 4 1.3V7.3a4 4 0 0 1-4-4V2Z"/>
+                        </svg>
+                    </a>
+                </div>
             </div>
         </div>
 
@@ -204,6 +222,39 @@
         </svg>
         <span class="wa-float-label">راسلنا</span>
     </a>
+
+    {# ---------- زر السلة العائم (فوق زر واتساب) ---------- #}
+    <button type="button" class="cart-float" id="cartFloatBtn" aria-label="فتح السلة">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 8h12l-1 12.5a1 1 0 0 1-1 .9H8a1 1 0 0 1-1-.9L6 8Z"/>
+            <path d="M9 8V6a3 3 0 0 1 6 0v2"/>
+        </svg>
+        <span class="cart-float-count {{ 'has-items' if cart_count }}" id="cartFloatCount">{{ cart_count }}</span>
+    </button>
+
+    {# ---------- لوحة السلة الجانبية — تتفتح بلا مغادرة الصفحة ---------- #}
+    <div class="cart-drawer-overlay" id="cartOverlay" hidden></div>
+    <aside class="cart-drawer" id="cartDrawer" hidden aria-label="سلة المشتريات">
+        <header class="cart-drawer-head">
+            <h2>سلة المشتريات</h2>
+            <button type="button" class="cart-drawer-close" id="cartDrawerClose" aria-label="إغلاق">×</button>
+        </header>
+
+        <div class="cart-drawer-body" id="cartDrawerBody">
+            <p class="cart-drawer-loading">جاري التحميل…</p>
+        </div>
+
+        <footer class="cart-drawer-foot" id="cartDrawerFoot" hidden>
+            <div class="cart-drawer-total">
+                <span>المجموع</span>
+                <strong id="cartDrawerSubtotal">0 دج</strong>
+            </div>
+            <p class="cart-drawer-note">سعر التوصيل يُحسب فصفحة الطلب حسب ولايتك</p>
+            <a href="{{ url_for('cart.checkout') }}" class="btn-primary cart-drawer-checkout">إتمام الطلب</a>
+            <a href="{{ url_for('cart.view_cart') }}" class="cart-drawer-link">عرض السلة كاملة</a>
+        </footer>
+    </aside>
 
     <script src="{{ url_for('static', filename='js/site.js') }}" defer></script>
 </body>

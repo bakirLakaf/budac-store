@@ -94,6 +94,64 @@ def remove():
     return redirect(url_for("cart.view_cart"))
 
 
+# ==================== API السلة (اللوحة الجانبية) ====================
+
+def _cart_json():
+    """
+    يرجّع حالة السلة كـJSON — تستعملها لوحة السلة الجانبية فالصفحة الرئيسية.
+    ما نعتمدوش على أسعار من المتصفح: كلش يُحسب هنا من قاعدة البيانات.
+    """
+    lines = cart_service.get_cart_lines()
+    subtotal = cart_service.get_cart_subtotal(lines)
+    return jsonify({
+        "count": sum(line.quantity for line in lines),
+        "subtotal": subtotal,
+        "subtotal_display": f"{subtotal:,} دج",
+        "lines": [
+            {
+                "key": line.key,
+                "name": line.name,
+                "variant_label": line.variant_label,
+                "quantity": line.quantity,
+                "unit_price_display": line.unit_price_display,
+                "line_total_display": line.line_total_display,
+                "image": line.image_filename,
+                "kind": line.kind,
+            }
+            for line in lines
+        ],
+    })
+
+
+@cart_bp.route("/api/cart")
+def api_cart():
+    """حالة السلة الحالية."""
+    return _cart_json()
+
+
+@cart_bp.route("/api/cart/update", methods=["POST"])
+def api_cart_update():
+    """تغيير الكمية من اللوحة الجانبية. quantity = 0 يعني حذف."""
+    data = request.get_json(silent=True) or {}
+    key = data.get("key")
+    quantity = data.get("quantity")
+
+    if not key or quantity is None:
+        return jsonify({"error": "طلب غير صالح"}), 400
+
+    try:
+        quantity = int(quantity)
+    except (TypeError, ValueError):
+        return jsonify({"error": "كمية غير صالحة"}), 400
+
+    if quantity <= 0:
+        cart_service.remove_from_cart(key)
+    else:
+        cart_service.update_quantity(key, quantity)
+
+    return _cart_json()
+
+
 # ==================== الكوبونات ====================
 
 @cart_bp.route("/cart/coupon", methods=["POST"])

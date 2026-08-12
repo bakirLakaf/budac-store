@@ -190,3 +190,148 @@
         init();
     }
 })();
+
+/* ════════════════════════════════════════════════════════════
+   لوحة السلة الجانبية (v15)
+   تتفتح فنفس الصفحة بلا انتقال. كل الأسعار تجي من السيرفر —
+   ما نحسبو والو فالمتصفح باش الزبون ما يقدرش يبدّلهم.
+   ════════════════════════════════════════════════════════════ */
+(function () {
+    var btn      = document.getElementById('cartFloatBtn');
+    var drawer   = document.getElementById('cartDrawer');
+    var overlay  = document.getElementById('cartOverlay');
+    var closeBtn = document.getElementById('cartDrawerClose');
+    var body     = document.getElementById('cartDrawerBody');
+    var foot     = document.getElementById('cartDrawerFoot');
+    var subtotal = document.getElementById('cartDrawerSubtotal');
+    var floatCount = document.getElementById('cartFloatCount');
+
+    if (!btn || !drawer) return;
+
+    var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = tokenMeta ? tokenMeta.getAttribute('content') : '';
+    var isOpen = false;
+
+    function openDrawer() {
+        isOpen = true;
+        overlay.hidden = false;
+        drawer.hidden = false;
+        // نأخّر إضافة الكلاس إطار واحد باش الانتقال (transition) يبان
+        requestAnimationFrame(function () {
+            overlay.classList.add('is-open');
+            drawer.classList.add('is-open');
+        });
+        document.body.classList.add('drawer-open');
+        loadCart();
+    }
+
+    function closeDrawer() {
+        isOpen = false;
+        overlay.classList.remove('is-open');
+        drawer.classList.remove('is-open');
+        document.body.classList.remove('drawer-open');
+        setTimeout(function () {
+            if (!isOpen) { overlay.hidden = true; drawer.hidden = true; }
+        }, 250);
+    }
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str == null ? '' : str;
+        return div.innerHTML;
+    }
+
+    function render(data) {
+        if (!data.lines || data.lines.length === 0) {
+            body.innerHTML = '<p class="cart-drawer-empty">سلتك خاوية.<br>تصفّح المنتجات وزيد اللي عجبك.</p>';
+            foot.hidden = true;
+        } else {
+            var html = '';
+            data.lines.forEach(function (line) {
+                var img = line.image
+                    ? '<img class="cd-line-img" src="/static/img/products/' + escapeHtml(line.image) + '" alt="" loading="lazy">'
+                    : '<div class="cd-line-img"></div>';
+                html +=
+                    '<div class="cd-line" data-key="' + escapeHtml(line.key) + '">' +
+                        img +
+                        '<div class="cd-line-info">' +
+                            '<p class="cd-line-name">' + escapeHtml(line.name) + '</p>' +
+                            (line.variant_label ? '<p class="cd-line-variant">' + escapeHtml(line.variant_label) + '</p>' : '') +
+                            '<p class="cd-line-price">' + escapeHtml(line.line_total_display) + '</p>' +
+                            '<div class="cd-line-actions">' +
+                                '<button type="button" class="cd-qty-btn" data-act="dec">−</button>' +
+                                '<span class="cd-qty-val">' + line.quantity + '</span>' +
+                                '<button type="button" class="cd-qty-btn" data-act="inc">+</button>' +
+                                '<button type="button" class="cd-remove" data-act="del">حذف</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+            });
+            body.innerHTML = html;
+            subtotal.textContent = data.subtotal_display;
+            foot.hidden = false;
+        }
+        updateCounts(data.count);
+    }
+
+    function updateCounts(count) {
+        if (floatCount) {
+            floatCount.textContent = count;
+            floatCount.classList.toggle('has-items', count > 0);
+        }
+        // نحدّثو حتى عدّاد الهيدر باش الرقمين ما يختلفوش
+        var headerCount = document.querySelector('.cart-link .cart-count');
+        if (headerCount) {
+            headerCount.textContent = count;
+            headerCount.classList.toggle('has-items', count > 0);
+        }
+    }
+
+    function loadCart() {
+        body.innerHTML = '<p class="cart-drawer-loading">جاري التحميل…</p>';
+        fetch('/api/cart', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(render)
+            .catch(function () {
+                body.innerHTML = '<p class="cart-drawer-empty">تعذّر تحميل السلة. حاول من جديد.</p>';
+            });
+    }
+
+    function changeQty(key, quantity) {
+        fetch('/api/cart/update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ key: key, quantity: quantity })
+        })
+            .then(function (r) { return r.json(); })
+            .then(render)
+            .catch(function () { loadCart(); });
+    }
+
+    // تفويض الأحداث: زر واحد يخدم على كل الأسطر حتى بعد إعادة الرسم
+    body.addEventListener('click', function (e) {
+        var target = e.target.closest('[data-act]');
+        if (!target) return;
+
+        var lineEl = target.closest('.cd-line');
+        if (!lineEl) return;
+
+        var key = lineEl.getAttribute('data-key');
+        var current = parseInt(lineEl.querySelector('.cd-qty-val').textContent, 10) || 1;
+        var act = target.getAttribute('data-act');
+
+        if (act === 'inc')      changeQty(key, current + 1);
+        else if (act === 'dec') changeQty(key, current - 1);
+        else if (act === 'del') changeQty(key, 0);
+    });
+
+    btn.addEventListener('click', openDrawer);
+    closeBtn.addEventListener('click', closeDrawer);
+    overlay.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && isOpen) closeDrawer();
+    });
+})();
