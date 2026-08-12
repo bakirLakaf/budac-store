@@ -18,9 +18,14 @@
 فـ250 هو هدر خالص — الزائر يحمّل 10 أضعاف اللي يحتاجو.
 """
 
+import gc
 import os
 
 from PIL import Image, ImageOps
+
+# ⚠️ حد أمان: يمنع "قنبلة الصور" (ملف صغير يتفكك لصورة ضخمة تستهلك كل الذاكرة).
+# 50 ميغابكسل = صورة 7000×7000 — أكبر بكثير من أي صورة هاتف عادية.
+Image.MAX_IMAGE_PIXELS = 50_000_000
 
 
 def get_upload_dir(subfolder):
@@ -83,6 +88,27 @@ def _save_webp(im, path, quality):
     im.save(path, "WEBP", quality=quality, method=6)
 
 
+def _open_optimized(source, max_size):
+    """
+    يفتح الصورة بأقل استهلاك ذاكرة ممكن.
+
+    ⚠️ الحيلة المهمة هنا: `draft()`.
+    صورة هاتف 3024×4032 تاخذ ~36 ميغا فالذاكرة كي تتفك كاملة. لكن JPEG يقدر
+    يتفك **مباشرة بحجم أصغر** (نصف/ربع/ثمن) بلا ما يمر بالحجم الكامل.
+    هذا يقلل الاستهلاك بـ90%+ وهو أسرع كذلك.
+
+    بلا هذا، استيراد 143 صورة على سيرفر بذاكرة محدودة يطيح بـ"out of memory".
+    """
+    im = Image.open(source)
+
+    # draft يخدم غير مع JPEG — والباقي يتفك عادي
+    if im.format == "JPEG":
+        im.draft("RGB", (max_size, max_size))
+
+    im.load()
+    return im
+
+
 def process_image(source, target_dir, base_name, make_thumb=True):
     """
     يعالج صورة ويحفظها كـWebP (+ مصغّرة).
@@ -95,35 +121,52 @@ def process_image(source, target_dir, base_name, make_thumb=True):
     يرجع (main_filename, thumb_filename). thumb_filename يكون None إذا make_thumb=False.
     يرمي ImageProcessError إذا الملف ماشي صورة صالحة.
     """
-    try:
-        im = Image.open(source)
-        im.load()  # نجبروه يقرا فعليًا — باش نكتشفو الملفات التالفة دابا ماشي بعد
-    except Exception as e:
-        raise ImageProcessError(f"ما قدرناش نقراو الصورة: {e}")
+    im = None
+    main = None
+    thumb = None
 
     try:
-        im = _prepare(im)
-    except Exception as e:
-        raise ImageProcessError(f"ما قدرناش نعالجو الصورة: {e}")
+        try:
+            im = _open_optimized(source, MAX_WIDTH)
+        except Exception as e:
+            raise ImageProcessError(f"ما قدرناش نقراو الصورة: {e}")
 
-    os.makedirs(target_dir, exist_ok=True)
+        try:
+            im = _prepare(im)
+        except Exception as e:
+            raise ImageProcessError(f"ما قدرناش نعالجو الصورة: {e}")
 
-    # ---- النسخة الرئيسية ----
-    main = im.copy()
-    main.thumbnail((MAX_WIDTH, MAX_HEIGHT), Image.LANCZOS)  # thumbnail يحافظ على النسبة
+        os.makedirs(target_dir, exist_ok=True)
 
-    main_filename = f"{base_name}.webp"
-    _save_webp(main, os.path.join(target_dir, main_filename), QUALITY_MAIN)
+        # ---- النسخة الرئيسية ----
+        # thumbnail يعدّل الصورة نفسها (in-place) ويحافظ على النسبة.
+        # ⚠️ نصغّرو الأصل أولاً، وبعدها ناخذو نسخة للمصغّرة — هكذا النسخة
+        # تكون من صورة صغيرة ماشي من الأصل الضخم.
+        im.thumbnail((MAX_WIDTH, MAX_HEIGHT), Image.LANCZOS)
 
-    # ---- المصغّرة ----
-    thumb_filename = None
-    if make_thumb:
-        thumb = im.copy()
-        thumb.thumbnail((THUMB_SIZE, THUMB_SIZE), Image.LANCZOS)
-        thumb_filename = f"{base_name}{THUMB_SUFFIX}.webp"
-        _save_webp(thumb, os.path.join(target_dir, thumb_filename), QUALITY_THUMB)
+        main_filename = f"{base_name}.webp"
+        _save_webp(im, os.path.join(target_dir, main_filename), QUALITY_MAIN)
 
-    return main_filename, thumb_filename
+        # ---- المصغّرة ----
+        thumb_filename = None
+        if make_thumb:
+            thumb = im.copy()
+            thumb.thumbnail((THUMB_SIZE, THUMB_SIZE), Image.LANCZOS)
+            thumb_filename = f"{base_name}{THUMB_SUFFIX}.webp"
+            _save_webp(thumb, os.path.join(target_dir, thumb_filename), QUALITY_THUMB)
+
+        return main_filename, thumb_filename
+
+    finally:
+        # نحرّرو الذاكرة فورًا — ما نستناوش الجامع التلقائي.
+        # مهم بزاف كي نعالجو 143 صورة وحدة بوحدة.
+        for img in (thumb, main, im):
+            if img is not None:
+                try:
+                    img.close()
+                except Exception:
+                    pass
+        gc.collect()
 
 
 def thumb_name(filename):

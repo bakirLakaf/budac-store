@@ -17,6 +17,8 @@
 يحلل واش لقى وواش ما لقاش فكل منتج — باش تشوف بالضبط فين المشكل.
 """
 
+import argparse
+import gc
 import io
 import json
 import os
@@ -85,9 +87,14 @@ def download_image(url, base_name, target_dir=IMAGES_DIR):
 
     try:
         # نعالجوها من الذاكرة مباشرة، بلا ما نكتبو الأصل على القرص
-        main_filename, _ = process_image(
-            io.BytesIO(response.content), target_dir, base_name
-        )
+        content = response.content
+        main_filename, _ = process_image(io.BytesIO(content), target_dir, base_name)
+
+        # ⚠️ نحرّرو رد الشبكة فورًا. مع 143 صورة، تراكمهم يستهلك ذاكرة
+        # بلا فائدة على سيرفر بموارد محدودة.
+        del content
+        response.close()
+
         return main_filename
     except ImageProcessError as e:
         print(f"   ⚠️  ما قدرتش نعالج الصورة: {e}")
@@ -518,7 +525,7 @@ def _extract_full_variants(variants_field):
     return cleaned
 
 
-def run():
+def run(limit=None, skip_images=False):
 
     app = create_app()
     with app.app_context():
@@ -526,6 +533,9 @@ def run():
 
         raw_products = fetch_all_products()
         print(f"\n✅ لقيت {len(raw_products)} منتج فمتجر YouCan.")
+
+        if limit:
+            print(f"   (غادي نعالجو {limit} منتج فهاد التشغيلة)")
 
         # 1) نجربو Admin API أولاً — يعطي أغنى بيانات (تنويعات بأسعارها)
         admin_products = fetch_admin_api_products()
@@ -614,7 +624,9 @@ def run():
             db.session.flush()  # باش ناخذو product.id قبل ما نزيدو الصور/الـvariants
 
             # --- الصور المتعددة ---
-            image_urls = extract_images(source, fallback_thumbnail=item.get("thumbnail"))
+            image_urls = [] if skip_images else extract_images(
+                source, fallback_thumbnail=item.get("thumbnail")
+            )
             first_image_filename = None
             for idx, img_url in enumerate(image_urls):
                 image_filename = download_image(img_url, f"{slug}-{idx}")
@@ -679,6 +691,15 @@ def run():
             })
 
             added += 1
+
+            # نحرّرو الذاكرة بعد كل منتج — مهم على السيرفرات المحدودة
+            gc.collect()
+
+            if limit and added >= limit:
+                print(f"\n   ⏸ وصلنا للحد ({limit} منتج). عاود شغّل نفس الأمر")
+                print("      باش تكمّل — المنتجات الموجودة يتخطاهم تلقائيًا.")
+                break
+
             print(
                 f"      ✅ تصنيف: {category.name if category else 'بلا تصنيف'} | "
                 f"صور: {len(image_urls)} | تنويعات: {len(variants_data)}"
@@ -878,4 +899,15 @@ def _print_analysis():
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="استيراد المنتجات من YouCan")
+    parser.add_argument(
+        "--limit", type=int, default=None,
+        help="عدد المنتجات فهاد التشغيلة (مفيد إذا السيرفر ذاكرتو محدودة)",
+    )
+    parser.add_argument(
+        "--skip-images", action="store_true",
+        help="بلا تحميل الصور — أسرع وأخف بكثير، تزيدهم بعدين",
+    )
+    args = parser.parse_args()
+
+    run(limit=args.limit, skip_images=args.skip_images)
