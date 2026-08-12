@@ -7,6 +7,14 @@
 
     {# ---------- SEO + المشاركة الاجتماعية ---------- #}
     <meta name="description" content="{% block meta_description %}{{ store_name }} — متجر جزائري لمستلزمات الديكور والحرف اليدوية. توصيل لكل الولايات، الدفع عند الاستلام.{% endblock %}">
+    {# ---------- أيقونة الموقع ---------- #}
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/png" sizes="192x192"
+          href="{{ url_for('static', filename='img/brand/icon-192.png') }}">
+    <link rel="apple-touch-icon"
+          href="{{ url_for('static', filename='img/brand/apple-touch-icon.png') }}">
+    <meta name="theme-color" content="#2E1A47">
+
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="canonical" href="{{ request.url }}">
 

@@ -16,6 +16,12 @@ def create_app():
 
     db.init_app(app)
 
+    # ⚠️ Railway يخدم وراء بروكسي (reverse proxy). بلا هاذي، Flask يظن أن
+    # الاتصال http وليس https، فالروابط المطلقة (og:image, canonical, redirects)
+    # تتولّد بـhttp — وهذا يخلي المتصفح يشطب على https فشريط العنوان.
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
     # حماية CSRF: تتحقق تلقائيًا من كل POST/PUT/DELETE.
     # بلاها، أي موقع خارجي يقدر يخلق فورم مخفي يبعث طلب لموقعك باسم أدمن داخل
     # (مثلاً حذف كل المنتجات) بمجرد ما يزور الأدمن ذاك الموقع.

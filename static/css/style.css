@@ -2317,23 +2317,28 @@ a:focus-visible, button:focus-visible {
 }
 .cart-drawer-overlay.is-open { opacity: 1; }
 
+/* ⚠️ مهم: خاصية hidden لازم تغلب display:flex، وإلا اللوحة تبان مباشرة
+   كي تتحل الصفحة (هذا كان سبب ظهورها بلا ما تضغط الزر). */
+.cart-drawer[hidden],
+.cart-drawer-overlay[hidden] { display: none !important; }
+
 .cart-drawer {
     position: fixed;
     top: 0;
-    inset-inline-end: 0;
+    left: 0;                             /* موقع فيزيائي ثابت — ما يتقلبش مع RTL */
     z-index: 960;
     width: min(420px, 100%);
     height: 100dvh;
     display: flex;
     flex-direction: column;
     background: var(--color-bg);
-    box-shadow: -18px 0 40px -20px rgba(0, 0, 0, 0.4);
-    transform: translateX(-100%);        /* RTL: اللوحة على اليمين */
+    box-shadow: 18px 0 40px -20px rgba(0, 0, 0, 0.4);
+    /* الترانسفورم ما يتقلبش تلقائيًا مع RTL — لهذا نستعملو قيمة فيزيائية.
+       اللوحة على اليسار، فنخبيوها لبرّا اليسار بـ-100%. */
+    transform: translateX(-100%);
     transition: transform 0.25s ease;
 }
-[dir="rtl"] .cart-drawer { transform: translateX(100%); }
-.cart-drawer.is-open,
-[dir="rtl"] .cart-drawer.is-open { transform: translateX(0); }
+.cart-drawer.is-open { transform: translateX(0); }
 
 .cart-drawer-head {
     display: flex;
