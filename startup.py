@@ -29,6 +29,12 @@ def run():
         db.create_all()
         print("   ✅ الجداول جاهزة")
 
+        # ---------- 1.5) الأعمدة الجديدة ----------
+        # ⚠️ db.create_all() ينشئ الجداول الناقصة فقط — ما يزيدش أعمدة لجدول
+        # موجود من قبل. فنزيدوهم بيدنا هنا. كل خطوة تتحقق أولاً، فالتشغيل
+        # المتكرر آمن تمامًا.
+        _add_missing_columns(db)
+
         # ---------- 2) أسعار التوصيل ----------
         if ShippingRate.query.count() == 0:
             print("🚚 نعمّرو أسعار التوصيل...")
@@ -62,6 +68,46 @@ def run():
             print("👤 حساب الأدمن موجود")
 
         print("✅ التجهيز خلص — نشغّلو الموقع\n")
+
+
+def _add_missing_columns(db):
+    """
+    يزيد الأعمدة الجديدة للجداول الموجودة (هجرة بسيطة بلا Alembic).
+
+    كل عمود يتحقق أولاً واش موجود. إذا موجود → يتخطاه. إذا لا → يزيدو.
+    يخدم على PostgreSQL و SQLite بنفس الطريقة.
+    """
+    from sqlalchemy import inspect, text
+
+    # (اسم الجدول, اسم العمود, تعريف SQL)
+    wanted = [
+        ("products", "is_featured", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("offers", "spotlight_position", "VARCHAR(10) NOT NULL DEFAULT 'none'"),
+        ("offers", "spotlight_text", "TEXT"),
+    ]
+
+    inspector = inspect(db.engine)
+    added = 0
+
+    for table, column, ddl in wanted:
+        if table not in inspector.get_table_names():
+            continue
+
+        existing = {c["name"] for c in inspector.get_columns(table)}
+        if column in existing:
+            continue
+
+        try:
+            db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+            db.session.commit()
+            print(f"   ➕ زدنا العمود {table}.{column}")
+            added += 1
+        except Exception as e:
+            db.session.rollback()
+            print(f"   ⚠️ ما قدرناش نزيدو {table}.{column}: {e}")
+
+    if added == 0:
+        print("   ✅ كل الأعمدة موجودة")
 
 
 if __name__ == "__main__":

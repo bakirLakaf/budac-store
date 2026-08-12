@@ -70,6 +70,31 @@
                 <input type="checkbox" name="is_active" {{ 'checked' if not offer or offer.is_active }}>
                 <span>مفعّل</span>
             </label>
+
+            <fieldset class="spotlight-settings">
+                <legend>قسم «عرض خاص» بالصورة الكبيرة</legend>
+                <p class="hint">
+                    يعرض هاد العرض فبلوك كبير بالصورة والسعر والزر.
+                    عرض واحد فقط يبان — إذا فعّلت أكثر من واحد ياخذ الأول حسب ترتيب الظهور.
+                </p>
+
+                {% set pos = offer.spotlight_position if offer else 'none' %}
+                <label class="field">
+                    <span>مكان الظهور</span>
+                    <select name="spotlight_position">
+                        <option value="none"   {{ 'selected' if pos == 'none' }}>ما يبانش</option>
+                        <option value="top"    {{ 'selected' if pos == 'top' }}>فوق الصفحة (أول حاجة)</option>
+                        <option value="bottom" {{ 'selected' if pos == 'bottom' }}>تحت الصفحة (فوق الفوتر)</option>
+                    </select>
+                </label>
+
+                <label class="field">
+                    <span>نص القسم (اختياري)</span>
+                    <textarea name="spotlight_text" rows="4"
+                              placeholder="كلام قصير عن العرض يبان جنب الصورة">{{ offer.spotlight_text if offer and offer.spotlight_text else '' }}</textarea>
+                    <small class="hint">إذا خلّيتو فارغ، يستعمل «الوصف» فوق.</small>
+                </label>
+            </fieldset>
         </div>
 
         <div class="form-col">

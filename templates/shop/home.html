@@ -1,6 +1,11 @@
 {% extends "base.html" %}
+{% from "shop/_spotlight.html" import spotlight_section %}
 
 {% block content %}
+
+{% if spotlight and spotlight.spotlight_position == "top" %}
+{{ spotlight_section(spotlight) }}
+{% endif %}
 
 {% if offers %}
 <section class="hero-slider" id="heroSlider" aria-roledescription="carousel" aria-label="العروض الخاصة">
@@ -145,34 +150,6 @@
 </section>
 {% endif %}
 
-{% if categories %}
-<section class="categories-section reveal" id="categories">
-    <div class="container">
-        <div class="section-head">
-            <h2 class="section-heading">تسوّق حسب التصنيف</h2>
-            <p class="section-sub">لقى اللي تحتاجو بسرعة</p>
-        </div>
-
-        <div class="categories-grid">
-            {% for cat in categories %}
-            <a href="{{ url_for('shop.home', category=cat.slug) }}" class="category-card">
-                <div class="category-card-image">
-                    {% if cat.image_filename %}
-                        <img src="{{ url_for('static', filename='img/categories/' + (cat.image_filename | thumb)) }}"
-                             alt="{{ cat.name }}" loading="lazy">
-                    {% else %}
-                        <span class="category-mono">{{ cat.name[0] }}</span>
-                    {% endif %}
-                </div>
-                <span class="category-card-name">{{ cat.name }}</span>
-                <span class="category-card-arrow" aria-hidden="true">‹</span>
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-</section>
-{% endif %}
-
 {% if best_sellers %}
 <section class="strip-section reveal">
     <div class="container">
@@ -209,6 +186,34 @@
 </section>
 {% endif %}
 
+{% if categories %}
+<section class="categories-section categories-mobile reveal" id="categories">
+    <div class="container">
+        <div class="section-head">
+            <h2 class="section-heading">تسوّق حسب التصنيف</h2>
+            <p class="section-sub">لقى اللي تحتاجو بسرعة</p>
+        </div>
+
+        <div class="categories-grid">
+            {% for cat in categories %}
+            <a href="{{ url_for('shop.home', category=cat.slug) }}" class="category-card">
+                <div class="category-card-image">
+                    {% if cat.image_filename %}
+                        <img src="{{ url_for('static', filename='img/categories/' + (cat.image_filename | thumb)) }}"
+                             alt="{{ cat.name }}" loading="lazy">
+                    {% else %}
+                        <span class="category-mono">{{ cat.name[0] }}</span>
+                    {% endif %}
+                </div>
+                <span class="category-card-name">{{ cat.name }}</span>
+                <span class="category-card-arrow" aria-hidden="true">‹</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
 <section class="strip-section recently-viewed" id="recentlyViewed" hidden>
     <div class="container">
         <div class="section-head section-head-row">
@@ -223,57 +228,107 @@
 </section>
 
 <section class="product-grid-section reveal" id="products">
-    <div class="container">
+    <div class="container shop-layout">
 
+        {# ---------- الشريط الجانبي: يبان فالحاسوب فقط، ويبقى ملتصق عند التمرير ---------- #}
         {% if categories %}
-        <div class="category-filter-row">
-            <a href="{{ url_for('shop.home') }}" class="category-chip {{ 'is-active' if not active_category else '' }}">الكل</a>
-            {% for cat in categories %}
-                <a href="{{ url_for('shop.home', category=cat.slug) }}"
-                   class="category-chip {{ 'is-active' if active_category == cat.slug else '' }}">
-                    {{ cat.name }}
-                </a>
-            {% endfor %}
-        </div>
+        <aside class="shop-sidebar" aria-label="التصنيفات">
+            <div class="shop-sidebar-inner">
+                <h2 class="shop-sidebar-title">التصنيفات</h2>
+                <ul class="shop-sidebar-list">
+                    <li>
+                        <a href="{{ url_for('shop.home') }}"
+                           class="side-cat {{ 'is-active' if not active_category }}"
+                           data-cat="all">
+                            <span class="side-cat-name">كل المنتجات</span>
+                            <span class="side-cat-count">{{ all_products|length }}</span>
+                        </a>
+                    </li>
+                    {% for cat in categories %}
+                    {% set cat_count = all_products | selectattr('category') | selectattr('category.slug', 'equalto', cat.slug) | list | length %}
+                    <li>
+                        <a href="{{ url_for('shop.home', category=cat.slug) }}"
+                           class="side-cat {{ 'is-active' if active_category == cat.slug }}"
+                           data-cat="{{ cat.slug }}">
+                            <span class="side-cat-name">{{ cat.name }}</span>
+                            <span class="side-cat-count">{{ cat_count }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </aside>
         {% endif %}
 
-        {% if products %}
-        <div class="product-grid">
-            {% for product in products %}
-            <a href="{{ url_for('shop.product_detail', slug=product.slug) }}" class="product-card">
-                <div class="product-card-image ph-{{ loop.index0 % 4 }}">
-                    {% if product.image_filename %}
-                        <img src="{{ url_for('static', filename='img/products/' + product.image_filename) }}" alt="{{ product.name }}" loading="lazy">
-                    {% else %}
-                        <span class="ph-monogram">{{ product.name[0] }}</span>
-                    {% endif %}
-                    {% if not product.is_in_stock %}
-                        <span class="badge-out">نفذت الكمية</span>
-                    {% elif product.has_discount %}
-                        <span class="badge-offer">-{{ product.discount_percent }}%</span>
-                    {% endif %}
-                </div>
-                <div class="product-card-body">
-                    <h3 class="product-card-name">{{ product.name }}</h3>
-                    {% if product.color_variant %}
-                        <p class="product-card-variant">{{ product.color_variant }}</p>
-                    {% endif %}
-                    <p class="product-card-price">
-                        {{ product.price_display }}
-                        {% if product.has_discount %}
-                            <span class="price-compare">{{ product.compare_at_price_display }}</span>
+        <div class="shop-main">
+
+            {# ---------- أزرار التصنيف: تبان فالهاتف فقط (فالحاسوب الشريط الجانبي يكفي) ---------- #}
+            {% if categories %}
+            <div class="category-filter-row category-filter-mobile">
+                <a href="{{ url_for('shop.home') }}"
+                   class="category-chip {{ 'is-active' if not active_category }}"
+                   data-cat="all">الكل</a>
+                {% for cat in categories %}
+                    <a href="{{ url_for('shop.home', category=cat.slug) }}"
+                       class="category-chip {{ 'is-active' if active_category == cat.slug }}"
+                       data-cat="{{ cat.slug }}">{{ cat.name }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <p class="shop-result-count" id="shopResultCount"></p>
+
+            {% if all_products %}
+            <div class="product-grid" id="shopGrid">
+                {# ⚠️ نطبعو **كل** المنتجات، والفلترة تصرا فالمتصفح فورًا بلا إعادة تحميل.
+                   المنتجات اللي ماشي من التصنيف المختار تتخبّى بـCSS. #}
+                {% for product in all_products %}
+                <a href="{{ url_for('shop.product_detail', slug=product.slug) }}"
+                   class="product-card"
+                   data-cat="{{ product.category.slug if product.category else '' }}">
+                    <div class="product-card-image ph-{{ loop.index0 % 4 }}">
+                        {% if product.image_filename %}
+                            <img src="{{ url_for('static', filename='img/products/' + product.image_filename) }}" alt="{{ product.name }}" loading="lazy">
+                        {% else %}
+                            <span class="ph-monogram">{{ product.name[0] }}</span>
                         {% endif %}
-                    </p>
-                </div>
-            </a>
-            {% endfor %}
+                        {% if not product.is_in_stock %}
+                            <span class="badge-out">نفذت الكمية</span>
+                        {% elif product.has_discount %}
+                            <span class="badge-offer">-{{ product.discount_percent }}%</span>
+                        {% endif %}
+                    </div>
+                    <div class="product-card-body">
+                        {% if product.category %}
+                            <span class="product-card-cat">{{ product.category.name }}</span>
+                        {% endif %}
+                        <h3 class="product-card-name">{{ product.name }}</h3>
+                        <p class="product-card-price">
+                            {{ product.price_display }}
+                            {% if product.has_discount %}
+                                <span class="price-compare">{{ product.compare_at_price_display }}</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+
+            <p class="shop-empty-filter" id="shopEmptyFilter" hidden>
+                ماكاين حتى منتج فهاد التصنيف دابا.
+            </p>
+            {% else %}
+            <div class="empty-state">
+                <p>ماكاين حتى منتج دابا. زيد منتجات من لوحة التحكم.</p>
+            </div>
+            {% endif %}
+
         </div>
-        {% else %}
-        <div class="empty-state">
-            <p>ماكاين حتى منتج دابا. زيد منتجات عبر <code>seed.py</code> أو من لوحة التحكم (فمرحلة قادمة).</p>
-        </div>
-        {% endif %}
     </div>
 </section>
+
+{% if spotlight and spotlight.spotlight_position == "bottom" %}
+{{ spotlight_section(spotlight) }}
+{% endif %}
 
 {% endblock %}

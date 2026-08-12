@@ -130,6 +130,13 @@ class Product(db.Model):
     stock_quantity = db.Column(db.Integer, nullable=False, default=0)
     image_filename = db.Column(db.String(255), nullable=True)  # الصورة الرئيسية (تبقى للتوافق مع القديم)
     is_active = db.Column(db.Boolean, nullable=False, default=True)  # يبان فالمتجر ولا لا
+
+    # يبان فقسم "الأكثر طلبًا" باختيار يدوي.
+    # ⚠️ هذا حل مؤقت ذكي: المتجر جديد وماكانش مبيعات، فالأدمن يختار بيدو.
+    # كي توصل المبيعات الحقيقية للحد الأدنى، القسم يتبدّل أوتوماتيكيًا
+    # للأرقام الحقيقية وهاد الخانة تولّي بلا مفعول (شوف _find_best_sellers).
+    is_featured = db.Column(db.Boolean, nullable=False, default=False)
+
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     category = db.relationship("Category", back_populates="products")
@@ -276,6 +283,17 @@ class Offer(db.Model):
 
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    # ---------- قسم "عرض خاص" بالصورة الكبيرة ----------
+    # "none"   → ما يبانش فهاد القسم (عادي)
+    # "top"    → فوق الصفحة، أول حاجة يشوفها الزبون
+    # "bottom" → تحت الصفحة، فوق الفوتر
+    # ⚠️ عرض واحد فقط يبان — إذا اخترت أكثر من واحد، ياخذ الأول حسب sort_order.
+    spotlight_position = db.Column(db.String(10), nullable=False, default="none")
+
+    # نص حر يبان جنب الصورة (اختياري — إذا خلّيتو فارغ يستعمل description)
+    spotlight_text = db.Column(db.Text, nullable=True)
+
     starts_at = db.Column(db.DateTime, nullable=True)  # اختياري: بداية العرض
     ends_at = db.Column(db.DateTime, nullable=True)    # اختياري: نهاية العرض
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

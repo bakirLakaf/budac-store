@@ -21,6 +21,17 @@ def home():
 
     products = query.order_by(Product.created_at.desc()).all()
 
+    # ⚠️ للفلترة الفورية بلا إعادة تحميل: نبعثو **كل** المنتجات للقالب،
+    # والجافاسكريبت يخبّي/يبيّن حسب التصنيف. الفلترة من السيرفر (?category=)
+    # تبقى تخدم للروابط المباشرة ولمحركات البحث.
+    all_products = (
+        Product.query
+        .options(joinedload(Product.category), joinedload(Product.variants))
+        .filter_by(is_active=True)
+        .order_by(Product.created_at.desc())
+        .all()
+    )
+
     categories = Category.query.filter_by(is_active=True).order_by(Category.name).all()
 
     # العروض الخاصة تبان فوق فالصفحة الرئيسية — غير اللي شغالة فعليًا:
@@ -44,15 +55,42 @@ def home():
         newest = [p for p in products if p.is_in_stock][:8]
         best_sellers = _find_best_sellers(limit=8)
 
+    # العرض المميّز (قسم الصورة الكبيرة) — واحد فقط، فوق أو تحت
+    spotlight = _find_spotlight_offer()
+
     return render_template(
         "shop/home.html",
         products=products,
+        all_products=all_products,
         categories=categories,
         active_category=category_slug,
         offers=offers,
         newest=newest,
         best_sellers=best_sellers,
+        spotlight=spotlight,
     )
+
+
+def _find_spotlight_offer():
+    """
+    يجيب العرض المخصّص لقسم "عرض خاص" بالصورة الكبيرة.
+
+    يرجع None إذا ماكانش — والقالب ما يعرضش القسم أصلاً.
+    إذا الأدمن فعّل أكثر من عرض، ناخذو الأول حسب sort_order.
+    """
+    candidates = (
+        Offer.query
+        .options(joinedload(Offer.items).joinedload(OfferItem.product))
+        .filter(Offer.spotlight_position.in_(["top", "bottom"]))
+        .order_by(Offer.sort_order, Offer.created_at.desc())
+        .all()
+    )
+
+    for offer in candidates:
+        if offer.is_running and offer.items:
+            return offer
+
+    return None
 
 
 def _find_best_sellers(limit=8):
@@ -78,8 +116,13 @@ def _find_best_sellers(limit=8):
         .all()
     )
 
-    if not rows:
-        return []
+    # ⚠️ عتبة الثقة: أقل من 5 منتجات مباعة يعني الأرقام مازال ضعيفة
+    # وما تعكسش الحقيقة. فنستعملو الاختيار اليدوي حتى نوصلو للعتبة،
+    # وبعدها القسم يتحوّل أوتوماتيكيًا للمبيعات الحقيقية.
+    MIN_PRODUCTS_SOLD = 5
+
+    if len(rows) < MIN_PRODUCTS_SOLD:
+        return _find_featured_products(limit)
 
     product_ids = [r[0] for r in rows]
     products = (
@@ -93,7 +136,23 @@ def _find_best_sellers(limit=8):
     order_map = {pid: i for i, pid in enumerate(product_ids)}
     products.sort(key=lambda p: order_map.get(p.id, 999))
 
-    return [p for p in products if p.is_in_stock]
+    result = [p for p in products if p.is_in_stock]
+    return result or _find_featured_products(limit)
+
+
+def _find_featured_products(limit=8):
+    """
+    المنتجات المختارة يدويًا من لوحة التحكم (خانة "مميّز").
+    تُستعمل حتى يجمع المتجر مبيعات حقيقية كافية.
+    """
+    return (
+        Product.query
+        .options(joinedload(Product.variants), joinedload(Product.category))
+        .filter(Product.is_active.is_(True), Product.is_featured.is_(True))
+        .order_by(Product.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 @shop_bp.route("/product/<slug>")

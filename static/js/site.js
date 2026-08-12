@@ -335,3 +335,72 @@
         if (e.key === 'Escape' && isOpen) closeDrawer();
     });
 })();
+
+/* ════════════════════════════════════════════════════════════
+   الفلترة الفورية حسب التصنيف (v17)
+   كل المنتجات مطبوعة فالصفحة، والفلترة تصرا فالمتصفح — بلا إعادة تحميل.
+   الرابط يتحدّث بـhistory.pushState باش الزبون يقدر يشاركو ويرجع للخلف.
+   ════════════════════════════════════════════════════════════ */
+(function () {
+    var grid = document.getElementById('shopGrid');
+    if (!grid) return;
+
+    var cards      = Array.prototype.slice.call(grid.querySelectorAll('.product-card'));
+    var countEl    = document.getElementById('shopResultCount');
+    var emptyEl    = document.getElementById('shopEmptyFilter');
+    var triggers   = document.querySelectorAll('.side-cat[data-cat], .category-chip[data-cat]');
+    var section    = document.getElementById('products');
+
+    function applyFilter(slug, pushUrl) {
+        var visible = 0;
+
+        cards.forEach(function (card) {
+            var match = (slug === 'all') || (card.getAttribute('data-cat') === slug);
+            card.classList.toggle('is-filtered-out', !match);
+            if (match) visible++;
+        });
+
+        // نحدّثو حالة الأزرار فالجهتين (الشريط الجانبي وأزرار الهاتف)
+        triggers.forEach(function (el) {
+            el.classList.toggle('is-active', el.getAttribute('data-cat') === slug);
+        });
+
+        if (countEl) {
+            countEl.textContent = visible === 0
+                ? ''
+                : visible + (visible === 1 ? ' منتج' : ' منتج');
+        }
+        if (emptyEl) emptyEl.hidden = visible !== 0;
+
+        if (pushUrl) {
+            var url = (slug === 'all')
+                ? window.location.pathname
+                : window.location.pathname + '?category=' + encodeURIComponent(slug);
+            history.pushState({ cat: slug }, '', url);
+        }
+    }
+
+    triggers.forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            var slug = el.getAttribute('data-cat');
+            applyFilter(slug, true);
+
+            // نمرّرو لقسم المنتجات باش الزبون يشوف النتيجة فورًا
+            if (section) {
+                var top = section.getBoundingClientRect().top + window.scrollY - 20;
+                window.scrollTo({ top: top, behavior: 'smooth' });
+            }
+        });
+    });
+
+    // زر "رجوع" فالمتصفح يرجّع الفلتر السابق
+    window.addEventListener('popstate', function () {
+        var params = new URLSearchParams(window.location.search);
+        applyFilter(params.get('category') || 'all', false);
+    });
+
+    // الحالة الأولى: من الرابط
+    var initial = new URLSearchParams(window.location.search).get('category') || 'all';
+    applyFilter(initial, false);
+})();

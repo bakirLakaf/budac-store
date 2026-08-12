@@ -263,6 +263,7 @@ def product_form(product_id=None):
         product.stock_quantity = request.form.get("stock_quantity", type=int) or 0
         product.category_id = request.form.get("category_id", type=int) or None
         product.is_active = bool(request.form.get("is_active"))
+        product.is_featured = bool(request.form.get("is_featured"))
 
         # إعدادات حاسبة الكمية
         calc_type = request.form.get("calculator_type") or None
@@ -549,6 +550,11 @@ def offer_form(offer_id=None):
         offer.bundle_price = request.form.get("bundle_price", type=int) or 0
         offer.sort_order = request.form.get("sort_order", type=int) or 0
         offer.is_active = bool(request.form.get("is_active"))
+
+        # قسم "عرض خاص" — نتحققو من القيمة باش ما تدخلش قيمة غريبة
+        position = request.form.get("spotlight_position", "none")
+        offer.spotlight_position = position if position in ("none", "top", "bottom") else "none"
+        offer.spotlight_text = (request.form.get("spotlight_text") or "").strip() or None
 
         # التواريخ اختيارية
         offer.starts_at = _parse_date(request.form.get("starts_at"))

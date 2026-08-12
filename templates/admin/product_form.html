@@ -59,6 +59,15 @@
                 <span>مفعّل (يبان فالمتجر)</span>
             </label>
 
+            <label class="checkbox-field">
+                <input type="checkbox" name="is_featured" {{ 'checked' if product and product.is_featured }}>
+                <span>مميّز — يبان فقسم «الأكثر طلبًا»</span>
+            </label>
+            <small class="hint">
+                هاد الخانة تخدم حتى يجمع المتجر مبيعات حقيقية (5 منتجات مباعة على الأقل).
+                بعدها القسم يتحوّل أوتوماتيكيًا للأكثر مبيعًا فعليًا.
+            </small>
+
             <details class="calc-settings" {{ 'open' if product and product.calculator_type }}>
                 <summary>حاسبة الكمية (اختيارية)</summary>
 
