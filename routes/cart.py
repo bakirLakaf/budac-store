@@ -171,16 +171,13 @@ def api_communes():
     for c in communes:
         link = links.get(c.id)
 
-        # بلا مزامنة نقبلو الكل (الأدمن يبعث يدويًا)
+        # ⚠️ هاد القائمة تُعرض **فقط للتوصيل للمنزل** — التوصيل للمكتب
+        # عندو قائمة مكاتب خاصة بيه (شوف /api/pickup-points).
+        # فالتوفّر هنا = التوصيل للمنزل، ماشي can_send العام.
         if link is None:
+            # بلا مزامنة نقبلو الكل (الأدمن يبعث يدويًا)
             available = True
             external_id = ""
-        elif not link.can_send:
-            available = False
-            external_id = ""
-        elif delivery_type == "office":
-            available = link.has_pickup_point
-            external_id = link.external_id or ""
         else:
             available = link.has_home_delivery
             external_id = link.external_id or ""

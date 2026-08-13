@@ -35,17 +35,18 @@
     <div class="ic-sync">
         <h3>البلديات</h3>
         <p class="hint">
-            ZR يحتاج <strong>معرّف البلدية</strong> باش يقبل الطرد — ماشي اسمها.
-            البلديات عندنا أصلاً (1541 بلدية رسمية). هنا نربطهم بمعرّفات ZR
-            ونعرفو لأي بلدية يوصل. البلديات اللي ما يوصلش ليها تبان للزبون
-            <strong>معطّلة</strong> — يلقى بلديتو ويفهم المشكل.
+            <strong>التوصيل للمنزل:</strong> متاح لكل بلديات الولايات اللي ZR
+            يوصل ليها (المصدر: جدول أسعار ZR).<br>
+            <strong>التوصيل للمكتب:</strong> يعتمد على قائمة مكاتب ZR الحقيقية
+            (Nos Bureaux) — الولاية اللي ماكانش فيها مكتب ما تعرضش هاد الخيار.
         </p>
 
         <p class="ic-linked {{ 'is-ok' if linked_communes > 0 else 'is-warn' }}">
             {% if linked_communes == 0 %}
-                🔴 ZR مازال ما مربوطش بالبلديات — اضغط الزر تحت
+                🔴 ZR مازال ما مربوطش — اضغط الزر تحت
             {% else %}
-                ✓ ZR يوصل لـ{{ linked_communes }} بلدية، تغطي {{ wilayas_covered }} ولاية
+                ✓ توصيل للمنزل: {{ wilayas_covered }} ولاية ({{ linked_communes }} بلدية)
+                — مكاتب استلام فـ{{ office_wilayas }} ولاية
             {% endif %}
         </p>
 
@@ -82,23 +83,21 @@
         <div class="test-result is-ok">
             ✓ خلصات المزامنة:
             <ul class="sync-stats">
-                <li>بلديات مربوطة بـZR: <strong>{{ sync_result.linked }}</strong>
-                    من {{ sync_result.our_total }}
-                    {% if sync_result.matched_zones and sync_result.matched_zones > sync_result.linked %}
-                    <span class="muted">(عبر {{ sync_result.matched_zones }} منطقة فرعية عند ZR)</span>
-                    {% endif %}
+                <li>🏠 <strong>التوصيل للمنزل</strong>:
+                    {{ sync_result.wilayas_covered }} ولاية من 58
+                    ({{ sync_result.home_communes }} بلدية من {{ sync_result.our_total }})
                 </li>
-                <li>ZR يوصل فعلاً لـ<strong>{{ sync_result.deliverable }}</strong> بلدية</li>
-                <li>ولايات مغطّاة: <strong>{{ sync_result.wilayas_covered }}</strong> من 58</li>
-                {% if sync_result.deactivated %}
-                <li class="muted">{{ sync_result.deactivated }} بلدية ما بقاتش عند ZR (تعطّلت)</li>
-                {% endif %}
-                {% if sync_result.no_match_count %}
+                <li>🏢 <strong>التوصيل للمكتب</strong>:
+                    {{ sync_result.offices_total }} مكتب
+                    فـ{{ sync_result.office_wilayas }} ولاية
+                </li>
                 <li class="muted">
-                    {{ sync_result.no_match_count }} منطقة عند ZR ما لقيناش ليها بلدية عندنا
-                    (أسماء مختلفة ولا مناطق فرعية) — عادي، ما يأثرش
+                    مصدر التغطية: {{ sync_result.coverage_source }}
+                    · معرّفات بلديات: {{ sync_result.matched_ids }}
                 </li>
-                {% endif %}
+                {% for w in sync_result.warnings %}
+                <li class="muted">⚠️ {{ w }}</li>
+                {% endfor %}
             </ul>
         </div>
         {% endif %}

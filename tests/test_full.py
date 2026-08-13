@@ -84,9 +84,11 @@ def build():
         db.session.add(CarrierCommune(carrier_id=carrier.id, commune_id=cm1.id,
                                       external_id="zr-uuid-1", has_home_delivery=True,
                                       has_pickup_point=True, can_send=True))
+        # بلدية ما يوصلش ليها: has_home_delivery=False هو المعيار
+        # (can_send بقى للتوافق فقط — التوفّر للمنزل يتقرّر بـhas_home_delivery)
         db.session.add(CarrierCommune(carrier_id=carrier.id, commune_id=cm2.id,
-                                      external_id="zr-uuid-2", has_home_delivery=True,
-                                      has_pickup_point=True, can_send=False))
+                                      external_id="zr-uuid-2", has_home_delivery=False,
+                                      has_pickup_point=False, can_send=False))
 
         admin = AdminUser(username="admin")
         admin.set_password("test-password-123")

@@ -1324,16 +1324,26 @@ def integrations():
     # كم بلدية محفوظة دابا — نعرضوها للأدمن باش يعرف واش لازم يزامن
     linked = 0
     wilayas_covered = 0
+    office_wilayas = 0
     carrier = Carrier.query.filter_by(code="zrexpress").first()
     if carrier:
+        # بلديات التوصيل للمنزل
         linked = CarrierCommune.query.filter_by(
-            carrier_id=carrier.id, can_send=True
+            carrier_id=carrier.id, has_home_delivery=True
         ).count()
         wilayas_covered = (
             db.session.query(Commune.wilaya_code)
             .join(CarrierCommune, CarrierCommune.commune_id == Commune.id)
             .filter(CarrierCommune.carrier_id == carrier.id,
-                    CarrierCommune.can_send.is_(True))
+                    CarrierCommune.has_home_delivery.is_(True))
+            .distinct().count()
+        )
+        # ولايات فيها مكتب استلام
+        office_wilayas = (
+            db.session.query(Commune.wilaya_code)
+            .join(CarrierCommune, CarrierCommune.commune_id == Commune.id)
+            .filter(CarrierCommune.carrier_id == carrier.id,
+                    CarrierCommune.has_pickup_point.is_(True))
             .distinct().count()
         )
 
@@ -1345,6 +1355,7 @@ def integrations():
         inspect_data=inspect_data,
         linked_communes=linked,
         wilayas_covered=wilayas_covered,
+        office_wilayas=office_wilayas,
     )
 
 
