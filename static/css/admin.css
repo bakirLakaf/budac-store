@@ -471,3 +471,70 @@ body {
 .sync-unmatched ul { margin: 6px 0; padding-inline-start: 20px; }
 .sync-unmatched li { line-height: 1.8; }
 .sync-unmatched small { color: #6B6257; display: block; margin-top: 6px; }
+
+/* ---------- صور الموديلات ---------- */
+.variants-table .variant-img-cell { width: 64px; }
+
+.variant-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 1px solid #E6E0D4;
+    display: block;
+}
+.variant-thumb-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #F4F0E8;
+    color: #A89D8C;
+    font-size: 18px;
+}
+
+.variant-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.variant-actions form { margin: 0; }
+
+/* زر رفع الملف: <input type=file> مخبّي داخل <label> */
+.btn-file {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ---------- تشخيص بيانات شركة التوصيل ---------- */
+.sync-buttons { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.sync-buttons form { margin: 0; }
+
+.inspect-box {
+    margin-top: 14px;
+    padding: 14px;
+    background: #F7F4EE;
+    border: 1px solid #E6E0D4;
+    border-radius: 10px;
+    font-size: 13px;
+}
+.inspect-box code {
+    background: #EDE7DA;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+.inspect-box pre {
+    max-height: 340px;
+    overflow: auto;
+    background: #2E1A47;
+    color: #EFE7D8;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.6;
+    text-align: left;
+}
+.inspect-box summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }

@@ -462,11 +462,55 @@ def variant_add(product_id):
         sku=(request.form.get("sku") or "").strip() or None,
         is_default=not product.variants,  # أول تنويعة تولي الافتراضية تلقائيًا
     )
+
+    # صورة خاصة بهاد الموديل — كي يختارها الزبون تتبدّل الصورة الرئيسية
+    image = request.files.get("image")
+    if image and image.filename:
+        try:
+            variant.image_filename = save_image(image, "products", base_name=product.slug)
+        except Exception as e:
+            flash(f"التنويعة تزادت لكن الصورة فشلت: {e}", "warning")
+
     db.session.add(variant)
     db.session.commit()
 
     flash(f"تمت إضافة التنويعة «{label}»", "success")
     return redirect(url_for("admin.product_form", product_id=product_id))
+
+
+@admin_bp.route("/variants/<int:variant_id>/image", methods=["POST"])
+@login_required
+def variant_image(variant_id):
+    """
+    يبدّل (ولا يحيّد) صورة موديل موجود.
+
+    ⚠️ ليش مهمة؟ الزبون كي يختار موديل، لازم يشوف صورتو بالضبط.
+    بلا صورة خاصة، الصورة الرئيسية ما تتبدلش وهذا يخلق سوء فهم عند الطلب.
+    """
+    variant = ProductVariant.query.get_or_404(variant_id)
+
+    # حذف الصورة
+    if request.form.get("remove"):
+        variant.image_filename = None
+        db.session.commit()
+        flash(f"تحيّدت صورة «{variant.label}»", "success")
+        return redirect(url_for("admin.product_form", product_id=variant.product_id))
+
+    image = request.files.get("image")
+    if not image or not image.filename:
+        flash("ما اخترتش حتى صورة", "error")
+        return redirect(url_for("admin.product_form", product_id=variant.product_id))
+
+    try:
+        variant.image_filename = save_image(
+            image, "products", base_name=variant.product.slug
+        )
+        db.session.commit()
+        flash(f"تبدّلت صورة «{variant.label}»", "success")
+    except Exception as e:
+        flash(f"ما قدرناش نحفظو الصورة: {e}", "error")
+
+    return redirect(url_for("admin.product_form", product_id=variant.product_id))
 
 
 @admin_bp.route("/variants/<int:variant_id>/delete", methods=["POST"])
@@ -1124,7 +1168,7 @@ def order_send_to_carrier(order_id):
     # بلا هاد المعرّف الطرد يتبعث بلا ولاية ويترفض.
     from services.zrexpress import find_territory_id
 
-    territory_id = find_territory_id("zr", order.wilaya_code)
+    territory_id = find_territory_id("zrexpress", order.wilaya_code)
 
     if not territory_id:
         flash(
@@ -1189,6 +1233,7 @@ def integrations():
 
     zr_result = None
     sync_result = None
+    inspect_data = None
 
     if request.method == "POST":
         action = request.form.get("test") or request.form.get("action")
@@ -1196,6 +1241,20 @@ def integrations():
         if action == "zr":
             ok, message = test_connection()
             zr_result = {"ok": ok, "message": message}
+
+        elif action == "inspect":
+            # تشخيص: نوريّو البيانات الخام باش نعرفو بنيتها الحقيقية
+            from services.zrexpress import inspect_territories
+            import json as _json
+            try:
+                info = inspect_territories()
+                inspect_data = {
+                    "count": info["count"],
+                    "fields": ", ".join(info["fields"]),
+                    "sample": _json.dumps(info["sample"], ensure_ascii=False, indent=2),
+                }
+            except ZRError as e:
+                zr_result = {"ok": False, "message": str(e)}
 
         elif action == "sync_territories":
             try:
@@ -1205,7 +1264,7 @@ def integrations():
 
     # كم ولاية مربوطة دابا — نعرضوها للأدمن باش يعرف واش لازم يزامن
     linked = 0
-    carrier = Carrier.query.filter_by(code="zr").first()
+    carrier = Carrier.query.filter_by(code="zrexpress").first()
     if carrier:
         linked = ShippingRate.query.filter(
             ShippingRate.carrier_id == carrier.id,
@@ -1217,6 +1276,7 @@ def integrations():
         zr_configured=is_configured(),
         zr_result=zr_result,
         sync_result=sync_result,
+        inspect_data=inspect_data,
         linked_wilayas=linked,
     )
 

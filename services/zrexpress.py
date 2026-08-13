@@ -93,14 +93,52 @@ def _request(method, path, **kwargs):
         return {}
 
 
-def get_territories():
+def get_territories(max_pages=20):
     """
-    قائمة الولايات/المناطق عند ZR مع معرّفاتها.
+    قائمة المناطق عند ZR مع معرّفاتها — **كل الصفحات**.
 
-    نحتاجوها باش نربطو ولاياتنا بمعرّفات ZR — بلاها ما نقدروش نبعثو طرد.
+    ⚠️ ZR يرجّع النتائج على صفحات. الطلب الأول كان يجيب 200 فقط ويظن
+    أنها كل شيء. إذا المناطق هي البلديات (1541 فالجزائر)، كنا ناخذو
+    13% منها فقط — والباقي ما يتربطش أبدًا.
+
+    max_pages : حد أمان باش ما ندخلوش فحلقة لا نهائية إذا ZR بدّل الرد.
     """
-    data = _request("POST", "/territories/search", json={"page": 1, "pageSize": 200})
-    return data.get("data") or data.get("items") or []
+    all_items = []
+    page = 1
+
+    while page <= max_pages:
+        data = _request("POST", "/territories/search",
+                        json={"page": page, "pageSize": 200})
+
+        items = data.get("data") or data.get("items") or []
+        if not items:
+            break
+
+        all_items.extend(items)
+
+        # وقفنا إذا الصفحة ناقصة (يعني هي الأخيرة)
+        if len(items) < 200:
+            break
+
+        page += 1
+
+    return all_items
+
+
+def inspect_territories(sample=3):
+    """
+    تشخيص: يرجّع عيّنة خام من بيانات ZR باش نعرفو أسماء الحقول الحقيقية.
+
+    ⚠️ ضروري لأن التوثيق ما يوضّحش واش "territory" معناها ولاية ولا بلدية.
+    بلا هاد المعرفة، أي ربط نبنيوه يكون تخمين.
+    """
+    items = get_territories()
+
+    return {
+        "count": len(items),
+        "fields": sorted({k for it in items[:50] for k in it.keys()}),
+        "sample": items[:sample],
+    }
 
 
 def get_delivery_rates():
@@ -266,7 +304,7 @@ def sync_territories():
     """
     from models import db, Carrier, ShippingRate
 
-    carrier = Carrier.query.filter_by(code="zr").first()
+    carrier = Carrier.query.filter_by(code="zrexpress").first()
     if not carrier:
         raise ZRError("شركة ZR Express ماكانتش فقاعدة البيانات")
 

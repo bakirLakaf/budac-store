@@ -1,94 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ product.name }} — {{ store_name }}<section class="reviews-section" id="reviews">
-    <div class="container container-narrow">
-        <div class="reviews-head">
-            <h2 class="section-heading">آراء الزبائن</h2>
-            {% if avg_rating %}
-            <div class="rating-summary">
-                <span class="rating-stars">{{ "★" * (avg_rating | round | int) }}{{ "☆" * (5 - (avg_rating | round | int)) }}</span>
-                <span class="rating-value">{{ avg_rating }}/5</span>
-                <span class="rating-count">({{ reviews|length }} تقييم)</span>
-            </div>
-            {% endif %}
-        </div>
-
-        {% if reviews %}
-        <ul class="reviews-list">
-            {% for r in reviews %}
-            <li class="review-item">
-                <div class="review-head">
-                    <strong class="review-author">{{ r.author_name }}</strong>
-                    <span class="review-stars">{{ r.stars }}</span>
-                </div>
-                {% if r.comment %}<p class="review-comment">{{ r.comment }}</p>{% endif %}
-                <span class="review-date">{{ r.created_at.strftime('%Y-%m-%d') }}</span>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="hint-muted">مازال ماكانش تقييم لهذا المنتج — كن أول واحد!</p>
-        {% endif %}
-
-        <details class="review-form-box">
-            <summary>اكتب تقييمك</summary>
-            <form method="post" action="{{ url_for('shop.add_review', slug=product.slug) }}" class="review-form">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                <label class="field">
-                    <span>اسمك *</span>
-                    <input type="text" name="author_name" required maxlength="120">
-                </label>
-
-                <div class="field">
-                    <span>تقييمك *</span>
-                    <div class="star-picker" id="starPicker">
-                        {% for i in range(5, 0, -1) %}
-                        <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}" {{ 'checked' if i == 5 }}>
-                        <label for="star{{ i }}" title="{{ i }} نجوم">★</label>
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <label class="field">
-                    <span>رأيك (اختياري)</span>
-                    <textarea name="comment" rows="3" maxlength="1000" placeholder="واش عجبك فهاد المنتج؟"></textarea>
-                </label>
-
-                <button type="submit" class="btn-primary">أرسل التقييم</button>
-                <p class="hint">يبان بعد المراجعة.</p>
-            </form>
-        </details>
-    </div>
-</section>
-
-{% if related %}
-<section class="related-section">
-    <div class="container">
-        <h2 class="section-heading">منتجات قد تعجبك</h2>
-        <div class="product-grid">
-            {% for p in related %}
-            <a href="{{ url_for('shop.product_detail', slug=p.slug) }}" class="product-card">
-                <div class="product-card-image ph-{{ loop.index0 % 4 }}">
-                    {% if p.image_filename %}
-                        <img src="{{ url_for('static', filename='img/products/' + p.image_filename) }}" alt="{{ p.name }}" loading="lazy">
-                    {% else %}
-                        <span class="ph-monogram">{{ p.name[0] }}</span>
-                    {% endif %}
-                    {% if p.has_discount %}<span class="badge-offer">-{{ p.discount_percent }}%</span>{% endif %}
-                </div>
-                <div class="product-card-body">
-                    <h3 class="product-card-name">{{ p.name }}</h3>
-                    <p class="product-card-price">{{ p.price_display }}</p>
-                </div>
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-</section>
-{% endif %}
-
-{% endblock %}
+{% block title %}{{ product.name }} — {{ store_name }}{% endblock %}
 
 {% block content %}
 
@@ -146,7 +58,7 @@
 
             {% if product.variants %}
             <div class="variant-picker">
-                <p class="variant-picker-label">اختر التنويعة:</p>
+                <p class="variant-picker-label">اختر الموديل:</p>
                 <div class="variant-options">
                     {% for v in product.variants %}
                     <button type="button"
@@ -324,16 +236,46 @@
     var thumbs = document.querySelectorAll(".gallery-thumb");
     var mainImg = document.getElementById("galleryMainImage");
 
-    thumbs.forEach(function (thumb) {
-        thumb.addEventListener("click", function () {
-            var fullSrc = thumb.getAttribute("data-full");
-            if (mainImg && fullSrc) {
-                mainImg.src = fullSrc;
-            }
-            thumbs.forEach(function (t) { t.classList.remove("is-active"); });
-            thumb.classList.add("is-active");
+    // الصورة "المثبّتة" — اللي ترجع كي يبعّد الزبون الماوس.
+    // تتبدّل غير بالضغط ولا باختيار موديل، ماشي بالمرور.
+    var pinnedSrc = mainImg ? mainImg.src : "";
+
+    function setPinned(src) {
+        pinnedSrc = src;
+        if (mainImg) mainImg.src = src;
+        // نعلّمو المصغّرة الموافقة (المقارنة بآخر جزء من الرابط)
+        var tail = src.split("/").pop();
+        thumbs.forEach(function (t) {
+            var full = t.getAttribute("data-full") || "";
+            t.classList.toggle("is-active", full.split("/").pop() === tail);
         });
+    }
+
+    thumbs.forEach(function (thumb) {
+        var fullSrc = thumb.getAttribute("data-full");
+
+        // ---------- معاينة بالمرور: مؤقتة، ما تثبتش ----------
+        thumb.addEventListener("mouseenter", function () {
+            if (mainImg && fullSrc) mainImg.src = fullSrc;
+        });
+        thumb.addEventListener("mouseleave", function () {
+            if (mainImg && pinnedSrc) mainImg.src = pinnedSrc;
+        });
+
+        // ---------- الضغط: يثبّت ----------
+        thumb.addEventListener("click", function () {
+            if (fullSrc) setPinned(fullSrc);
+        });
+
+        // ⚠️ فالهاتف ماكانش "مرور" — اللمسة تولّي ضغطة مباشرة،
+        // وهذا هو السلوك الصحيح تما.
+        thumb.addEventListener("touchstart", function () {
+            if (fullSrc) setPinned(fullSrc);
+        }, { passive: true });
     });
+
+    // نخليوها متاحة لمنطق التنويعات تحت
+    window.__setPinnedImage = setPinned;
 
     // ---------- تأثير التكبير (Zoom) عند تقريب الماوس من الصورة ----------
     var galleryMain = document.getElementById("galleryMain");
@@ -678,14 +620,115 @@
                 selectedVariantInput.value = chip.getAttribute("data-variant-id") || "";
             }
 
+            // صورة الموديل تتثبّت (ماشي معاينة مؤقتة) — الزبون لازم يشوف
+            // بالضبط واش راه يطلب.
             var image = chip.getAttribute("data-image");
-            if (image && mainImg) {
-                mainImg.src = image;
+            if (image) {
+                if (window.__setPinnedImage) {
+                    window.__setPinnedImage(image);
+                } else if (mainImg) {
+                    mainImg.src = image;
+                }
+
+                // نمرّرو للصورة فالهاتف باش الزبون يشوف التبديل
+                if (window.innerWidth <= 768 && mainImg) {
+                    var top = mainImg.getBoundingClientRect().top + window.scrollY - 70;
+                    if (window.scrollY > top) window.scrollTo({ top: top, behavior: "smooth" });
+                }
             }
         });
     });
 })();
 </script>
+
+<section class="reviews-section" id="reviews">
+    <div class="container container-narrow">
+        <div class="reviews-head">
+            <h2 class="section-heading">آراء الزبائن</h2>
+            {% if avg_rating %}
+            <div class="rating-summary">
+                <span class="rating-stars">{{ "★" * (avg_rating | round | int) }}{{ "☆" * (5 - (avg_rating | round | int)) }}</span>
+                <span class="rating-value">{{ avg_rating }}/5</span>
+                <span class="rating-count">({{ reviews|length }} تقييم)</span>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if reviews %}
+        <ul class="reviews-list">
+            {% for r in reviews %}
+            <li class="review-item">
+                <div class="review-head">
+                    <strong class="review-author">{{ r.author_name }}</strong>
+                    <span class="review-stars">{{ r.stars }}</span>
+                </div>
+                {% if r.comment %}<p class="review-comment">{{ r.comment }}</p>{% endif %}
+                <span class="review-date">{{ r.created_at.strftime('%Y-%m-%d') }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="hint-muted">مازال ماكانش تقييم لهذا المنتج — كن أول واحد!</p>
+        {% endif %}
+
+        <details class="review-form-box">
+            <summary>اكتب تقييمك</summary>
+            <form method="post" action="{{ url_for('shop.add_review', slug=product.slug) }}" class="review-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <label class="field">
+                    <span>اسمك *</span>
+                    <input type="text" name="author_name" required maxlength="120">
+                </label>
+
+                <div class="field">
+                    <span>تقييمك *</span>
+                    <div class="star-picker" id="starPicker">
+                        {% for i in range(5, 0, -1) %}
+                        <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}" {{ 'checked' if i == 5 }}>
+                        <label for="star{{ i }}" title="{{ i }} نجوم">★</label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <label class="field">
+                    <span>رأيك (اختياري)</span>
+                    <textarea name="comment" rows="3" maxlength="1000" placeholder="واش عجبك فهاد المنتج؟"></textarea>
+                </label>
+
+                <button type="submit" class="btn-primary">أرسل التقييم</button>
+                <p class="hint">يبان بعد المراجعة.</p>
+            </form>
+        </details>
+    </div>
+</section>
+
+{% if related %}
+<section class="related-section">
+    <div class="container">
+        <h2 class="section-heading">منتجات قد تعجبك</h2>
+        <div class="product-grid">
+            {% for p in related %}
+            <a href="{{ url_for('shop.product_detail', slug=p.slug) }}" class="product-card">
+                <div class="product-card-image ph-{{ loop.index0 % 4 }}">
+                    {% if p.image_filename %}
+                        <img src="{{ url_for('static', filename='img/products/' + p.image_filename) }}" alt="{{ p.name }}" loading="lazy">
+                    {% else %}
+                        <span class="ph-monogram">{{ p.name[0] }}</span>
+                    {% endif %}
+                    {% if p.has_discount %}<span class="badge-offer">-{{ p.discount_percent }}%</span>{% endif %}
+                </div>
+                <div class="product-card-body">
+                    <h3 class="product-card-name">{{ p.name }}</h3>
+                    <p class="product-card-price">{{ p.price_display }}</p>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
 
 <section class="reviews-section" id="reviews">
     <div class="container container-narrow">

@@ -180,22 +180,57 @@
 {% if product %}
 <hr class="divider">
 
-<h2 class="section-title">التنويعات (ألوان / مقاسات)</h2>
+<h2 class="section-title">الموديلات (ألوان / مقاسات)</h2>
+<p class="hint">
+    كل موديل يقدر يكون عندو <strong>صورة خاصة بيه</strong>. كي الزبون يختارو
+    فصفحة المنتج، الصورة الرئيسية تتبدّل مباشرة لصورتو —
+    وهذا يقلّل الطلبيات الغالطة والإرجاع.
+</p>
 
 {% if product.variants %}
-<table class="admin-table">
-    <thead><tr><th>التنويعة</th><th>السعر</th><th>SKU</th><th>افتراضية</th><th></th></tr></thead>
+<table class="admin-table variants-table">
+    <thead>
+        <tr><th>الصورة</th><th>الموديل</th><th>السعر</th><th>SKU</th><th>افتراضي</th><th></th></tr>
+    </thead>
     <tbody>
         {% for v in product.variants %}
         <tr>
+            <td class="variant-img-cell">
+                {% if v.image_filename %}
+                    <img src="{{ url_for('static', filename='img/products/' + (v.image_filename | thumb)) }}"
+                         alt="{{ v.label }}" class="variant-thumb">
+                {% else %}
+                    <span class="variant-thumb variant-thumb-empty" title="بلا صورة">—</span>
+                {% endif %}
+            </td>
             <td>{{ v.label }}</td>
             <td>{{ v.price_display }}</td>
             <td>{{ v.sku or '—' }}</td>
             <td>{{ '✓' if v.is_default else '' }}</td>
-            <td>
+            <td class="variant-actions">
+                <form method="post" enctype="multipart/form-data"
+                      action="{{ url_for('admin.variant_image', variant_id=v.id) }}"
+                      class="variant-img-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="btn-admin btn-sm btn-file">
+                        {{ 'بدّل الصورة' if v.image_filename else '+ صورة' }}
+                        <input type="file" name="image" accept="image/*"
+                               onchange="this.form.submit()" hidden>
+                    </label>
+                </form>
+
+                {% if v.image_filename %}
+                <form method="post" action="{{ url_for('admin.variant_image', variant_id=v.id) }}"
+                      onsubmit="return confirm('تحيّد صورة «{{ v.label }}»؟')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="remove" value="1">
+                    <button type="submit" class="btn-admin btn-sm">حيّد الصورة</button>
+                </form>
+                {% endif %}
+
                 <form method="post" action="{{ url_for('admin.variant_delete', variant_id=v.id) }}"
-                      onsubmit="return confirm('تمسح التنويعة «{{ v.label }}»؟')">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      onsubmit="return confirm('تمسح الموديل «{{ v.label }}»؟')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn-admin btn-sm btn-danger">حذف</button>
                 </form>
             </td>
@@ -204,15 +239,20 @@
     </tbody>
 </table>
 {% else %}
-<p class="hint">ماكاين حتى تنويعة. إذا المنتج عندو ألوان/مقاسات مختلفة، زيدهم هنا.</p>
+<p class="hint">ماكاين حتى موديل. إذا المنتج عندو ألوان/مقاسات مختلفة، زيدهم هنا.</p>
 {% endif %}
 
-<form method="post" action="{{ url_for('admin.variant_add', product_id=product.id) }}" class="inline-form">
+<form method="post" enctype="multipart/form-data"
+      action="{{ url_for('admin.variant_add', product_id=product.id) }}" class="inline-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="text" name="label" placeholder="اسم التنويعة (مثلاً: دوري)" required>
+    <input type="text" name="label" placeholder="اسم الموديل (مثلاً: دوري / الجزيرة)" required>
     <input type="number" name="price" placeholder="سعر خاص (اختياري)" min="0">
     <input type="text" name="sku" placeholder="SKU (اختياري)">
-    <button type="submit" class="btn-admin btn-sm">+ زيد تنويعة</button>
+    <label class="btn-admin btn-sm btn-file">
+        📷 صورة
+        <input type="file" name="image" accept="image/*" hidden>
+    </label>
+    <button type="submit" class="btn-admin btn-sm">+ زيد موديل</button>
 </form>
 {% endif %}
 

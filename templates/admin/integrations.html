@@ -48,11 +48,30 @@
             {% endif %}
         </p>
 
-        <form method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="action" value="sync_territories">
-            <button type="submit" class="btn-admin">زامن الولايات مع ZR</button>
-        </form>
+        <div class="sync-buttons">
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="sync_territories">
+                <button type="submit" class="btn-admin">زامن الولايات مع ZR</button>
+            </form>
+
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="inspect">
+                <button type="submit" class="btn-admin btn-sm">🔍 افحص بيانات ZR</button>
+            </form>
+        </div>
+
+        {% if inspect_data %}
+        <div class="inspect-box">
+            <p><strong>عدد المناطق الحقيقي:</strong> {{ inspect_data.count }}</p>
+            <p><strong>الحقول المتاحة:</strong> <code>{{ inspect_data.fields }}</code></p>
+            <details open>
+                <summary>عيّنة من البيانات الخام</summary>
+                <pre dir="ltr">{{ inspect_data.sample }}</pre>
+            </details>
+        </div>
+        {% endif %}
 
         {% if sync_result %}
         <div class="test-result {{ 'is-ok' if not sync_result.unmatched else 'is-warn' }}">
