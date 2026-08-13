@@ -125,6 +125,49 @@ def _cart_json():
     })
 
 
+@cart_bp.route("/api/communes")
+def api_communes():
+    """
+    بلديات ولاية معيّنة عند شركة معيّنة — لقائمة البلديات فصفحة الطلب.
+
+    ⚠️ نرجعو غير البلديات اللي الشركة توصل ليها فعلاً (can_send).
+    هكذا الزبون ما يختارش بلدية ونكتشفو بعد أن ما نقدروش نبعثو ليها.
+    """
+    from models import Carrier, Commune
+
+    carrier_code = (request.args.get("carrier") or "").strip()
+    wilaya_code = (request.args.get("wilaya") or "").strip()
+    delivery_type = request.args.get("type", "home")
+
+    if not carrier_code or not wilaya_code:
+        return jsonify({"communes": [], "message": "اختر الولاية وشركة التوصيل"})
+
+    carrier = Carrier.query.filter_by(code=carrier_code, is_active=True).first()
+    if not carrier:
+        return jsonify({"communes": [], "message": "شركة غير معروفة"})
+
+    query = Commune.query.filter_by(
+        carrier_id=carrier.id,
+        wilaya_code=wilaya_code.zfill(2),
+        can_send=True,
+    )
+
+    # التوصيل للمكتب يحتاج نقطة استلام فالبلدية
+    if delivery_type == "office":
+        query = query.filter_by(has_pickup_point=True)
+    else:
+        query = query.filter_by(has_home_delivery=True)
+
+    rows = query.order_by(Commune.name_ar).all()
+
+    return jsonify({
+        "communes": [
+            {"id": c.external_id, "name": c.display_name} for c in rows
+        ],
+        "count": len(rows),
+    })
+
+
 @cart_bp.route("/api/cart")
 def api_cart():
     """حالة السلة الحالية."""
@@ -260,6 +303,7 @@ def checkout():
                     "wilaya_code": form["wilaya_code"],
                     "wilaya_name": wilaya["name"] if wilaya else form["wilaya_code"],
                     "commune": form["commune"],
+                    "commune_external_id": form.get("commune_id") or None,
                     "address_note": form["address_note"],
                 },
                 shipping_info={
@@ -412,6 +456,7 @@ def _read_checkout_form(form_data):
         "phone": (form_data.get("phone") or "").strip(),
         "wilaya_code": (form_data.get("wilaya_code") or "").strip(),
         "commune": (form_data.get("commune") or "").strip(),
+        "commune_id": (form_data.get("commune_id") or "").strip(),
         "address_note": (form_data.get("address_note") or "").strip(),
         "carrier_code": (form_data.get("carrier_code") or "").strip(),
         "delivery_type": form_data.get("delivery_type") or "home",
@@ -441,7 +486,9 @@ def _validate_checkout_form(form):
     if form["delivery_type"] not in ("home", "office"):
         errors.append("اختر نوع التوصيل")
 
-    if form["delivery_type"] == "home" and not form["commune"]:
-        errors.append("اكتب البلدية (ضرورية للتوصيل للمنزل)")
+    # ⚠️ البلدية ومعرّفها ضروريين فالحالتين: الشركة تحتاج معرّف البلدية
+    # باش تقبل الطرد، حتى فالتوصيل للمكتب.
+    if not form["commune"]:
+        errors.append("اختر البلدية من القائمة")
 
     return errors

@@ -153,6 +153,7 @@ def create_order(lines, customer_data, shipping_info, coupon=None, customer_note
             wilaya_code=customer_data["wilaya_code"],
             wilaya_name=customer_data["wilaya_name"],
             commune=customer_data.get("commune"),
+            commune_external_id=customer_data.get("commune_external_id"),
             address_note=customer_data.get("address_note"),
             carrier_code=shipping_info.get("carrier_code"),
             carrier_name=shipping_info.get("carrier_name"),

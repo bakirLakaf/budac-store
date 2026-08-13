@@ -33,18 +33,18 @@
 
     {# ---------- ربط الولايات بمناطق ZR ---------- #}
     <div class="ic-sync">
-        <h3>ربط الولايات</h3>
+        <h3>البلديات</h3>
         <p class="hint">
-            ZR يعرف الولايات بأرقام خاصة بيه، ماشي بالأسماء. لازم نربطو
-            ولاياتك الـ58 بأرقامو <strong>مرة وحدة</strong>، وإلا الطرد يتبعث
-            بلا ولاية ويترفض.
+            ZR يحتاج <strong>معرّف البلدية</strong> باش يقبل الطرد — ماشي اسمها.
+            نجيبو البلديات منّو مرة وحدة، وتولّي قائمة يختار منها الزبون فصفحة
+            الطلب. البلديات اللي ZR ما يوصلش ليها ما تبانش أصلاً.
         </p>
 
-        <p class="ic-linked {{ 'is-ok' if linked_wilayas >= 55 else 'is-warn' }}">
-            {% if linked_wilayas == 0 %}
-                🔴 ماكانش حتى ولاية مربوطة — اضغط الزر تحت
+        <p class="ic-linked {{ 'is-ok' if linked_communes > 0 else 'is-warn' }}">
+            {% if linked_communes == 0 %}
+                🔴 ماكانش حتى بلدية محفوظة — اضغط الزر تحت
             {% else %}
-                {{ linked_wilayas }} ولاية مربوطة من 58
+                ✓ {{ linked_communes }} بلدية محفوظة، تغطي {{ wilayas_covered }} ولاية
             {% endif %}
         </p>
 
@@ -52,7 +52,7 @@
             <form method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="action" value="sync_territories">
-                <button type="submit" class="btn-admin">زامن الولايات مع ZR</button>
+                <button type="submit" class="btn-admin">زامن البلديات مع ZR</button>
             </form>
 
             <form method="post">
@@ -61,6 +61,10 @@
                 <button type="submit" class="btn-admin btn-sm">🔍 افحص بيانات ZR</button>
             </form>
         </div>
+
+        <p class="hint" style="margin-top:8px">
+            ⏱️ المزامنة تاخذ 30–60 ثانية (4000 منطقة على عدة صفحات).
+        </p>
 
         {% if inspect_data %}
         <div class="inspect-box">
@@ -74,26 +78,20 @@
         {% endif %}
 
         {% if sync_result %}
-        <div class="test-result {{ 'is-ok' if not sync_result.unmatched else 'is-warn' }}">
-            ✓ تربطات <strong>{{ sync_result.matched }}</strong> ولاية من
-            {{ sync_result.total }} (ZR عندو {{ sync_result.zr_count }} منطقة)
-
-            {% if sync_result.unmatched %}
-            <div class="sync-unmatched">
-                <strong>ما تربطوش ({{ sync_result.unmatched|length }}):</strong>
-                <ul>
-                    {% for w in sync_result.unmatched %}
-                    <li>{{ w }}</li>
-                    {% endfor %}
-                </ul>
-                <small>
-                    هاذو تحتاج تربطهم بيدك، ولا تتأكد أن أسماءهم فأسعار التوصيل
-                    تطابق أسماء ZR. الطلبيات لهاد الولايات تتبعث يدويًا.
-                </small>
-            </div>
-            {% endif %}
+        <div class="test-result is-ok">
+            ✓ خلصات المزامنة:
+            <ul class="sync-stats">
+                <li>بلديات جديدة: <strong>{{ sync_result.added }}</strong></li>
+                <li>بلديات محدّثة: <strong>{{ sync_result.updated }}</strong></li>
+                <li>ولايات مغطّاة: <strong>{{ sync_result.wilayas_covered }}</strong> من 58</li>
+                <li class="muted">ZR ما يوصلش لـ{{ sync_result.skipped_nosend }} بلدية (تجاوزناهم)</li>
+                {% if sync_result.deactivated %}
+                <li class="muted">{{ sync_result.deactivated }} بلدية ما بقاتش عند ZR (تعطّلت)</li>
+                {% endif %}
+            </ul>
         </div>
         {% endif %}
+    </div>
     </div>
 
     <div class="ic-features">

@@ -85,6 +85,7 @@ def _add_missing_columns(db):
         ("offers", "spotlight_position", "VARCHAR(10) NOT NULL DEFAULT 'none'"),
         ("offers", "spotlight_text", "TEXT"),
         ("shipping_rates", "carrier_territory_id", "VARCHAR(60)"),
+        ("orders", "commune_external_id", "VARCHAR(80)"),
     ]
 
     inspector = inspect(db.engine)

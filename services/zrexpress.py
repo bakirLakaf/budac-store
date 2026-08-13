@@ -291,95 +291,121 @@ def _extract_territory_fields(item):
     return tid, name, code
 
 
-def sync_territories():
+def sync_communes():
     """
-    يجيب مناطق ZR ويربطها بولاياتنا فجدول shipping_rates.
+    يجيب بلديات ZR ويخزّنهم عندنا.
 
-    يرجع dict فيه: matched (تربطو)، unmatched (ما تربطوش)، total.
+    ⚠️ بنية بيانات ZR (مفحوصة من ردّو الحقيقي):
+        level        = "commune"
+        id           = UUID — هو territoryId اللي يتبعث عند إنشاء الطرد
+        nameArabic   = اسم البلدية بالعربية
+        postalCode   = "01035" → أول رقمين "01" = رمز الولاية
+        delivery.canSend = واش ZR يقدر يبعث لهاد البلدية
 
-    الاستراتيجية — نجرّبو بالترتيب:
-      1) مطابقة برمز الولاية (الأدق إذا ZR يعطيه)
-      2) مطابقة بالاسم بعد التوحيد
-      3) مطابقة جزئية (الاسم داخل الاسم)
+    نتجاهلو البلديات اللي canSend = false — ما نعرضوهاش للزبون بدل ما
+    نقبلو طلبية ما نقدروش نبعثوها.
     """
-    from models import db, Carrier, ShippingRate
+    from models import db, Carrier, Commune
 
     carrier = Carrier.query.filter_by(code="zrexpress").first()
     if not carrier:
         raise ZRError("شركة ZR Express ماكانتش فقاعدة البيانات")
 
-    territories = get_territories()
-    if not territories:
+    items = get_territories()
+    if not items:
         raise ZRError("ZR ما رجعش حتى منطقة")
 
-    # نبنيو فهرسين للبحث السريع
-    by_code, by_name = {}, {}
-    for item in territories:
-        tid, name, code = _extract_territory_fields(item)
-        if not tid:
+    # البلديات الموجودة عندنا (باش نحدّثو بدل ما نكرّرو)
+    existing = {
+        c.external_id: c
+        for c in Commune.query.filter_by(carrier_id=carrier.id).all()
+    }
+
+    added, updated, skipped_level, skipped_nosend, skipped_nocode = 0, 0, 0, 0, 0
+    seen = set()
+
+    for item in items:
+        # 1) البلديات فقط
+        if (item.get("level") or "").lower() != "commune":
+            skipped_level += 1
             continue
-        if code:
-            by_code[str(int(code)) if str(code).isdigit() else str(code)] = tid
-        if name:
-            by_name[_normalize_arabic(name)] = tid
 
-    rates = ShippingRate.query.filter_by(carrier_id=carrier.id).all()
-    matched, unmatched = 0, []
+        external_id = item.get("id")
+        if not external_id:
+            continue
 
-    for rate in rates:
-        tid = None
+        delivery = item.get("delivery") or {}
+        can_send = bool(delivery.get("canSend"))
 
-        # 1) بالرمز
-        code_key = str(int(rate.wilaya_code)) if str(rate.wilaya_code).isdigit() else str(rate.wilaya_code)
-        tid = by_code.get(code_key)
+        # 2) نتجاوزو البلديات اللي ZR ما يبعثش ليها
+        if not can_send:
+            skipped_nosend += 1
+            continue
 
-        # 2) بالاسم الموحّد
-        if not tid:
-            tid = by_name.get(_normalize_arabic(rate.wilaya_name))
+        # 3) رمز الولاية من الرمز البريدي: "01035" → "01"
+        postal = str(item.get("postalCode") or "").strip()
+        wilaya_code = postal[:2] if len(postal) >= 2 and postal[:2].isdigit() else None
 
-        # 3) مطابقة جزئية
-        if not tid:
-            ours = _normalize_arabic(rate.wilaya_name)
-            for zr_name, zr_id in by_name.items():
-                if ours and (ours in zr_name or zr_name in ours):
-                    tid = zr_id
-                    break
+        if not wilaya_code:
+            skipped_nocode += 1
+            continue
 
-        if tid:
-            rate.carrier_territory_id = str(tid)
-            matched += 1
+        name_ar = (item.get("nameArabic") or "").strip()
+        name_fr = (item.get("name") or "").strip()
+
+        if not name_ar and not name_fr:
+            continue
+
+        seen.add(external_id)
+        row = existing.get(external_id)
+
+        if row is None:
+            row = Commune(carrier_id=carrier.id, external_id=external_id)
+            db.session.add(row)
+            added += 1
         else:
-            unmatched.append(f"{rate.wilaya_code} ~ {rate.wilaya_name}")
+            updated += 1
+
+        row.name_ar = name_ar or name_fr
+        row.name_fr = name_fr or None
+        row.postal_code = postal or None
+        row.wilaya_code = wilaya_code
+        row.has_home_delivery = bool(delivery.get("hasHomeDelivery", True))
+        row.has_pickup_point = bool(delivery.get("hasPickupPoint", False))
+        row.can_send = True
+
+    # البلديات اللي ما بقاتش عند ZR → نعطّلوها بدل ما نمسحوها
+    # (باش الطلبيات القديمة تبقى مفهومة)
+    removed = 0
+    for ext_id, row in existing.items():
+        if ext_id not in seen and row.can_send:
+            row.can_send = False
+            removed += 1
 
     db.session.commit()
 
+    # كم ولاية عندها بلديات
+    wilayas_covered = db.session.query(Commune.wilaya_code).filter_by(
+        carrier_id=carrier.id, can_send=True
+    ).distinct().count()
+
     return {
-        "total": len(rates),
-        "matched": matched,
-        "unmatched": unmatched,
-        "zr_count": len(territories),
+        "total_from_zr": len(items),
+        "added": added,
+        "updated": updated,
+        "deactivated": removed,
+        "wilayas_covered": wilayas_covered,
+        "skipped_level": skipped_level,
+        "skipped_nosend": skipped_nosend,
+        "skipped_nocode": skipped_nocode,
     }
 
 
-def find_territory_id(carrier_code, wilaya_code):
+def find_territory_id(carrier_code, commune_external_id):
     """
-    يجيب معرّف المنطقة المحفوظ لولاية معينة.
-    يرجع None إذا ما تربطش — والمستدعي يعرض خطأ واضح.
+    معرّف المنطقة اللي يتبعث لـZR = معرّف البلدية.
+
+    ⚠️ الطلبية تخزّن المعرّف وقت الطلب، فحتى لو تبدّلت بيانات ZR بعدين،
+    الإرسال يبقى يخدم بنفس المعرّف اللي اختارو الزبون.
     """
-    from models import Carrier, ShippingRate
-
-    carrier = Carrier.query.filter_by(code=carrier_code).first()
-    if not carrier:
-        return None
-
-    rate = ShippingRate.query.filter_by(
-        carrier_id=carrier.id, wilaya_code=str(wilaya_code).zfill(2)
-    ).first()
-
-    if not rate:
-        # نجرّبو بلا أصفار بادئة (احتياط لاختلاف التخزين)
-        rate = ShippingRate.query.filter_by(
-            carrier_id=carrier.id, wilaya_code=str(wilaya_code)
-        ).first()
-
-    return rate.carrier_territory_id if rate else None
+    return commune_external_id or None

@@ -11,7 +11,8 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 from app import create_app
 from models import (db, Product, ProductVariant, Category, Offer, OfferItem,
-                    Coupon, Order, Carrier, ShippingRate, AdminUser, StoreSetting)
+                    Coupon, Order, Carrier, ShippingRate, AdminUser, StoreSetting,
+                    Commune)
 
 PASSED, FAILED = [], []
 
@@ -62,11 +63,17 @@ def build():
         db.session.commit()
         db.session.add(OfferItem(offer_id=off.id, product_id=p1.id, quantity=2))
 
-        carrier = Carrier(name="ZR Express", code="zr", is_active=True)
+        carrier = Carrier(name="ZR Express", code="zrexpress", is_active=True)
         db.session.add(carrier)
         db.session.commit()
-        db.session.add(ShippingRate(carrier_id=carrier.id, wilaya_code=16,
+        db.session.add(ShippingRate(carrier_id=carrier.id, wilaya_code="16",
                                     wilaya_name="الجزائر", home_price=600, office_price=400))
+        db.session.add(Commune(carrier_id=carrier.id, external_id="zr-uuid-1",
+                               name_ar="باب الوادي", wilaya_code="16",
+                               has_home_delivery=True, has_pickup_point=True, can_send=True))
+        db.session.add(Commune(carrier_id=carrier.id, external_id="zr-uuid-2",
+                               name_ar="بلدية ماشي متاحة", wilaya_code="16",
+                               has_home_delivery=True, has_pickup_point=True, can_send=False))
 
         admin = AdminUser(username="admin")
         admin.set_password("test-password-123")
@@ -162,12 +169,26 @@ def run():
 
     # ══════════ 5. أسعار التوصيل ══════════
     section("5. التوصيل")
-    r = c.get("/api/shipping-price?wilaya=16&type=home&carrier=zr")
+    r = c.get("/api/shipping-price?wilaya=16&type=home&carrier=zrexpress")
     check("سعر التوصيل للمنزل", r.status_code == 200)
     if r.status_code == 200:
         check("السعر صحيح (600)", r.get_json().get("price") == 600, str(r.get_json()))
-    r = c.get("/api/shipping-price?wilaya=999&type=home&carrier=zr")
+    r = c.get("/api/shipping-price?wilaya=999&type=home&carrier=zrexpress")
     check("ولاية ماكانتش ما تكسرش", r.status_code in (200, 400, 404))
+
+    # ---------- البلديات ----------
+    r = c.get("/api/communes?carrier=zrexpress&wilaya=16&type=home")
+    names = [x["name"] for x in r.get_json()["communes"]]
+    check("قائمة البلديات تخدم", "باب الوادي" in names, str(names))
+    check("البلدية اللي الشركة ما توصلش ليها مستبعدة",
+          "بلدية ماشي متاحة" not in names, str(names))
+
+    r = c.get("/api/communes")
+    check("طلب بلا معاملات ما يكسرش", r.status_code == 200)
+
+    r = c.get("/api/communes?carrier=zrexpress&wilaya=99&type=home")
+    check("ولاية بلا بلديات ترجع قائمة فارغة",
+          r.get_json()["communes"] == [])
 
     # ══════════ 6. لوحة التحكم ══════════
     section("6. لوحة التحكم")
@@ -193,8 +214,9 @@ def run():
                                   "variant_id": ids["v1"], "quantity": 2})
     r = buyer.post("/checkout", data={
         "name": "بكير", "phone": "0676672334",
-        "carrier_code": "zr", "wilaya_code": 16,
+        "carrier_code": "zrexpress", "wilaya_code": 16,
         "delivery_type": "home", "commune": "باب الوادي",
+        "commune_id": "zr-uuid-1",
         "address_note": "شارع 1", "note": "",
     }, follow_redirects=True)
     body = r.get_data(as_text=True)
@@ -210,7 +232,18 @@ def run():
         if n:
             o = Order.query.first()
             check("مجموع الطلبية صحيح (1000+600)", o.total == 1600, f"رجع {o.total}")
+            check("🔴 معرّف البلدية محفوظ (ضروري لـZR)",
+                  o.commune_external_id == "zr-uuid-1", str(o.commune_external_id))
     check("السلة تفرغت بعد الطلب", buyer.get("/api/cart").get_json()["count"] == 0)
+
+    nc = app.test_client()
+    nc.post("/cart/add", data={"kind": "product", "item_id": ids["p2"], "quantity": 1})
+    r = nc.post("/checkout", data={
+        "name": "زبون", "phone": "0555111222", "carrier_code": "zrexpress",
+        "wilaya_code": 16, "delivery_type": "home", "commune": "",
+    }, follow_redirects=True)
+    check("طلبية بلا بلدية مرفوضة",
+          "اختر البلدية" in r.get_data(as_text=True))
 
     # ══════════ 8. الحسابات ══════════
     section("8. الأسعار والحسابات")

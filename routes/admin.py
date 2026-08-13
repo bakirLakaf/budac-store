@@ -1166,14 +1166,14 @@ def order_send_to_carrier(order_id):
 
     # ⚠️ ZR يعرف الولايات بمعرّفاتو الخاصة (territoryId)، ماشي بالأسماء.
     # بلا هاد المعرّف الطرد يتبعث بلا ولاية ويترفض.
-    from services.zrexpress import find_territory_id
-
-    territory_id = find_territory_id("zrexpress", order.wilaya_code)
+    # ZR يحتاج معرّف **البلدية** (territoryId)، ماشي الولاية.
+    # الطلبية خزّناتو وقت الطلب.
+    territory_id = order.commune_external_id
 
     if not territory_id:
         flash(
-            f"ولاية «{order.wilaya_name}» ما مربوطةش بمنطقة عند ZR. "
-            "روح للتكاملات واضغط «زامن الولايات».",
+            "هاد الطلبية ما فيهاش معرّف البلدية (يمكن قديمة، ولا الزبون كتب "
+            "البلدية بيدو). ابعثها يدويًا من موقع ZR.",
             "error",
         )
         return redirect(url_for("admin.order_detail", order_id=order.id))
@@ -1228,8 +1228,8 @@ def integrations():
     """صفحة التكاملات — اختبار الاتصال بشركات التوصيل."""
     from services.zrexpress import test_connection, is_configured
 
-    from services.zrexpress import sync_territories, ZRError
-    from models import Carrier, ShippingRate
+    from services.zrexpress import sync_communes, ZRError
+    from models import Carrier, Commune
 
     zr_result = None
     sync_result = None
@@ -1258,18 +1258,19 @@ def integrations():
 
         elif action == "sync_territories":
             try:
-                sync_result = sync_territories()
+                sync_result = sync_communes()
             except ZRError as e:
                 zr_result = {"ok": False, "message": str(e)}
 
-    # كم ولاية مربوطة دابا — نعرضوها للأدمن باش يعرف واش لازم يزامن
+    # كم بلدية محفوظة دابا — نعرضوها للأدمن باش يعرف واش لازم يزامن
     linked = 0
+    wilayas_covered = 0
     carrier = Carrier.query.filter_by(code="zrexpress").first()
     if carrier:
-        linked = ShippingRate.query.filter(
-            ShippingRate.carrier_id == carrier.id,
-            ShippingRate.carrier_territory_id.isnot(None),
-        ).count()
+        linked = Commune.query.filter_by(carrier_id=carrier.id, can_send=True).count()
+        wilayas_covered = db.session.query(Commune.wilaya_code).filter_by(
+            carrier_id=carrier.id, can_send=True
+        ).distinct().count()
 
     return render_template(
         "admin/integrations.html",
@@ -1277,7 +1278,8 @@ def integrations():
         zr_result=zr_result,
         sync_result=sync_result,
         inspect_data=inspect_data,
-        linked_wilayas=linked,
+        linked_communes=linked,
+        wilayas_covered=wilayas_covered,
     )
 
 

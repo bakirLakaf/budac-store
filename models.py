@@ -460,6 +460,52 @@ class ShippingRate(db.Model):
 
 # ==================== مستخدم لوحة التحكم ====================
 
+class Commune(db.Model):
+    """
+    بلدية عند شركة التوصيل.
+
+    ⚠️ ليش جدول كامل بدل نص حر؟
+    ZR ما يقبلش اسم بلدية مكتوب — يحتاج معرّف (territoryId) بالضبط.
+    وزيادة: بعض البلديات ZR ما يوصلش ليها (canSend = false)، فما نعرضوهاش
+    للزبون أصلاً بدل ما نقبلو طلبية ما نقدروش نبعثوها.
+
+    البيانات تتجاب أوتوماتيكيًا من الشركة (زر «زامن» فالتكاملات).
+    """
+
+    __tablename__ = "communes"
+    __table_args__ = (
+        db.UniqueConstraint("carrier_id", "external_id", name="uq_carrier_commune"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    carrier_id = db.Column(db.Integer, db.ForeignKey("carriers.id"), nullable=False, index=True)
+
+    # المعرّف عند الشركة — هو اللي يتبعث كـterritoryId
+    external_id = db.Column(db.String(80), nullable=False)
+
+    name_ar = db.Column(db.String(150), nullable=False)
+    name_fr = db.Column(db.String(150), nullable=True)
+    postal_code = db.Column(db.String(10), nullable=True)
+
+    # رمز الولاية "01".."58" — يتستخرج من الرمز البريدي
+    wilaya_code = db.Column(db.String(4), nullable=False, index=True)
+
+    # واش الشركة توصل فعلاً لهاد البلدية
+    has_home_delivery = db.Column(db.Boolean, nullable=False, default=True)
+    has_pickup_point = db.Column(db.Boolean, nullable=False, default=False)
+    can_send = db.Column(db.Boolean, nullable=False, default=True)
+
+    carrier = db.relationship("Carrier")
+
+    @property
+    def display_name(self):
+        """الاسم اللي يشوفو الزبون — عربي أولاً، وفرنسي كاحتياط."""
+        return self.name_ar or self.name_fr or "—"
+
+    def __repr__(self):
+        return f"<Commune {self.wilaya_code} {self.name_ar}>"
+
+
 class StoreSetting(db.Model):
     """
     إعدادات المتجر — جدول بسيط: مفتاح ← قيمة.
@@ -663,6 +709,11 @@ class Order(db.Model):
     wilaya_code = db.Column(db.String(4), nullable=False)
     wilaya_name = db.Column(db.String(120), nullable=False)
     commune = db.Column(db.String(150), nullable=True)
+
+    # معرّف البلدية عند الشركة — يتبعث كـterritoryId عند إنشاء الطرد.
+    # نخزّنوه مع الطلبية باش الإرسال يخدم حتى لو تبدّلت البيانات بعدين.
+    commune_external_id = db.Column(db.String(80), nullable=True)
+
     address_note = db.Column(db.Text, nullable=True)
 
     carrier_code = db.Column(db.String(60), nullable=True)

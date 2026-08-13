@@ -53,8 +53,18 @@
                 </label>
 
                 <label class="field" id="communeField">
-                    <span>البلدية</span>
-                    <input type="text" name="commune" value="{{ form.get('commune', '') }}" placeholder="اكتب اسم بلديتك">
+                    <span>البلدية *</span>
+
+                    {# القائمة تتعمّر تلقائيًا حسب الولاية وشركة التوصيل.
+                       الاسم يتبعث فـ"commune" (للعرض)، والمعرّف فـ"commune_id"
+                       (هو اللي تحتاجو شركة التوصيل باش تقبل الطرد). #}
+                    <select name="commune" id="communeSelect" required>
+                        <option value="">اختر الولاية أولاً</option>
+                    </select>
+                    <input type="hidden" name="commune_id" id="communeIdInput"
+                           value="{{ form.get('commune_id', '') }}">
+
+                    <small class="field-note" id="communeNote" hidden></small>
                 </label>
 
                 <label class="field">
@@ -134,11 +144,86 @@
         return n.toLocaleString('en-US') + ' دج';
     }
 
-    // البلدية ضرورية للتوصيل للمنزل فقط — نوضحو هذا بصريًا
+    var communeSelect = document.getElementById('communeSelect');
+    var communeIdInput = document.getElementById('communeIdInput');
+    var communeNote = document.getElementById('communeNote');
+
+    // نحفظو الاختيار السابق (كي يرجع النموذج بخطأ) باش ما يضيعش
+    var previousCommune = {{ (form.get('commune') or '') | tojson }};
+
+    function setCommuneNote(text) {
+        if (!communeNote) return;
+        communeNote.textContent = text || '';
+        communeNote.hidden = !text;
+    }
+
+    /**
+     * يعمّر قائمة البلديات حسب الولاية ونوع التوصيل.
+     * ⚠️ نجيبوها من السيرفر ماشي من قائمة ثابتة، لأن شركة التوصيل هي اللي
+     * تقرّر واش توصل لهاد البلدية ولا لا — والقائمة تتبدّل عندهم.
+     */
+    function loadCommunes() {
+        if (!communeSelect) return;
+
+        if (!carrier.value || !wilaya.value) {
+            communeSelect.innerHTML = '<option value="">اختر الولاية أولاً</option>';
+            communeIdInput.value = '';
+            setCommuneNote('');
+            return;
+        }
+
+        communeSelect.innerHTML = '<option value="">جاري التحميل…</option>';
+        communeSelect.disabled = true;
+
+        var url = '{{ url_for("cart.api_communes") }}'
+            + '?carrier=' + encodeURIComponent(carrier.value)
+            + '&wilaya=' + encodeURIComponent(wilaya.value)
+            + '&type=' + encodeURIComponent(deliveryType.value);
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                communeSelect.disabled = false;
+                var list = data.communes || [];
+
+                if (!list.length) {
+                    communeSelect.innerHTML = '<option value="">ماكانش بلديات متاحة</option>';
+                    setCommuneNote('الشركة ما توصلش لهاد الولاية بهاد الطريقة. جرّب طريقة توصيل أخرى ولا شركة أخرى.');
+                    return;
+                }
+
+                var html = '<option value="">اختر بلديتك</option>';
+                list.forEach(function (c) {
+                    var selected = (c.name === previousCommune) ? ' selected' : '';
+                    html += '<option value="' + c.name + '" data-id="' + c.id + '"' + selected + '>'
+                          + c.name + '</option>';
+                });
+                communeSelect.innerHTML = html;
+
+                setCommuneNote(list.length + ' بلدية متاحة');
+                syncCommuneId();
+            })
+            .catch(function () {
+                communeSelect.disabled = false;
+                communeSelect.innerHTML = '<option value="">تعذّر التحميل</option>';
+                setCommuneNote('ماكانش اتصال. حاول من جديد.');
+            });
+    }
+
+    // نحدّثو المعرّف المخفي كي يبدّل الزبون البلدية
+    function syncCommuneId() {
+        if (!communeSelect || !communeIdInput) return;
+        var opt = communeSelect.options[communeSelect.selectedIndex];
+        communeIdInput.value = opt ? (opt.getAttribute('data-id') || '') : '';
+    }
+
+    if (communeSelect) {
+        communeSelect.addEventListener('change', syncCommuneId);
+    }
+
+    // البلدية ضرورية دائمًا: الشركة تحتاجها فالحالتين
     function syncCommuneField() {
-        var isHome = deliveryType.value === 'home';
-        communeField.querySelector('span').textContent = isHome ? 'البلدية *' : 'البلدية (اختياري)';
-        communeField.querySelector('input').required = isHome;
+        loadCommunes();
     }
 
     function updateShipping() {
@@ -236,10 +321,14 @@
         window.addEventListener("pagehide", saveProgress);
     })();
 
+    // ⚠️ أي تبديل فالشركة/الولاية/نوع التوصيل يغيّر البلديات المتاحة،
+    // ماشي غير السعر. لهذا نعيدو تحميل القائمة فالثلاثة.
     [carrier, wilaya, deliveryType].forEach(function (el) {
-        el.addEventListener('change', updateShipping);
+        el.addEventListener('change', function () {
+            updateShipping();
+            loadCommunes();
+        });
     });
-    deliveryType.addEventListener('change', syncCommuneField);
 
     syncCommuneField();
     updateShipping();
