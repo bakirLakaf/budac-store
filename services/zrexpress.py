@@ -330,8 +330,15 @@ def sync_communes():
         for link in CarrierCommune.query.filter_by(carrier_id=carrier.id).all()
     }
 
-    linked, no_match, skipped_level = 0, [], 0
-    matched_ids = set()
+    # ⚠️ نقطة حرجة: ZR عندو ~4000 منطقة لـ1541 بلدية — يعني **عدة مناطق
+    # فرعية لنفس البلدية** (أحياء، مراكز، قرى). لو كتبنا فوق الرابط فكل
+    # مرة، آخر منطقة تغلب: بلدية عندها منطقة توصل وزوج ما يوصلوش تولّي
+    # معطّلة ظلمًا.
+    #
+    # الصح: **نجمّعو** بـOR — إذا أي منطقة توصل، البلدية توصل.
+    # والمعرّف ناخذوه من منطقة توصل فعلاً (ماشي من وحدة معطّلة).
+    aggregated = {}   # commune_id → dict
+    no_match, skipped_level, matched_items = [], 0, 0
 
     for item in items:
         if (item.get("level") or "").lower() != "commune":
@@ -359,21 +366,49 @@ def sync_communes():
                 no_match.append(f"{wilaya_code} ~ {name_ar or name_fr}")
             continue
 
+        matched_items += 1
         delivery = item.get("delivery") or {}
 
-        link = existing.get(commune.id)
+        can_send = bool(delivery.get("canSend"))
+        has_home = bool(delivery.get("hasHomeDelivery", True))
+        has_pickup = bool(delivery.get("hasPickupPoint", False))
+
+        agg = aggregated.get(commune.id)
+        if agg is None:
+            aggregated[commune.id] = {
+                "external_id": str(external_id),
+                "can_send": can_send,
+                "has_home_delivery": has_home,
+                "has_pickup_point": has_pickup,
+                "zones": 1,
+            }
+            continue
+
+        # تجميع: أي منطقة تقدر → البلدية تقدر
+        agg["zones"] += 1
+        agg["has_home_delivery"] = agg["has_home_delivery"] or has_home
+        agg["has_pickup_point"] = agg["has_pickup_point"] or has_pickup
+
+        # المعرّف: نفضّلو منطقة توصل فعلاً — هو اللي يتبعث لـZR وقت الطلب
+        if can_send and not agg["can_send"]:
+            agg["external_id"] = str(external_id)
+        agg["can_send"] = agg["can_send"] or can_send
+
+    # نكتبو النتيجة المجمّعة فقاعدة البيانات
+    for commune_id, agg in aggregated.items():
+        link = existing.get(commune_id)
         if link is None:
-            link = CarrierCommune(carrier_id=carrier.id, commune_id=commune.id)
+            link = CarrierCommune(carrier_id=carrier.id, commune_id=commune_id)
             db.session.add(link)
-            existing[commune.id] = link
+            existing[commune_id] = link
 
-        link.external_id = str(external_id)
-        link.has_home_delivery = bool(delivery.get("hasHomeDelivery", True))
-        link.has_pickup_point = bool(delivery.get("hasPickupPoint", False))
-        link.can_send = bool(delivery.get("canSend"))
+        link.external_id = agg["external_id"]
+        link.has_home_delivery = agg["has_home_delivery"]
+        link.has_pickup_point = agg["has_pickup_point"]
+        link.can_send = agg["can_send"]
 
-        matched_ids.add(commune.id)
-        linked += 1
+    matched_ids = set(aggregated.keys())
+    linked = len(aggregated)
 
     # بلديات ما لقيناهاش عند ZR هاد المرة → نعطّلوها
     deactivated = 0
@@ -399,6 +434,7 @@ def sync_communes():
 
     return {
         "total_from_zr": len(items),
+        "matched_zones": matched_items,   # مناطق ZR اللي تطابقت (أكثر من البلديات)
         "linked": linked,
         "deliverable": deliverable,
         "deactivated": deactivated,

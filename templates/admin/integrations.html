@@ -83,7 +83,11 @@
             ✓ خلصات المزامنة:
             <ul class="sync-stats">
                 <li>بلديات مربوطة بـZR: <strong>{{ sync_result.linked }}</strong>
-                    من {{ sync_result.our_total }}</li>
+                    من {{ sync_result.our_total }}
+                    {% if sync_result.matched_zones and sync_result.matched_zones > sync_result.linked %}
+                    <span class="muted">(عبر {{ sync_result.matched_zones }} منطقة فرعية عند ZR)</span>
+                    {% endif %}
+                </li>
                 <li>ZR يوصل فعلاً لـ<strong>{{ sync_result.deliverable }}</strong> بلدية</li>
                 <li>ولايات مغطّاة: <strong>{{ sync_result.wilayas_covered }}</strong> من 58</li>
                 {% if sync_result.deactivated %}
