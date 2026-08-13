@@ -4,6 +4,55 @@ from flask_sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
 
+class VariantPriceTier(db.Model):
+    """
+    سعر الحبة حسب الكمية — عرض الجملة.
+
+    مثال لموديل "دوري كبير":
+        من 1   إلى 99   → 500 دج للحبة
+        من 100 إلى 199  → 420 دج للحبة
+        من 200 وفوق      → 380 دج للحبة
+
+    ⚠️ الحساب يصرا **فالسيرفر دائمًا**. الزبون يشوف السعر يتبدّل وهو يزيد
+    الكمية، بصح اللي يتحسب فالطلبية هو اللي نحسبوه حنا — ماشي اللي بعثو
+    المتصفح.
+    """
+
+    __tablename__ = "variant_price_tiers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    variant_id = db.Column(db.Integer, db.ForeignKey("product_variants.id"),
+                           nullable=False, index=True)
+
+    min_quantity = db.Column(db.Integer, nullable=False)          # من (شامل)
+    max_quantity = db.Column(db.Integer, nullable=True)           # إلى (شامل)، فارغ = بلا حد
+    unit_price = db.Column(db.Integer, nullable=False)            # سعر الحبة فهاد المجال
+
+    variant = db.relationship("ProductVariant", back_populates="price_tiers")
+
+    @property
+    def range_display(self):
+        """وصف المجال للعرض: «100 – 199 حبة» ولا «200 حبة وفوق»."""
+        if self.max_quantity:
+            return f"{self.min_quantity} – {self.max_quantity} حبة"
+        return f"{self.min_quantity} حبة وفوق"
+
+    @property
+    def unit_price_display(self):
+        return f"{self.unit_price:,} دج / الحبة"
+
+    def matches(self, quantity):
+        if quantity < self.min_quantity:
+            return False
+        if self.max_quantity is not None and quantity > self.max_quantity:
+            return False
+        return True
+
+    def __repr__(self):
+        return f"<Tier {self.min_quantity}+ = {self.unit_price}>"
+
+
+
 class Category(db.Model):
     """
     تصنيف للمنتجات (مثلاً: مرايا، إكسسوارات، ديكور...).
@@ -60,6 +109,47 @@ class ProductVariant(db.Model):
     is_default = db.Column(db.Boolean, nullable=False, default=False)
 
     product = db.relationship("Product", back_populates="variants")
+
+    price_tiers = db.relationship(
+        "VariantPriceTier",
+        back_populates="variant",
+        cascade="all, delete-orphan",
+        order_by="VariantPriceTier.min_quantity",
+    )
+
+    def price_for_quantity(self, quantity):
+        """
+        سعر الحبة حسب الكمية المطلوبة.
+
+        ⚠️ هاد الدالة هي **المرجع الوحيد** للسعر. السلة، صفحة المنتج،
+        والطلبية كلهم يستعملوها — باش ما يصراش اختلاف بين السعر اللي
+        شاف الزبون واللي اتحسب فعلاً.
+
+        إذا ماكانش مجال يوافق الكمية، نرجعو السعر العادي.
+        """
+        quantity = max(1, int(quantity or 1))
+
+        for tier in sorted(self.price_tiers, key=lambda t: t.min_quantity, reverse=True):
+            if tier.matches(quantity):
+                return tier.unit_price
+
+        return self.effective_price
+
+    @property
+    def has_tiers(self):
+        return bool(self.price_tiers)
+
+    def tiers_payload(self):
+        """المجالات بصيغة JSON — يستعملها JavaScript فصفحة المنتج."""
+        return [
+            {
+                "min": t.min_quantity,
+                "max": t.max_quantity,
+                "price": t.unit_price,
+                "range": t.range_display,
+            }
+            for t in sorted(self.price_tiers, key=lambda t: t.min_quantity)
+        ]
 
     @property
     def effective_price(self):
@@ -462,48 +552,72 @@ class ShippingRate(db.Model):
 
 class Commune(db.Model):
     """
-    بلدية عند شركة التوصيل.
+    بلدية جزائرية — القائمة الرسمية الكاملة (1541 بلدية × 58 ولاية).
 
-    ⚠️ ليش جدول كامل بدل نص حر؟
-    ZR ما يقبلش اسم بلدية مكتوب — يحتاج معرّف (territoryId) بالضبط.
-    وزيادة: بعض البلديات ZR ما يوصلش ليها (canSend = false)، فما نعرضوهاش
-    للزبون أصلاً بدل ما نقبلو طلبية ما نقدروش نبعثوها.
+    ⚠️ ليش مستقلة عن شركة التوصيل؟
+    البلديات ديال الجزائر ثابتة، ماشي ملك شركة. لو ربطناها بـZR، كنا:
+      • نخسرو البلديات اللي ZR ما يوصلش ليها (والزبون ما يلقاش بلديتو)
+      • نعاودو نجيبوها من الصفر لكل شركة جديدة
 
-    البيانات تتجاب أوتوماتيكيًا من الشركة (زر «زامن» فالتكاملات).
+    ربط الشركة يصرا فجدول منفصل (CarrierCommune) — كل شركة تقول واش
+    توصل لهاد البلدية وشنو معرّفها عندها.
+
+    المصدر: github.com/othmanus/algeria-cities
     """
 
     __tablename__ = "communes"
     __table_args__ = (
-        db.UniqueConstraint("carrier_id", "external_id", name="uq_carrier_commune"),
+        db.UniqueConstraint("wilaya_code", "name_ar", name="uq_wilaya_commune"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    wilaya_code = db.Column(db.String(4), nullable=False, index=True)   # "01".."58"
+    name_ar = db.Column(db.String(150), nullable=False)
+    name_fr = db.Column(db.String(150), nullable=True)
+    daira = db.Column(db.String(150), nullable=True)                    # الدائرة
+
+    carrier_links = db.relationship(
+        "CarrierCommune", back_populates="commune", cascade="all, delete-orphan"
+    )
+
+    @property
+    def display_name(self):
+        return self.name_ar or self.name_fr or "—"
+
+    def __repr__(self):
+        return f"<Commune {self.wilaya_code} {self.name_ar}>"
+
+
+class CarrierCommune(db.Model):
+    """
+    ربط بلدية بشركة توصيل.
+
+    فيها المعرّف عند الشركة (territoryId عند ZR) وواش الشركة توصل فعلاً
+    لهاد البلدية. بلا سطر هنا = الشركة ما توصلش (ولا مازال ما زامنّاش).
+    """
+
+    __tablename__ = "carrier_communes"
+    __table_args__ = (
+        db.UniqueConstraint("carrier_id", "commune_id", name="uq_carrier_commune_link"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     carrier_id = db.Column(db.Integer, db.ForeignKey("carriers.id"), nullable=False, index=True)
+    commune_id = db.Column(db.Integer, db.ForeignKey("communes.id"), nullable=False, index=True)
 
-    # المعرّف عند الشركة — هو اللي يتبعث كـterritoryId
-    external_id = db.Column(db.String(80), nullable=False)
+    # المعرّف عند الشركة — هو اللي يتبعث فطلب إنشاء الطرد
+    external_id = db.Column(db.String(80), nullable=True)
 
-    name_ar = db.Column(db.String(150), nullable=False)
-    name_fr = db.Column(db.String(150), nullable=True)
-    postal_code = db.Column(db.String(10), nullable=True)
-
-    # رمز الولاية "01".."58" — يتستخرج من الرمز البريدي
-    wilaya_code = db.Column(db.String(4), nullable=False, index=True)
-
-    # واش الشركة توصل فعلاً لهاد البلدية
     has_home_delivery = db.Column(db.Boolean, nullable=False, default=True)
     has_pickup_point = db.Column(db.Boolean, nullable=False, default=False)
     can_send = db.Column(db.Boolean, nullable=False, default=True)
 
     carrier = db.relationship("Carrier")
-
-    @property
-    def display_name(self):
-        """الاسم اللي يشوفو الزبون — عربي أولاً، وفرنسي كاحتياط."""
-        return self.name_ar or self.name_fr or "—"
+    commune = db.relationship("Commune", back_populates="carrier_links")
 
     def __repr__(self):
-        return f"<Commune {self.wilaya_code} {self.name_ar}>"
+        return f"<CarrierCommune {self.carrier_id}:{self.commune_id}>"
 
 
 class StoreSetting(db.Model):
@@ -713,6 +827,10 @@ class Order(db.Model):
     # معرّف البلدية عند الشركة — يتبعث كـterritoryId عند إنشاء الطرد.
     # نخزّنوه مع الطلبية باش الإرسال يخدم حتى لو تبدّلت البيانات بعدين.
     commune_external_id = db.Column(db.String(80), nullable=True)
+
+    # نقطة الاستلام (للتوصيل للمكتب) — تُختار من قائمة الشركة
+    pickup_point_id = db.Column(db.String(80), nullable=True)
+    pickup_point_name = db.Column(db.String(200), nullable=True)
 
     address_note = db.Column(db.Text, nullable=True)
 

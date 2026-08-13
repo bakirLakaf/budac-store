@@ -35,6 +35,9 @@ def run():
         # المتكرر آمن تمامًا.
         _add_missing_columns(db)
 
+        # ---------- 1.7) البلديات ----------
+        _seed_communes()
+
         # ---------- 2) أسعار التوصيل ----------
         if ShippingRate.query.count() == 0:
             print("🚚 نعمّرو أسعار التوصيل...")
@@ -70,6 +73,25 @@ def run():
         print("✅ التجهيز خلص — نشغّلو الموقع\n")
 
 
+def _seed_communes():
+    """
+    يعمّر البلديات عند أول إقلاع.
+    ⚠️ نتخطاه إذا الجدول معمّر — ما نعاودوش نقراو 1541 سطر فكل نشر.
+    """
+    from models import Commune
+
+    count = Commune.query.count()
+    if count >= 1500:
+        print(f"🏘️  البلديات موجودة ({count} بلدية)")
+        return
+
+    try:
+        import seed_communes
+        seed_communes.run()
+    except Exception as e:
+        print(f"⚠️ ما قدرناش نعمّرو البلديات: {e}")
+
+
 def _add_missing_columns(db):
     """
     يزيد الأعمدة الجديدة للجداول الموجودة (هجرة بسيطة بلا Alembic).
@@ -86,6 +108,8 @@ def _add_missing_columns(db):
         ("offers", "spotlight_text", "TEXT"),
         ("shipping_rates", "carrier_territory_id", "VARCHAR(60)"),
         ("orders", "commune_external_id", "VARCHAR(80)"),
+        ("orders", "pickup_point_id", "VARCHAR(80)"),
+        ("orders", "pickup_point_name", "VARCHAR(200)"),
     ]
 
     inspector = inspect(db.engine)

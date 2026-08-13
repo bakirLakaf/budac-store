@@ -238,6 +238,49 @@ body {
     position: absolute; bottom: 0; left: 0; right: 0;
     background: rgba(46,26,71,0.85); color: #fff; font-size: 10px; text-align: center; padding: 2px;
 }
+
+/* 🔴 كانو ناقصين كليًا: الأزرار كانت فالHTML بصح بلا CSS = غير مرئية،
+   فما كنتش تقدر تحذف صورة ولا تبدّل الرئيسية. */
+.image-item { width: 104px; height: 104px; }
+.image-item.is-main { border: 2px solid var(--a-primary); }
+
+.image-item-actions {
+    position: absolute;
+    top: 4px;
+    inset-inline-end: 4px;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+/* فالهاتف ماكانش "مرور" — نخليوهم ظاهرين دائمًا */
+.image-item:hover .image-item-actions,
+.image-item:focus-within .image-item-actions { opacity: 1; }
+@media (hover: none) {
+    .image-item-actions { opacity: 1; }
+}
+
+.image-item-actions form { margin: 0; }
+
+.img-btn {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.img-btn-main { background: rgba(46, 26, 71, 0.92); }
+.img-btn-main:hover { background: #C9A227; color: #2E1A47; }
+.img-btn-del { background: rgba(179, 38, 30, 0.92); font-size: 18px; }
+.img-btn-del:hover { background: #B3261E; }
+
 .image-delete-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .image-delete-row form { margin: 0; }
 .banner-preview { width: 100%; border-radius: 10px; margin-top: 10px; border: 1px solid var(--a-border); }
@@ -538,3 +581,97 @@ body {
     text-align: left;
 }
 .inspect-box summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+
+/* ---------- إدارة الموديلات ---------- */
+.variants-manager { display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; }
+
+.variant-card {
+    border: 1.5px solid var(--a-border);
+    border-radius: 12px;
+    padding: 14px;
+    background: #FDFCFA;
+}
+
+.variant-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--a-border);
+}
+.variant-head .variant-info { flex: 1; min-width: 0; }
+.variant-name { display: block; font-size: 15px; }
+.variant-meta { font-size: 12px; color: var(--a-text-soft); }
+.tag-default {
+    background: #EFE9F7; color: #4A2F6B;
+    padding: 1px 7px; border-radius: 999px; font-size: 11px;
+}
+.variant-del-form { margin: 0; }
+
+.variant-section { margin-top: 14px; }
+.variant-section-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--a-primary);
+}
+
+/* اختيار صورة الموديل من صور المنتج */
+.img-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.img-choice {
+    position: relative;
+    width: 68px;
+    height: 68px;
+    border: 2px solid var(--a-border);
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+}
+.img-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.img-choice img { width: 100%; height: 100%; object-fit: cover; }
+.img-choice:has(input:checked),
+.img-choice.is-picked { border-color: var(--a-primary); box-shadow: 0 0 0 2px rgba(46,26,71,0.15); }
+.img-choice-none { font-size: 11px; color: var(--a-text-soft); text-align: center; padding: 4px; }
+
+/* جدول أسعار الجملة */
+.tiers-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 13px; }
+.tiers-table th {
+    text-align: start; font-size: 12px; font-weight: 600;
+    color: var(--a-text-soft); padding: 4px 6px;
+}
+.tiers-table td { padding: 3px 6px; }
+.tiers-table input {
+    width: 100%; padding: 7px 9px;
+    border: 1px solid var(--a-border); border-radius: 7px;
+    font-family: inherit; font-size: 13px;
+}
+
+.add-variant-box {
+    border: 1.5px dashed var(--a-border);
+    border-radius: 12px;
+    padding: 14px;
+    background: #FAF8F4;
+}
+.add-variant-box h3 { margin: 0 0 10px; font-size: 14px; }
+.variant-img-select {
+    padding: 8px 10px; border: 1px solid var(--a-border);
+    border-radius: 7px; font-family: inherit; font-size: 13px;
+}
+
+/* ---------- تفاصيل الطلبية: مكتب الاستلام ---------- */
+.info-row-highlight {
+    background: #FDF6E3;
+    border-inline-start: 3px solid var(--a-gold, #C9A227);
+    padding-inline-start: 10px;
+    border-radius: 6px;
+}
+.info-row-muted { opacity: 0.65; font-size: 12px; }
+.info-row-muted code {
+    background: #F0ECE4; padding: 2px 6px;
+    border-radius: 4px; font-size: 11px;
+}

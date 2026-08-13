@@ -293,39 +293,47 @@ def _extract_territory_fields(item):
 
 def sync_communes():
     """
-    يجيب بلديات ZR ويخزّنهم عندنا.
+    يربط بلدياتنا الرسمية بمعرّفات ZR.
 
-    ⚠️ بنية بيانات ZR (مفحوصة من ردّو الحقيقي):
-        level        = "commune"
-        id           = UUID — هو territoryId اللي يتبعث عند إنشاء الطرد
-        nameArabic   = اسم البلدية بالعربية
-        postalCode   = "01035" → أول رقمين "01" = رمز الولاية
-        delivery.canSend = واش ZR يقدر يبعث لهاد البلدية
+    ⚠️ البلديات عندنا أصلاً (القائمة الرسمية 1541). هنا ما نزيدو حتى بلدية —
+    نربط فقط: "بلدية X عند ZR معرّفها Y، وواش يوصل ليها".
 
-    نتجاهلو البلديات اللي canSend = false — ما نعرضوهاش للزبون بدل ما
-    نقبلو طلبية ما نقدروش نبعثوها.
+    المطابقة بالاسم بعد التوحيد + رمز الولاية من الرمز البريدي.
     """
-    from models import db, Carrier, Commune
+    from models import db, Carrier, Commune, CarrierCommune
 
     carrier = Carrier.query.filter_by(code="zrexpress").first()
     if not carrier:
         raise ZRError("شركة ZR Express ماكانتش فقاعدة البيانات")
 
+    our_communes = Commune.query.all()
+    if not our_communes:
+        raise ZRError(
+            "البلديات ماكانتش فقاعدة البيانات. "
+            "شغّل: python seed_communes.py"
+        )
+
+    # فهرس: (رمز الولاية، الاسم الموحّد) → البلدية عندنا
+    index = {}
+    for c in our_communes:
+        index[(c.wilaya_code, _normalize_arabic(c.name_ar))] = c
+        if c.name_fr:
+            index.setdefault((c.wilaya_code, _normalize_arabic(c.name_fr)), c)
+
     items = get_territories()
     if not items:
         raise ZRError("ZR ما رجعش حتى منطقة")
 
-    # البلديات الموجودة عندنا (باش نحدّثو بدل ما نكرّرو)
+    # الروابط الموجودة
     existing = {
-        c.external_id: c
-        for c in Commune.query.filter_by(carrier_id=carrier.id).all()
+        link.commune_id: link
+        for link in CarrierCommune.query.filter_by(carrier_id=carrier.id).all()
     }
 
-    added, updated, skipped_level, skipped_nosend, skipped_nocode = 0, 0, 0, 0, 0
-    seen = set()
+    linked, no_match, skipped_level = 0, [], 0
+    matched_ids = set()
 
     for item in items:
-        # 1) البلديات فقط
         if (item.get("level") or "").lower() != "commune":
             skipped_level += 1
             continue
@@ -334,70 +342,70 @@ def sync_communes():
         if not external_id:
             continue
 
-        delivery = item.get("delivery") or {}
-        can_send = bool(delivery.get("canSend"))
-
-        # 2) نتجاوزو البلديات اللي ZR ما يبعثش ليها
-        if not can_send:
-            skipped_nosend += 1
-            continue
-
-        # 3) رمز الولاية من الرمز البريدي: "01035" → "01"
         postal = str(item.get("postalCode") or "").strip()
         wilaya_code = postal[:2] if len(postal) >= 2 and postal[:2].isdigit() else None
-
         if not wilaya_code:
-            skipped_nocode += 1
             continue
 
         name_ar = (item.get("nameArabic") or "").strip()
         name_fr = (item.get("name") or "").strip()
 
-        if not name_ar and not name_fr:
+        # نجرّبو بالعربية ثم بالفرنسية
+        commune = (index.get((wilaya_code, _normalize_arabic(name_ar)))
+                   or index.get((wilaya_code, _normalize_arabic(name_fr))))
+
+        if commune is None:
+            if name_ar or name_fr:
+                no_match.append(f"{wilaya_code} ~ {name_ar or name_fr}")
             continue
 
-        seen.add(external_id)
-        row = existing.get(external_id)
+        delivery = item.get("delivery") or {}
 
-        if row is None:
-            row = Commune(carrier_id=carrier.id, external_id=external_id)
-            db.session.add(row)
-            added += 1
-        else:
-            updated += 1
+        link = existing.get(commune.id)
+        if link is None:
+            link = CarrierCommune(carrier_id=carrier.id, commune_id=commune.id)
+            db.session.add(link)
+            existing[commune.id] = link
 
-        row.name_ar = name_ar or name_fr
-        row.name_fr = name_fr or None
-        row.postal_code = postal or None
-        row.wilaya_code = wilaya_code
-        row.has_home_delivery = bool(delivery.get("hasHomeDelivery", True))
-        row.has_pickup_point = bool(delivery.get("hasPickupPoint", False))
-        row.can_send = True
+        link.external_id = str(external_id)
+        link.has_home_delivery = bool(delivery.get("hasHomeDelivery", True))
+        link.has_pickup_point = bool(delivery.get("hasPickupPoint", False))
+        link.can_send = bool(delivery.get("canSend"))
 
-    # البلديات اللي ما بقاتش عند ZR → نعطّلوها بدل ما نمسحوها
-    # (باش الطلبيات القديمة تبقى مفهومة)
-    removed = 0
-    for ext_id, row in existing.items():
-        if ext_id not in seen and row.can_send:
-            row.can_send = False
-            removed += 1
+        matched_ids.add(commune.id)
+        linked += 1
+
+    # بلديات ما لقيناهاش عند ZR هاد المرة → نعطّلوها
+    deactivated = 0
+    for cid, link in existing.items():
+        if cid not in matched_ids and link.can_send:
+            link.can_send = False
+            deactivated += 1
 
     db.session.commit()
 
-    # كم ولاية عندها بلديات
-    wilayas_covered = db.session.query(Commune.wilaya_code).filter_by(
+    deliverable = CarrierCommune.query.filter_by(
         carrier_id=carrier.id, can_send=True
-    ).distinct().count()
+    ).count()
+
+    wilayas_covered = (
+        db.session.query(Commune.wilaya_code)
+        .join(CarrierCommune, CarrierCommune.commune_id == Commune.id)
+        .filter(CarrierCommune.carrier_id == carrier.id,
+                CarrierCommune.can_send.is_(True))
+        .distinct()
+        .count()
+    )
 
     return {
         "total_from_zr": len(items),
-        "added": added,
-        "updated": updated,
-        "deactivated": removed,
+        "linked": linked,
+        "deliverable": deliverable,
+        "deactivated": deactivated,
         "wilayas_covered": wilayas_covered,
-        "skipped_level": skipped_level,
-        "skipped_nosend": skipped_nosend,
-        "skipped_nocode": skipped_nocode,
+        "our_total": len(our_communes),
+        "no_match": no_match[:20],
+        "no_match_count": len(no_match),
     }
 
 
@@ -409,3 +417,58 @@ def find_territory_id(carrier_code, commune_external_id):
     الإرسال يبقى يخدم بنفس المعرّف اللي اختارو الزبون.
     """
     return commune_external_id or None
+
+
+# ═══════════════════════════════════════════════════════════
+# نقاط الاستلام (Stop Desk)
+# ═══════════════════════════════════════════════════════════
+
+def get_pickup_points(wilaya_code=None):
+    """
+    مكاتب الاستلام عند ZR.
+
+    ⚠️ الزبون اللي يختار "التوصيل للمكتب" لازم يختار **مكتب محدد**،
+    ماشي بلدية. لهذا نجيبو القائمة من الشركة مباشرة.
+
+    أسماء الحقول مجرّبة على عدة احتمالات لأن التوثيق ما يوضحهاش.
+    """
+    try:
+        data = _request("POST", "/pickup-points/search",
+                        json={"page": 1, "pageSize": 500})
+    except ZRError:
+        # بعض الحسابات تستعمل مسار آخر
+        data = _request("POST", "/agencies/search",
+                        json={"page": 1, "pageSize": 500})
+
+    items = data.get("data") or data.get("items") or []
+    results = []
+
+    for it in items:
+        pid = it.get("id") or it.get("code")
+        if not pid:
+            continue
+
+        name = (it.get("nameArabic") or it.get("name")
+                or it.get("label") or "").strip()
+
+        address = (it.get("address") or it.get("addressArabic") or "").strip()
+        postal = str(it.get("postalCode") or "").strip()
+        w_code = postal[:2] if len(postal) >= 2 and postal[:2].isdigit() else None
+
+        # بعض الردود تعطي الولاية كحقل مستقل
+        if not w_code:
+            raw = it.get("wilayaCode") or it.get("stateCode")
+            if raw and str(raw).isdigit():
+                w_code = str(int(raw)).zfill(2)
+
+        if wilaya_code and w_code != str(wilaya_code).zfill(2):
+            continue
+
+        results.append({
+            "id": str(pid),
+            "name": name or "مكتب",
+            "address": address,
+            "wilaya_code": w_code,
+        })
+
+    return results

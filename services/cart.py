@@ -12,7 +12,10 @@ from flask import session
 from models import db, Product, ProductVariant, Offer
 
 CART_KEY = "cart"
-MAX_QUANTITY_PER_ITEM = 50  # سقف معقول، يمنع أخطاء الإدخال والطلبات الوهمية
+# ⚠️ السقف كان 50 — وهذا كان يكسر عروض الجملة: زبون يطلب 300 حبة
+# والسلة تقصّها لـ50 بلا ما يحس. رفعناه لـ5000 (كافي للجملة، ومازال
+# يمنع الطلبات الوهمية بأرقام خيالية).
+MAX_QUANTITY_PER_ITEM = 5000
 
 
 class CartLine:
@@ -206,7 +209,12 @@ def get_cart_lines():
                     stale_keys.append(key)
                     continue
 
-            unit_price = variant.effective_price if variant else product.price
+            # ⚠️ السعر يعتمد على الكمية (عروض الجملة). الحساب يصرا هنا
+            # فالسيرفر — المتصفح يعرض فقط، ما يقررش.
+            if variant:
+                unit_price = variant.price_for_quantity(quantity)
+            else:
+                unit_price = product.price
 
             # 🔴 إصلاح حرج: التنويعة كانت تقرا stock_quantity مباشرة وتتجاهل
             # النظام المفتوح. المنتجات المستوردة كميتها 0، فأي طلبية بتنويعة

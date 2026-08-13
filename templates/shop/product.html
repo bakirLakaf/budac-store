@@ -68,11 +68,19 @@
                             data-price-display="{{ v.price_display }}"
                             data-compare="{{ v.compare_at_price_display or '' }}"
                             data-stock="{{ v.stock_quantity }}"
+                            data-tiers="{{ v.tiers_payload() | tojson | forceescape }}"
                             {% if v.image_filename %}data-image="{{ url_for('static', filename='img/products/' + v.image_filename) }}"{% endif %}>
                         {{ v.label }}
                     </button>
                     {% endfor %}
                 </div>
+            </div>
+
+            {# ---------- جدول أسعار الجملة للموديل المختار ---------- #}
+            <div class="tiers-box" id="tiersBox" hidden>
+                <p class="tiers-title">📦 كل ما تشري أكثر، ترخص الحبة</p>
+                <div class="tiers-list" id="tiersList"></div>
+                <p class="tiers-hint" id="tiersHint"></p>
             </div>
             {% elif product.color_variant %}
                 <p class="product-detail-variant">اللون: {{ product.color_variant }}</p>
@@ -185,7 +193,7 @@
                         <label for="qtyInput">الكمية</label>
                         <div class="qty-stepper">
                             <button type="button" class="qty-btn" data-step="-1" aria-label="نقّص">−</button>
-                            <input type="number" name="quantity" id="qtyInput" value="1" min="1" max="50"
+                            <input type="number" name="quantity" id="qtyInput" value="1" min="1" max="5000"
                                    inputmode="numeric" aria-label="الكمية">
                             <button type="button" class="qty-btn" data-step="1" aria-label="زيد">+</button>
                         </div>
@@ -446,7 +454,7 @@
                 var step = parseInt(btn.dataset.step, 10);
                 var value = (parseInt(qtyInput.value, 10) || 1) + step;
                 var min = parseInt(qtyInput.min, 10) || 1;
-                var max = parseInt(qtyInput.max, 10) || 50;
+                var max = parseInt(qtyInput.max, 10) || 5000;
                 qtyInput.value = Math.max(min, Math.min(max, value));
             });
         });
@@ -636,8 +644,107 @@
                     if (window.scrollY > top) window.scrollTo({ top: top, behavior: "smooth" });
                 }
             }
+
+            // نحدّثو جدول أسعار الجملة والسعر حسب الكمية الحالية
+            applyTiers(chip);
         });
     });
+
+    /* ══════════════════════════════════════════════════════════
+       أسعار الجملة: السعر يتبدّل حسب الكمية
+       ⚠️ هذا **عرض فقط**. السعر الحقيقي يتحسب فالسيرفر عند الإضافة
+       للسلة — باش حتى واحد ما يقدر يبدّلو من أدوات المطوّر.
+       ══════════════════════════════════════════════════════════ */
+    var tiersBox = document.getElementById("tiersBox");
+    var tiersList = document.getElementById("tiersList");
+    var tiersHint = document.getElementById("tiersHint");
+    var qtyForPrice = document.getElementById("qtyInput");
+    var currentTiers = [];
+    var basePriceDisplay = priceValueEl ? priceValueEl.textContent : "";
+
+    function readTiers(chip) {
+        if (!chip) return [];
+        try {
+            return JSON.parse(chip.getAttribute("data-tiers") || "[]");
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function formatDZD(n) {
+        return n.toLocaleString("en-US") + " دج";
+    }
+
+    function tierForQuantity(qty) {
+        for (var i = currentTiers.length - 1; i >= 0; i--) {
+            var t = currentTiers[i];
+            if (qty >= t.min && (t.max === null || qty <= t.max)) return t;
+        }
+        return null;
+    }
+
+    function renderTiers() {
+        if (!tiersBox) return;
+
+        if (!currentTiers.length) {
+            tiersBox.hidden = true;
+            return;
+        }
+
+        tiersBox.hidden = false;
+        var qty = parseInt(qtyForPrice ? qtyForPrice.value : 1, 10) || 1;
+        var active = tierForQuantity(qty);
+
+        var html = "";
+        currentTiers.forEach(function (t) {
+            var isOn = active && t.min === active.min;
+            html += '<div class="tier-row' + (isOn ? " is-active" : "") + '">'
+                  + '<span class="tier-range">' + t.range + "</span>"
+                  + '<span class="tier-price">' + formatDZD(t.price) + " / الحبة</span>"
+                  + "</div>";
+        });
+        tiersList.innerHTML = html;
+
+        // السعر الرئيسي يعكس سعر الحبة الحالي
+        if (priceValueEl) {
+            priceValueEl.textContent = active ? formatDZD(active.price) : basePriceDisplay;
+        }
+
+        // نقترح على الزبون كم يزيد باش يوصل للسعر الأرخص الجاي
+        var next = null;
+        for (var i = 0; i < currentTiers.length; i++) {
+            if (currentTiers[i].min > qty) { next = currentTiers[i]; break; }
+        }
+        if (next && tiersHint) {
+            var need = next.min - qty;
+            tiersHint.textContent = "زيد " + need + " حبة وتشري بـ"
+                                  + formatDZD(next.price) + " للحبة";
+            tiersHint.hidden = false;
+        } else if (tiersHint) {
+            tiersHint.hidden = true;
+        }
+    }
+
+    function applyTiers(chip) {
+        currentTiers = readTiers(chip);
+        if (chip) {
+            basePriceDisplay = chip.getAttribute("data-price-display") || basePriceDisplay;
+        }
+        renderTiers();
+    }
+
+    // أي تبديل فالكمية يعيد حساب العرض
+    if (qtyForPrice) {
+        qtyForPrice.addEventListener("input", renderTiers);
+        qtyForPrice.addEventListener("change", renderTiers);
+        // أزرار +/- تبدّل القيمة برمجيًا، فما تطلقش "input"
+        document.querySelectorAll(".qty-btn").forEach(function (b) {
+            b.addEventListener("click", function () { setTimeout(renderTiers, 0); });
+        });
+    }
+
+    // الحالة الأولى: الموديل الافتراضي
+    applyTiers(document.querySelector(".variant-chip.is-active"));
 })();
 </script>
 

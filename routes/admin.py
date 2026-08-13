@@ -463,13 +463,12 @@ def variant_add(product_id):
         is_default=not product.variants,  # أول تنويعة تولي الافتراضية تلقائيًا
     )
 
-    # صورة خاصة بهاد الموديل — كي يختارها الزبون تتبدّل الصورة الرئيسية
-    image = request.files.get("image")
-    if image and image.filename:
-        try:
-            variant.image_filename = save_image(image, "products", base_name=product.slug)
-        except Exception as e:
-            flash(f"التنويعة تزادت لكن الصورة فشلت: {e}", "warning")
+    # الصورة تُختار من صور المنتج الموجودة (ماشي رفع جديد).
+    # ⚠️ هكذا ما نكرّروش نفس الصورة مرتين على القرص، والأدمن يرفع
+    # صور المنتج مرة وحدة ويوزّعها على الموديلات.
+    chosen = (request.form.get("image_filename") or "").strip()
+    if chosen and any(img.image_filename == chosen for img in product.images):
+        variant.image_filename = chosen
 
     db.session.add(variant)
     db.session.commit()
@@ -482,34 +481,94 @@ def variant_add(product_id):
 @login_required
 def variant_image(variant_id):
     """
-    يبدّل (ولا يحيّد) صورة موديل موجود.
+    يربط موديل بصورة من **صور المنتج الموجودة**.
 
-    ⚠️ ليش مهمة؟ الزبون كي يختار موديل، لازم يشوف صورتو بالضبط.
-    بلا صورة خاصة، الصورة الرئيسية ما تتبدلش وهذا يخلق سوء فهم عند الطلب.
+    ⚠️ ليش ماشي رفع جديد؟ الصور نفسها: الأدمن يرفع صور المنتج مرة وحدة،
+    وبعدها يقول "هاد الموديل = هاد الصورة". بلا تكرار على القرص، وبلا
+    ما يعاود يرفع نفس الصورة لكل موديل.
     """
     variant = ProductVariant.query.get_or_404(variant_id)
+    product = variant.product
 
-    # حذف الصورة
-    if request.form.get("remove"):
+    filename = (request.form.get("image_filename") or "").strip()
+
+    # فراغ = نحيّدو الربط
+    if not filename:
         variant.image_filename = None
         db.session.commit()
         flash(f"تحيّدت صورة «{variant.label}»", "success")
-        return redirect(url_for("admin.product_form", product_id=variant.product_id))
+        return redirect(url_for("admin.product_form", product_id=product.id))
 
-    image = request.files.get("image")
-    if not image or not image.filename:
-        flash("ما اخترتش حتى صورة", "error")
-        return redirect(url_for("admin.product_form", product_id=variant.product_id))
+    # نتحققو أن الصورة فعلاً من صور هاد المنتج (أمان: ما نقبلوش أي اسم)
+    valid = any(img.image_filename == filename for img in product.images)
+    if not valid and filename != product.image_filename:
+        flash("هاد الصورة ماشي من صور هاد المنتج", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
 
-    try:
-        variant.image_filename = save_image(
-            image, "products", base_name=variant.product.slug
-        )
-        db.session.commit()
-        flash(f"تبدّلت صورة «{variant.label}»", "success")
-    except Exception as e:
-        flash(f"ما قدرناش نحفظو الصورة: {e}", "error")
+    variant.image_filename = filename
+    db.session.commit()
+    flash(f"تربطات صورة «{variant.label}»", "success")
+    return redirect(url_for("admin.product_form", product_id=product.id))
 
+
+@admin_bp.route("/variants/<int:variant_id>/tiers", methods=["POST"])
+@login_required
+def variant_tiers(variant_id):
+    """
+    يحفظ مجالات سعر الجملة لموديل.
+
+    النموذج يبعث صفوف موازية: min_quantity[]، max_quantity[]، unit_price[].
+    نمسحو القديم ونكتبو الجديد — أبسط وأأمن من التعديل صف بصف.
+    """
+    from models import VariantPriceTier
+
+    variant = ProductVariant.query.get_or_404(variant_id)
+
+    mins = request.form.getlist("min_quantity")
+    maxs = request.form.getlist("max_quantity")
+    prices = request.form.getlist("unit_price")
+
+    new_tiers = []
+    for i in range(len(mins)):
+        try:
+            min_q = int(mins[i]) if mins[i].strip() else None
+            price = int(prices[i]) if i < len(prices) and prices[i].strip() else None
+            max_q = int(maxs[i]) if i < len(maxs) and maxs[i].strip() else None
+        except ValueError:
+            continue
+
+        # صف ناقص = نتجاوزوه (الأدمن يمكن خلّى سطر فارغ)
+        if min_q is None or price is None:
+            continue
+        if min_q < 1 or price < 0:
+            continue
+        if max_q is not None and max_q < min_q:
+            flash(f"المجال «من {min_q}» فيه «إلى» أصغر من «من» — تجاوزناه", "warning")
+            continue
+
+        new_tiers.append((min_q, max_q, price))
+
+    # نتحققو من التداخل: مجالان يغطّيو نفس الكمية = سعر غامض
+    new_tiers.sort(key=lambda t: t[0])
+    for i in range(len(new_tiers) - 1):
+        cur_max = new_tiers[i][1]
+        next_min = new_tiers[i + 1][0]
+        if cur_max is None or cur_max >= next_min:
+            flash(
+                f"المجالات متداخلة عند {next_min}. صحّحها باش السعر يكون واضح.",
+                "warning",
+            )
+            break
+
+    VariantPriceTier.query.filter_by(variant_id=variant.id).delete()
+    for min_q, max_q, price in new_tiers:
+        db.session.add(VariantPriceTier(
+            variant_id=variant.id, min_quantity=min_q,
+            max_quantity=max_q, unit_price=price,
+        ))
+
+    db.session.commit()
+    flash(f"تحفظو {len(new_tiers)} مجال سعر لـ«{variant.label}»", "success")
     return redirect(url_for("admin.product_form", product_id=variant.product_id))
 
 
@@ -1229,7 +1288,7 @@ def integrations():
     from services.zrexpress import test_connection, is_configured
 
     from services.zrexpress import sync_communes, ZRError
-    from models import Carrier, Commune
+    from models import Carrier, Commune, CarrierCommune
 
     zr_result = None
     sync_result = None
@@ -1267,10 +1326,16 @@ def integrations():
     wilayas_covered = 0
     carrier = Carrier.query.filter_by(code="zrexpress").first()
     if carrier:
-        linked = Commune.query.filter_by(carrier_id=carrier.id, can_send=True).count()
-        wilayas_covered = db.session.query(Commune.wilaya_code).filter_by(
+        linked = CarrierCommune.query.filter_by(
             carrier_id=carrier.id, can_send=True
-        ).distinct().count()
+        ).count()
+        wilayas_covered = (
+            db.session.query(Commune.wilaya_code)
+            .join(CarrierCommune, CarrierCommune.commune_id == Commune.id)
+            .filter(CarrierCommune.carrier_id == carrier.id,
+                    CarrierCommune.can_send.is_(True))
+            .distinct().count()
+        )
 
     return render_template(
         "admin/integrations.html",

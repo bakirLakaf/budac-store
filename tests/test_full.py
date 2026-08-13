@@ -12,7 +12,7 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 from app import create_app
 from models import (db, Product, ProductVariant, Category, Offer, OfferItem,
                     Coupon, Order, Carrier, ShippingRate, AdminUser, StoreSetting,
-                    Commune)
+                    Commune, CarrierCommune, VariantPriceTier, ProductImage)
 
 PASSED, FAILED = [], []
 
@@ -51,9 +51,18 @@ def build():
         db.session.add_all([p1, p2, p3])
         db.session.commit()
 
-        v1 = ProductVariant(product_id=p1.id, label="دوري كبير", stock_quantity=0)
+        db.session.add(ProductImage(product_id=p1.id, image_filename="img-a.webp"))
+        db.session.add(ProductImage(product_id=p1.id, image_filename="img-b.webp"))
+        v1 = ProductVariant(product_id=p1.id, label="دوري كبير", stock_quantity=0,
+                            image_filename="img-a.webp")
         v2 = ProductVariant(product_id=p1.id, label="أرجونتي", price=550, stock_quantity=0)
         db.session.add_all([v1, v2])
+
+        # أسعار الجملة على v1
+        db.session.flush()
+        for mn, mx, pr in [(1, 99, 500), (100, 199, 420), (200, None, 380)]:
+            db.session.add(VariantPriceTier(variant_id=v1.id, min_quantity=mn,
+                                            max_quantity=mx, unit_price=pr))
 
         c = Coupon(code="BUDAC10", discount_type="percent", value=10, is_active=True)
         db.session.add(c)
@@ -68,12 +77,16 @@ def build():
         db.session.commit()
         db.session.add(ShippingRate(carrier_id=carrier.id, wilaya_code="16",
                                     wilaya_name="الجزائر", home_price=600, office_price=400))
-        db.session.add(Commune(carrier_id=carrier.id, external_id="zr-uuid-1",
-                               name_ar="باب الوادي", wilaya_code="16",
-                               has_home_delivery=True, has_pickup_point=True, can_send=True))
-        db.session.add(Commune(carrier_id=carrier.id, external_id="zr-uuid-2",
-                               name_ar="بلدية ماشي متاحة", wilaya_code="16",
-                               has_home_delivery=True, has_pickup_point=True, can_send=False))
+        cm1 = Commune(wilaya_code="16", name_ar="باب الوادي", daira="باب الوادي")
+        cm2 = Commune(wilaya_code="16", name_ar="بلدية ماشي متاحة")
+        db.session.add_all([cm1, cm2])
+        db.session.flush()
+        db.session.add(CarrierCommune(carrier_id=carrier.id, commune_id=cm1.id,
+                                      external_id="zr-uuid-1", has_home_delivery=True,
+                                      has_pickup_point=True, can_send=True))
+        db.session.add(CarrierCommune(carrier_id=carrier.id, commune_id=cm2.id,
+                                      external_id="zr-uuid-2", has_home_delivery=True,
+                                      has_pickup_point=True, can_send=False))
 
         admin = AdminUser(username="admin")
         admin.set_password("test-password-123")
@@ -178,10 +191,17 @@ def run():
 
     # ---------- البلديات ----------
     r = c.get("/api/communes?carrier=zrexpress&wilaya=16&type=home")
-    names = [x["name"] for x in r.get_json()["communes"]]
+    data = r.get_json()["communes"]
+    names = [x["name"] for x in data]
     check("قائمة البلديات تخدم", "باب الوادي" in names, str(names))
-    check("البلدية اللي الشركة ما توصلش ليها مستبعدة",
-          "بلدية ماشي متاحة" not in names, str(names))
+    ok = [x for x in data if x["available"]]
+    bad = [x for x in data if not x["available"]]
+    check("البلدية المتاحة معلّمة صح",
+          any(x["name"] == "باب الوادي" for x in ok))
+    check("البلدية اللي ما توصلش معلّمة معطّلة",
+          any(x["name"] == "بلدية ماشي متاحة" for x in bad), str(bad))
+    check("معرّف الشركة يرجع مع البلدية المتاحة",
+          ok and ok[0]["id"] == "zr-uuid-1", str(ok[:1]))
 
     r = c.get("/api/communes")
     check("طلب بلا معاملات ما يكسرش", r.status_code == 200)
@@ -189,6 +209,25 @@ def run():
     r = c.get("/api/communes?carrier=zrexpress&wilaya=99&type=home")
     check("ولاية بلا بلديات ترجع قائمة فارغة",
           r.get_json()["communes"] == [])
+
+    # البيانات الرسمية
+    import json as _json, os as _os
+    data_file = _os.path.join(_os.path.dirname(__file__), "..", "budac",
+                              "data", "algeria_communes.json")
+    check("ملف البلديات الرسمي موجود", _os.path.exists(data_file))
+    if _os.path.exists(data_file):
+        with open(data_file, encoding="utf-8") as f:
+            all_rows = _json.load(f)
+        check("الملف فيه 1541 بلدية", len(all_rows) == 1541, str(len(all_rows)))
+        check("يغطي 58 ولاية",
+              len({r["c"] for r in all_rows}) == 58,
+              str(len({r["c"] for r in all_rows})))
+
+    r = c.get("/api/pickup-points?carrier=zrexpress&wilaya=16")
+    check("API المكاتب ما يكسرش بلا مفاتيح", r.status_code == 200)
+    r = c.get("/api/pickup-points?carrier=other&wilaya=16")
+    check("شركة بلا مكاتب ترجع رسالة واضحة",
+          r.get_json().get("points") == [])
 
     # ══════════ 6. لوحة التحكم ══════════
     section("6. لوحة التحكم")
@@ -244,6 +283,40 @@ def run():
     }, follow_redirects=True)
     check("طلبية بلا بلدية مرفوضة",
           "اختر البلدية" in r.get_data(as_text=True))
+
+    oc = app.test_client()
+    oc.post("/cart/add", data={"kind": "product", "item_id": ids["p2"], "quantity": 1})
+    r = oc.post("/checkout", data={
+        "name": "زبون", "phone": "0555111222", "carrier_code": "zrexpress",
+        "wilaya_code": 16, "delivery_type": "office", "commune": "",
+    }, follow_redirects=True)
+    check("طلبية للمكتب بلا مكتب مرفوضة",
+          "اختر مكتب الاستلام" in r.get_data(as_text=True))
+
+    # ══════════ 7.5 أسعار الجملة ══════════
+    section("7.5 أسعار الجملة (حسب الكمية)")
+    with app.app_context():
+        v = ProductVariant.query.filter_by(label="دوري كبير").first()
+        check("1 حبة → 500", v.price_for_quantity(1) == 500, str(v.price_for_quantity(1)))
+        check("99 حبة → 500", v.price_for_quantity(99) == 500)
+        check("100 حبة → 420", v.price_for_quantity(100) == 420, str(v.price_for_quantity(100)))
+        check("199 حبة → 420", v.price_for_quantity(199) == 420)
+        check("200 حبة → 380", v.price_for_quantity(200) == 380)
+        check("9999 حبة → 380", v.price_for_quantity(9999) == 380)
+        check("صورة الموديل من صور المنتج",
+              v.image_filename in [i.image_filename for i in v.product.images])
+
+    tc = app.test_client()
+    tc.post("/cart/add", data={"kind": "product", "item_id": ids["p1"],
+                               "variant_id": ids["v1"], "quantity": 150})
+    sub = tc.get("/api/cart").get_json()["subtotal"]
+    check("🔴 السلة تطبّق سعر الجملة (150×420)", sub == 63000, f"رجع {sub}")
+
+    tc2 = app.test_client()
+    tc2.post("/cart/add", data={"kind": "product", "item_id": ids["p1"],
+                                "variant_id": ids["v1"], "quantity": 300})
+    sub2 = tc2.get("/api/cart").get_json()["subtotal"]
+    check("السلة تطبّق أرخص مجال (300×380)", sub2 == 114000, f"رجع {sub2}")
 
     # ══════════ 8. الحسابات ══════════
     section("8. الأسعار والحسابات")

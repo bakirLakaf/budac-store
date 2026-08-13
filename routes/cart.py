@@ -128,44 +128,102 @@ def _cart_json():
 @cart_bp.route("/api/communes")
 def api_communes():
     """
-    بلديات ولاية معيّنة عند شركة معيّنة — لقائمة البلديات فصفحة الطلب.
+    بلديات ولاية معيّنة — لقائمة البلديات فصفحة الطلب.
 
-    ⚠️ نرجعو غير البلديات اللي الشركة توصل ليها فعلاً (can_send).
-    هكذا الزبون ما يختارش بلدية ونكتشفو بعد أن ما نقدروش نبعثو ليها.
+    ⚠️ نعرضو **كل** بلديات الولاية (القائمة الرسمية)، ونعلّمو اللي الشركة
+    ما توصلش ليها. هكذا الزبون يلقى بلديتو دائمًا ويفهم علاش ما تخدمش،
+    بدل ما يظن أن الموقع ناقص.
     """
-    from models import Carrier, Commune
+    from models import Carrier, Commune, CarrierCommune
 
     carrier_code = (request.args.get("carrier") or "").strip()
     wilaya_code = (request.args.get("wilaya") or "").strip()
     delivery_type = request.args.get("type", "home")
 
-    if not carrier_code or not wilaya_code:
-        return jsonify({"communes": [], "message": "اختر الولاية وشركة التوصيل"})
+    if not wilaya_code:
+        return jsonify({"communes": [], "message": "اختر الولاية أولاً"})
 
-    carrier = Carrier.query.filter_by(code=carrier_code, is_active=True).first()
-    if not carrier:
-        return jsonify({"communes": [], "message": "شركة غير معروفة"})
+    wilaya_code = wilaya_code.zfill(2)
 
-    query = Commune.query.filter_by(
-        carrier_id=carrier.id,
-        wilaya_code=wilaya_code.zfill(2),
-        can_send=True,
+    communes = (
+        Commune.query
+        .filter_by(wilaya_code=wilaya_code)
+        .order_by(Commune.name_ar)
+        .all()
     )
 
-    # التوصيل للمكتب يحتاج نقطة استلام فالبلدية
-    if delivery_type == "office":
-        query = query.filter_by(has_pickup_point=True)
-    else:
-        query = query.filter_by(has_home_delivery=True)
+    if not communes:
+        return jsonify({
+            "communes": [],
+            "message": "ماكانش بلديات لهاد الولاية. شغّل seed_communes.py",
+        })
 
-    rows = query.order_by(Commune.name_ar).all()
+    # روابط الشركة (إذا كانت مزامَنة)
+    links = {}
+    carrier = Carrier.query.filter_by(code=carrier_code, is_active=True).first()
+    if carrier:
+        links = {
+            l.commune_id: l
+            for l in CarrierCommune.query.filter_by(carrier_id=carrier.id).all()
+        }
+
+    results = []
+    for c in communes:
+        link = links.get(c.id)
+
+        # بلا مزامنة نقبلو الكل (الأدمن يبعث يدويًا)
+        if link is None:
+            available = True
+            external_id = ""
+        elif not link.can_send:
+            available = False
+            external_id = ""
+        elif delivery_type == "office":
+            available = link.has_pickup_point
+            external_id = link.external_id or ""
+        else:
+            available = link.has_home_delivery
+            external_id = link.external_id or ""
+
+        results.append({
+            "id": external_id,
+            "name": c.display_name,
+            "daira": c.daira or "",
+            "available": available,
+        })
 
     return jsonify({
-        "communes": [
-            {"id": c.external_id, "name": c.display_name} for c in rows
-        ],
-        "count": len(rows),
+        "communes": results,
+        "count": len(results),
+        "synced": bool(links),
     })
+
+
+@cart_bp.route("/api/pickup-points")
+def api_pickup_points():
+    """
+    مكاتب الاستلام لولاية معيّنة — كي يختار الزبون «التوصيل للمكتب».
+    """
+    from services.zrexpress import get_pickup_points, ZRError, is_configured
+
+    carrier_code = (request.args.get("carrier") or "").strip()
+    wilaya_code = (request.args.get("wilaya") or "").strip()
+
+    if carrier_code != "zrexpress":
+        return jsonify({
+            "points": [],
+            "message": "هاد الشركة ما عندهاش قائمة مكاتب — اكتب البلدية عادي",
+        })
+
+    if not is_configured():
+        return jsonify({"points": [], "message": "التكامل ماشي مفعّل"})
+
+    try:
+        points = get_pickup_points(wilaya_code)
+    except ZRError as e:
+        return jsonify({"points": [], "message": str(e)})
+
+    return jsonify({"points": points, "count": len(points)})
 
 
 @cart_bp.route("/api/cart")
@@ -304,6 +362,8 @@ def checkout():
                     "wilaya_name": wilaya["name"] if wilaya else form["wilaya_code"],
                     "commune": form["commune"],
                     "commune_external_id": form.get("commune_id") or None,
+                    "pickup_point_id": form.get("pickup_point_id") or None,
+                    "pickup_point_name": form.get("pickup_point_name") or None,
                     "address_note": form["address_note"],
                 },
                 shipping_info={
@@ -457,6 +517,8 @@ def _read_checkout_form(form_data):
         "wilaya_code": (form_data.get("wilaya_code") or "").strip(),
         "commune": (form_data.get("commune") or "").strip(),
         "commune_id": (form_data.get("commune_id") or "").strip(),
+        "pickup_point_id": (form_data.get("pickup_point_id") or "").strip(),
+        "pickup_point_name": (form_data.get("pickup_point_name") or "").strip(),
         "address_note": (form_data.get("address_note") or "").strip(),
         "carrier_code": (form_data.get("carrier_code") or "").strip(),
         "delivery_type": form_data.get("delivery_type") or "home",
@@ -486,9 +548,13 @@ def _validate_checkout_form(form):
     if form["delivery_type"] not in ("home", "office"):
         errors.append("اختر نوع التوصيل")
 
-    # ⚠️ البلدية ومعرّفها ضروريين فالحالتين: الشركة تحتاج معرّف البلدية
-    # باش تقبل الطرد، حتى فالتوصيل للمكتب.
-    if not form["commune"]:
-        errors.append("اختر البلدية من القائمة")
+    # ⚠️ التوصيل للمنزل يحتاج بلدية، والتوصيل للمكتب يحتاج مكتب.
+    # ما نخلطوش بيناتهم: الشركة تحتاج معلومة مختلفة فكل حالة.
+    if form["delivery_type"] == "office":
+        if not form.get("pickup_point_name"):
+            errors.append("اختر مكتب الاستلام من القائمة")
+    else:
+        if not form["commune"]:
+            errors.append("اختر البلدية من القائمة")
 
     return errors

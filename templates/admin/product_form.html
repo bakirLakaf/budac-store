@@ -180,80 +180,148 @@
 {% if product %}
 <hr class="divider">
 
-<h2 class="section-title">الموديلات (ألوان / مقاسات)</h2>
+<h2 class="section-title">الموديلات وأسعار الجملة</h2>
 <p class="hint">
-    كل موديل يقدر يكون عندو <strong>صورة خاصة بيه</strong>. كي الزبون يختارو
-    فصفحة المنتج، الصورة الرئيسية تتبدّل مباشرة لصورتو —
-    وهذا يقلّل الطلبيات الغالطة والإرجاع.
+    الموديل = نوع من المنتج (لون، شكل، مقاس). لكل موديل:
+    <strong>صورة</strong> يشوفها الزبون كي يختارو، و<strong>أسعار حسب الكمية</strong>
+    (كل ما زاد يشري، كل ما رخص سعر الحبة).
 </p>
 
 {% if product.variants %}
-<table class="admin-table variants-table">
-    <thead>
-        <tr><th>الصورة</th><th>الموديل</th><th>السعر</th><th>SKU</th><th>افتراضي</th><th></th></tr>
-    </thead>
-    <tbody>
-        {% for v in product.variants %}
-        <tr>
-            <td class="variant-img-cell">
+<div class="variants-manager">
+    {% for v in product.variants %}
+    <div class="variant-card">
+
+        {# ---------- السطر الأول: الصورة والمعلومات ---------- #}
+        <div class="variant-head">
+            <div class="variant-img-cell">
                 {% if v.image_filename %}
                     <img src="{{ url_for('static', filename='img/products/' + (v.image_filename | thumb)) }}"
                          alt="{{ v.label }}" class="variant-thumb">
                 {% else %}
-                    <span class="variant-thumb variant-thumb-empty" title="بلا صورة">—</span>
+                    <span class="variant-thumb variant-thumb-empty" title="بلا صورة">؟</span>
                 {% endif %}
-            </td>
-            <td>{{ v.label }}</td>
-            <td>{{ v.price_display }}</td>
-            <td>{{ v.sku or '—' }}</td>
-            <td>{{ '✓' if v.is_default else '' }}</td>
-            <td class="variant-actions">
-                <form method="post" enctype="multipart/form-data"
-                      action="{{ url_for('admin.variant_image', variant_id=v.id) }}"
-                      class="variant-img-form">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <label class="btn-admin btn-sm btn-file">
-                        {{ 'بدّل الصورة' if v.image_filename else '+ صورة' }}
-                        <input type="file" name="image" accept="image/*"
-                               onchange="this.form.submit()" hidden>
+            </div>
+
+            <div class="variant-info">
+                <strong class="variant-name">{{ v.label }}</strong>
+                <span class="variant-meta">
+                    السعر العادي: {{ v.price_display }}
+                    {% if v.sku %} · SKU: {{ v.sku }}{% endif %}
+                    {% if v.is_default %} · <span class="tag-default">افتراضي</span>{% endif %}
+                </span>
+            </div>
+
+            <form method="post" action="{{ url_for('admin.variant_delete', variant_id=v.id) }}"
+                  onsubmit="return confirm('تمسح الموديل «{{ v.label }}» وكل أسعارو؟')"
+                  class="variant-del-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-admin btn-sm btn-danger">حذف الموديل</button>
+            </form>
+        </div>
+
+        {# ---------- اختيار الصورة من صور المنتج ---------- #}
+        <div class="variant-section">
+            <label class="variant-section-title">صورة الموديل</label>
+
+            {% if product.images %}
+            <form method="post" action="{{ url_for('admin.variant_image', variant_id=v.id) }}"
+                  class="variant-img-picker">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="img-choices">
+                    <label class="img-choice {{ 'is-picked' if not v.image_filename }}">
+                        <input type="radio" name="image_filename" value=""
+                               {{ 'checked' if not v.image_filename }}>
+                        <span class="img-choice-none">بلا صورة</span>
                     </label>
-                </form>
 
-                {% if v.image_filename %}
-                <form method="post" action="{{ url_for('admin.variant_image', variant_id=v.id) }}"
-                      onsubmit="return confirm('تحيّد صورة «{{ v.label }}»؟')">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="remove" value="1">
-                    <button type="submit" class="btn-admin btn-sm">حيّد الصورة</button>
-                </form>
-                {% endif %}
+                    {% for img in product.images %}
+                    <label class="img-choice {{ 'is-picked' if v.image_filename == img.image_filename }}">
+                        <input type="radio" name="image_filename" value="{{ img.image_filename }}"
+                               {{ 'checked' if v.image_filename == img.image_filename }}>
+                        <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}" alt="">
+                    </label>
+                    {% endfor %}
+                </div>
 
-                <form method="post" action="{{ url_for('admin.variant_delete', variant_id=v.id) }}"
-                      onsubmit="return confirm('تمسح الموديل «{{ v.label }}»؟')">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-admin btn-sm btn-danger">حذف</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+                <button type="submit" class="btn-admin btn-sm">احفظ الصورة</button>
+            </form>
+            {% else %}
+            <p class="hint">ارفع صور المنتج أولاً (فوق)، وبعدها تقدر تختار لكل موديل صورتو.</p>
+            {% endif %}
+        </div>
+
+        {# ---------- أسعار الجملة ---------- #}
+        <div class="variant-section">
+            <label class="variant-section-title">أسعار حسب الكمية (اختياري)</label>
+            <p class="hint">
+                مثال: من <strong>1</strong> إلى <strong>99</strong> بـ500 دج ·
+                من <strong>100</strong> إلى <strong>199</strong> بـ420 دج ·
+                من <strong>200</strong> وفوق بـ380 دج (خلّي «إلى» فارغ).
+            </p>
+
+            <form method="post" action="{{ url_for('admin.variant_tiers', variant_id=v.id) }}"
+                  class="tiers-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <table class="tiers-table">
+                    <thead>
+                        <tr><th>من (حبة)</th><th>إلى (حبة)</th><th>سعر الحبة (دج)</th></tr>
+                    </thead>
+                    <tbody class="tiers-body" data-variant="{{ v.id }}">
+                        {% for t in v.price_tiers %}
+                        <tr>
+                            <td><input type="number" name="min_quantity" value="{{ t.min_quantity }}" min="1"></td>
+                            <td><input type="number" name="max_quantity" value="{{ t.max_quantity or '' }}" min="1" placeholder="بلا حد"></td>
+                            <td><input type="number" name="unit_price" value="{{ t.unit_price }}" min="0"></td>
+                        </tr>
+                        {% endfor %}
+
+                        {# صفوف فارغة باش الأدمن يزيد بلا ما يضغط زر #}
+                        {% for _ in range(2) %}
+                        <tr>
+                            <td><input type="number" name="min_quantity" min="1" placeholder="مثلاً 100"></td>
+                            <td><input type="number" name="max_quantity" min="1" placeholder="بلا حد"></td>
+                            <td><input type="number" name="unit_price" min="0" placeholder="مثلاً 420"></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <button type="submit" class="btn-admin btn-sm">احفظ الأسعار</button>
+            </form>
+        </div>
+
+    </div>
+    {% endfor %}
+</div>
 {% else %}
-<p class="hint">ماكاين حتى موديل. إذا المنتج عندو ألوان/مقاسات مختلفة، زيدهم هنا.</p>
+<p class="hint">ماكاين حتى موديل. إذا المنتج عندو ألوان/أشكال مختلفة، زيدهم تحت.</p>
 {% endif %}
 
-<form method="post" enctype="multipart/form-data"
-      action="{{ url_for('admin.variant_add', product_id=product.id) }}" class="inline-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="text" name="label" placeholder="اسم الموديل (مثلاً: دوري / الجزيرة)" required>
-    <input type="number" name="price" placeholder="سعر خاص (اختياري)" min="0">
-    <input type="text" name="sku" placeholder="SKU (اختياري)">
-    <label class="btn-admin btn-sm btn-file">
-        📷 صورة
-        <input type="file" name="image" accept="image/*" hidden>
-    </label>
-    <button type="submit" class="btn-admin btn-sm">+ زيد موديل</button>
-</form>
+<div class="add-variant-box">
+    <h3>زيد موديل جديد</h3>
+    <form method="post" action="{{ url_for('admin.variant_add', product_id=product.id) }}"
+          class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="label" placeholder="اسم الموديل (مثلاً: دوري / الجزيرة)" required>
+        <input type="number" name="price" placeholder="السعر العادي (اختياري)" min="0">
+        <input type="text" name="sku" placeholder="SKU (اختياري)">
+
+        {% if product.images %}
+        <select name="image_filename" class="variant-img-select">
+            <option value="">— اختر صورة (اختياري) —</option>
+            {% for img in product.images %}
+            <option value="{{ img.image_filename }}">صورة {{ loop.index }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+
+        <button type="submit" class="btn-admin btn-sm">+ زيد الموديل</button>
+    </form>
+    <p class="hint">بعد ما تزيدو، تقدر تختار صورتو وتحط أسعار الجملة.</p>
+</div>
 {% endif %}
 
 {% endblock %}

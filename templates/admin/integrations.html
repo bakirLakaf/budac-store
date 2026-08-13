@@ -36,15 +36,16 @@
         <h3>البلديات</h3>
         <p class="hint">
             ZR يحتاج <strong>معرّف البلدية</strong> باش يقبل الطرد — ماشي اسمها.
-            نجيبو البلديات منّو مرة وحدة، وتولّي قائمة يختار منها الزبون فصفحة
-            الطلب. البلديات اللي ZR ما يوصلش ليها ما تبانش أصلاً.
+            البلديات عندنا أصلاً (1541 بلدية رسمية). هنا نربطهم بمعرّفات ZR
+            ونعرفو لأي بلدية يوصل. البلديات اللي ما يوصلش ليها تبان للزبون
+            <strong>معطّلة</strong> — يلقى بلديتو ويفهم المشكل.
         </p>
 
         <p class="ic-linked {{ 'is-ok' if linked_communes > 0 else 'is-warn' }}">
             {% if linked_communes == 0 %}
-                🔴 ماكانش حتى بلدية محفوظة — اضغط الزر تحت
+                🔴 ZR مازال ما مربوطش بالبلديات — اضغط الزر تحت
             {% else %}
-                ✓ {{ linked_communes }} بلدية محفوظة، تغطي {{ wilayas_covered }} ولاية
+                ✓ ZR يوصل لـ{{ linked_communes }} بلدية، تغطي {{ wilayas_covered }} ولاية
             {% endif %}
         </p>
 
@@ -81,12 +82,18 @@
         <div class="test-result is-ok">
             ✓ خلصات المزامنة:
             <ul class="sync-stats">
-                <li>بلديات جديدة: <strong>{{ sync_result.added }}</strong></li>
-                <li>بلديات محدّثة: <strong>{{ sync_result.updated }}</strong></li>
+                <li>بلديات مربوطة بـZR: <strong>{{ sync_result.linked }}</strong>
+                    من {{ sync_result.our_total }}</li>
+                <li>ZR يوصل فعلاً لـ<strong>{{ sync_result.deliverable }}</strong> بلدية</li>
                 <li>ولايات مغطّاة: <strong>{{ sync_result.wilayas_covered }}</strong> من 58</li>
-                <li class="muted">ZR ما يوصلش لـ{{ sync_result.skipped_nosend }} بلدية (تجاوزناهم)</li>
                 {% if sync_result.deactivated %}
                 <li class="muted">{{ sync_result.deactivated }} بلدية ما بقاتش عند ZR (تعطّلت)</li>
+                {% endif %}
+                {% if sync_result.no_match_count %}
+                <li class="muted">
+                    {{ sync_result.no_match_count }} منطقة عند ZR ما لقيناش ليها بلدية عندنا
+                    (أسماء مختلفة ولا مناطق فرعية) — عادي، ما يأثرش
+                </li>
                 {% endif %}
             </ul>
         </div>

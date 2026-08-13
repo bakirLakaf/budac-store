@@ -2834,3 +2834,49 @@ img, video, iframe, table { max-width: 100%; }
     /* أزرار كبيرة كفاية للأصبع (48px = الحد الموصى به) */
     .btn-primary { min-height: 48px; padding: 13px 24px; }
 }
+
+/* ---------- أسعار الجملة فصفحة المنتج ---------- */
+.tiers-box {
+    margin: 16px 0;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #FBF6EE, #F3E9D8);
+    border: 1.5px solid rgba(201, 162, 39, 0.35);
+    border-radius: var(--radius-md);
+}
+.tiers-title {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-primary);
+}
+.tiers-list { display: flex; flex-direction: column; gap: 4px; }
+
+.tier-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    background: rgba(255, 255, 255, 0.6);
+    transition: background 0.15s, transform 0.15s;
+}
+.tier-row.is-active {
+    background: var(--color-primary);
+    color: #fff;
+    font-weight: 700;
+    transform: scale(1.015);
+}
+.tier-row.is-active .tier-price { color: var(--color-gold); }
+.tier-range { color: inherit; }
+.tier-price { font-weight: 700; white-space: nowrap; }
+
+.tiers-hint {
+    margin: 10px 0 0;
+    padding-top: 9px;
+    border-top: 1px dashed rgba(201, 162, 39, 0.4);
+    font-size: 13px;
+    font-weight: 600;
+    color: #8A6100;
+}

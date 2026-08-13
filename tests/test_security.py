@@ -202,7 +202,9 @@ def run():
     c5.post("/cart/add", data={"kind": "product", "item_id": ids2["p"], "quantity": 999999})
     api = c5.get("/api/cart").get_json()
     qty = api["lines"][0]["quantity"] if api["lines"] else 0
-    check("كمية ضخمة محدودة", qty <= 100, f"قبل {qty}", "🟡")
+    # ⚠️ السقف 5000 مقصود: عروض الجملة تحتاج كميات كبيرة (300، 1000 حبة).
+    # المهم أنه محدود، ماشي بلا نهاية.
+    check("كمية ضخمة محدودة بسقف معقول", 0 < qty <= 5000, f"قبل {qty}")
 
     # منتج مطفي / ماكانش
     c6 = app2.test_client()
