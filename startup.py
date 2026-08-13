@@ -33,6 +33,7 @@ def run():
         # ⚠️ db.create_all() ينشئ الجداول الناقصة فقط — ما يزيدش أعمدة لجدول
         # موجود من قبل. فنزيدوهم بيدنا هنا. كل خطوة تتحقق أولاً، فالتشغيل
         # المتكرر آمن تمامًا.
+        _repair_stale_communes(db)
         _add_missing_columns(db)
 
         # ---------- 1.7) البلديات ----------
@@ -90,6 +91,57 @@ def _seed_communes():
         seed_communes.run()
     except Exception as e:
         print(f"⚠️ ما قدرناش نعمّرو البلديات: {e}")
+
+
+def _repair_stale_communes(db):
+    """
+    يصلّح جدول communes إذا كان من نسخة قديمة.
+
+    ⚠️ ليش هاد الدالة؟
+    فنسخة قديمة، جدول communes كان يدمج بيانات البلدية مع ربط شركة التوصيل
+    (فيه carrier_id, external_id, has_home_delivery... وكلهم NOT NULL).
+    دابا الربط ولا فجدول منفصل (carrier_communes)، والبلدية فيها 5 أعمدة فقط.
+
+    db.create_all() ما يلمسش جدول موجود، فالجدول القديم يبقى — وأي محاولة
+    إدخال بلدية تفشل بـNotNullViolation على carrier_id.
+
+    الحل: نكشفو الأعمدة الغريبة، وإذا لقيناهم نمسحو الجدول ونعاودو نبنيوه.
+
+    ✅ آمن: البلديات بيانات مرجعية، تتعمّر من ملف JSON فكل مرة.
+       ما فيها حتى معلومة ديال زبون.
+    """
+    from sqlalchemy import inspect, text
+    from models import Commune
+
+    inspector = inspect(db.engine)
+    if "communes" not in inspector.get_table_names():
+        return  # الجدول ماكانش — create_all غادي يبنيه صحيح
+
+    db_columns = {c["name"] for c in inspector.get_columns("communes")}
+    model_columns = {c.name for c in Commune.__table__.columns}
+
+    # أعمدة موجودة فقاعدة البيانات وماشي فالموديل = بقايا نسخة قديمة
+    stale = db_columns - model_columns
+    if not stale:
+        return
+
+    print(f"   ⚠️ جدول communes قديم — أعمدة زائدة: {', '.join(sorted(stale))}")
+    print("      نعاودو نبنيوه من الصفر (البلديات تتعمّر من الملف)")
+
+    # ⚠️ CASCADE يخدم فقط على PostgreSQL — SQLite (التطوير المحلي) يرفضو.
+    # نمسحو carrier_communes أولاً باش ما يبقاش مفتاح أجنبي معلّق.
+    cascade = " CASCADE" if db.engine.dialect.name == "postgresql" else ""
+
+    try:
+        db.session.execute(text(f"DROP TABLE IF EXISTS carrier_communes{cascade}"))
+        db.session.execute(text(f"DROP TABLE IF EXISTS communes{cascade}"))
+        db.session.commit()
+
+        db.create_all()
+        print("   ✅ جدول communes تعاود بناؤه")
+    except Exception as e:
+        db.session.rollback()
+        print(f"   🔴 ما قدرناش نصلّحو جدول communes: {e}")
 
 
 def _add_missing_columns(db):

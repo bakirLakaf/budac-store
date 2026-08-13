@@ -887,6 +887,9 @@ a:focus-visible, button:focus-visible {
 .checkout-form-col { background: #fff; border: 1px solid #EDE9E2; border-radius: var(--radius-lg); padding: 26px; }
 
 .field { display: block; margin-bottom: 16px; }
+/* ⚠️ .field { display:block } يغلب خاصية hidden ديال المتصفح، فالحقل
+   المخفي (البلدية عند التوصيل للمكتب) يبقى ظاهر. هاد السطر يصلّحها. */
+.field[hidden] { display: none !important; }
 .field > span { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--color-primary); }
 .field input, .field select, .field textarea {
     width: 100%; padding: 11px 13px; border: 1.5px solid #E0DAD2;
