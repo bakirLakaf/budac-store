@@ -348,7 +348,7 @@
     var cards      = Array.prototype.slice.call(grid.querySelectorAll('.product-card'));
     var countEl    = document.getElementById('shopResultCount');
     var emptyEl    = document.getElementById('shopEmptyFilter');
-    var triggers   = document.querySelectorAll('.side-cat[data-cat], .category-chip[data-cat]');
+    var triggers   = document.querySelectorAll('.side-cat[data-cat], .category-card[data-cat]');
     var section    = document.getElementById('products');
 
     function applyFilter(slug, pushUrl) {
@@ -366,9 +366,11 @@
         });
 
         if (countEl) {
-            countEl.textContent = visible === 0
-                ? ''
-                : visible + (visible === 1 ? ' منتج' : ' منتج');
+            if (visible === 0)      countEl.textContent = '';
+            else if (visible === 1)  countEl.textContent = 'منتج واحد';
+            else if (visible === 2)  countEl.textContent = 'منتجان';
+            else if (visible <= 10)  countEl.textContent = visible + ' منتجات';
+            else                     countEl.textContent = visible + ' منتج';
         }
         if (emptyEl) emptyEl.hidden = visible !== 0;
 

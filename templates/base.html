@@ -236,7 +236,11 @@
         <span class="wa-float-label">راسلنا</span>
     </a>
 
-    {# ---------- زر السلة العائم (فوق زر واتساب) ---------- #}
+    {# ---------- زر السلة العائم (فوق زر واتساب) ----------
+       ⚠️ ما يبانش فصفحة السلة ولا صفحة الطلب: ما عندو معنى تما، وكان
+       يغطّي زر "متابعة الطلب" فالهاتف. #}
+    {% set _p = request.path %}
+    {% if not (_p.startswith('/cart') or _p.startswith('/checkout')) %}
     <button type="button" class="cart-float" id="cartFloatBtn" aria-label="فتح السلة">
         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
              stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -245,6 +249,7 @@
         </svg>
         <span class="cart-float-count {{ 'has-items' if cart_count }}" id="cartFloatCount">{{ cart_count }}</span>
     </button>
+    {% endif %}
 
     {# ---------- لوحة السلة الجانبية — تتفتح بلا مغادرة الصفحة ---------- #}
     <div class="cart-drawer-overlay" id="cartOverlay" hidden></div>

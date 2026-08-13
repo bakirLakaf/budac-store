@@ -70,6 +70,21 @@ def create_app():
     from services.images import thumb_name
     app.jinja_env.filters["thumb"] = thumb_name
 
+    def _store_settings():
+        """
+        إعدادات المتجر لكل القوالب.
+        ⚠️ نلفّوها فـtry: عند أول نشر الجدول مازال ماكانش، وما نبغيوش
+        الموقع كامل يطيح بسبب إعداد واحد.
+        """
+        from models import StoreSetting
+
+        try:
+            return {
+                "show_coupon_field": StoreSetting.get_bool("show_coupon_field"),
+            }
+        except Exception:
+            return {"show_coupon_field": True}
+
     # متغيرات تكون متاحة فكل القوالب (templates) بلا ما نبعتوها فكل route
     @app.context_processor
     def inject_store_info():
@@ -106,6 +121,7 @@ def create_app():
             "store_name": app.config["STORE_NAME"],
             "store_tagline": app.config["STORE_TAGLINE"],
             "cart_count": cart_count,
+            "settings": _store_settings(),
         }
 
     # ---------- صفحات الخطأ ----------

@@ -114,7 +114,38 @@ if __name__ == "__main__":
     try:
         run()
     except Exception as e:
-        # ⚠️ ما نوقفوش الإقلاع: أحسن يخدم الموقع ونشوفو الخطأ فالسجلات،
-        # من أن يبقى معطّل كليًا بسبب خطوة تجهيز وحدة
-        print(f"❌ خطأ فالتجهيز: {e}", file=sys.stderr)
+        # ⚠️ نفرّقو بين نوعين من الأخطاء:
+        #
+        # 1) خطأ **قاتل**: التطبيق ما يقدرش يخدم بلا قاعدة بيانات
+        #    (مثلاً psycopg2 ما يتحمّلش، ولا الاتصال مرفوض). فهاد الحالة
+        #    نوقفو مباشرة برسالة واضحة، بدل ما الموقع يعاود يقلع بلا فايدة
+        #    ويعمّر السجلات بمئات الأسطر يخبّيو السبب الحقيقي.
+        #
+        # 2) خطأ **ثانوي**: خطوة تجهيز وحدة فشلت (مثلاً أسعار التوصيل).
+        #    الموقع يقدر يخدم بلاها، فنكمّلو.
+        message = str(e)
+
+        fatal_signs = [
+            "libpq",                    # psycopg2 ما لقاش مكتبة PostgreSQL
+            "No module named 'psycopg2'",
+            "could not connect",        # قاعدة البيانات ما ترّدش
+            "password authentication",  # بيانات دخول غالطة
+            "does not exist",           # قاعدة البيانات ماكانتش
+            "could not translate host", # اسم السيرفر غالط
+            "Connection refused",
+            "timeout expired",
+        ]
+
+        if any(sign in message for sign in fatal_signs):
+            print("=" * 60, file=sys.stderr)
+            print("🔴 خطأ قاتل فالاتصال بقاعدة البيانات — وقّفنا الإقلاع", file=sys.stderr)
+            print(f"   {message}", file=sys.stderr)
+            print("", file=sys.stderr)
+            print("   تحقق من هاذي:", file=sys.stderr)
+            print("   • DATABASE_URL موجود فمتغيرات البيئة ديال خدمة web؟", file=sys.stderr)
+            print("   • psycopg2-binary فـrequirements.txt متوافق مع إصدار Python؟", file=sys.stderr)
+            print("=" * 60, file=sys.stderr)
+            sys.exit(1)
+
+        print(f"⚠️ خطوة تجهيز فشلت: {message}", file=sys.stderr)
         print("   الموقع غادي يبدا رغم هذا — راجع السجلات.", file=sys.stderr)

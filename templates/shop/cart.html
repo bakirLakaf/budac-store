@@ -90,6 +90,9 @@
             <aside class="cart-summary">
                 <h2 class="summary-title">ملخص الطلبية</h2>
 
+                {# خانة كود الخصم — تتحكم فظهورها من لوحة التحكم ← الإعدادات.
+                   نبيّنوها حتى إذا كان كوبون مطبّق، باش الزبون يقدر يحيّدو. #}
+                {% if settings.show_coupon_field or coupon %}
                 <form method="post" action="{{ url_for('cart.apply_coupon') }}" class="coupon-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="text" name="coupon_code" placeholder="كود الخصم"
@@ -99,6 +102,7 @@
 
                 {% if coupon_error %}
                     <p class="coupon-note coupon-error">{{ coupon_error }}</p>
+                {% endif %}
                 {% endif %}
 
                 {% if coupon %}

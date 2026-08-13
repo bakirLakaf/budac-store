@@ -207,7 +207,16 @@ def get_cart_lines():
                     continue
 
             unit_price = variant.effective_price if variant else product.price
-            stock = variant.stock_quantity if variant else product.available_quantity
+
+            # 🔴 إصلاح حرج: التنويعة كانت تقرا stock_quantity مباشرة وتتجاهل
+            # النظام المفتوح. المنتجات المستوردة كميتها 0، فأي طلبية بتنويعة
+            # كانت تُرفض ("عدّل الكميات المعلّمة") وزر الطلب يبقى مقفول.
+            if not Product.is_stock_tracked:
+                stock = None                 # None = بلا حد
+            elif variant:
+                stock = variant.stock_quantity
+            else:
+                stock = product.available_quantity
             image = (variant.image_filename if variant and variant.image_filename
                      else product.image_filename)
 
@@ -231,8 +240,13 @@ def get_cart_lines():
 
 
 def get_cart_count():
-    """عدد القطع الكلي فالسلة — للأيقونة فالهيدر."""
-    return sum(_get_raw_cart().values())
+    """
+    عدد **المنتجات المختلفة** فالسلة — للأيقونة فالهيدر والزر العائم.
+
+    ⚠️ ماشي مجموع الكميات: 3 قطع من منتج واحد = 1، ماشي 3.
+    هاذي أوضح للزبون (يعرف شحال عندو من منتج مختلف).
+    """
+    return len(_get_raw_cart())
 
 
 def get_cart_subtotal(lines=None):

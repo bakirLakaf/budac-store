@@ -195,8 +195,20 @@
         </div>
 
         <div class="categories-grid">
+            {# بطاقة "الكل" — تلغي الفلتر. البطاقات كلها تفلتر فورًا بلا
+               إعادة تحميل (شوف site.js). #}
+            <a href="{{ url_for('shop.home') }}" class="category-card category-card-all"
+               data-cat="all">
+                <div class="category-card-image">
+                    <span class="category-mono">✦</span>
+                </div>
+                <span class="category-card-name">كل المنتجات</span>
+                <span class="category-card-arrow" aria-hidden="true">‹</span>
+            </a>
+
             {% for cat in categories %}
-            <a href="{{ url_for('shop.home', category=cat.slug) }}" class="category-card">
+            <a href="{{ url_for('shop.home', category=cat.slug) }}" class="category-card"
+               data-cat="{{ cat.slug }}">
                 <div class="category-card-image">
                     {% if cat.image_filename %}
                         <img src="{{ url_for('static', filename='img/categories/' + (cat.image_filename | thumb)) }}"
@@ -261,20 +273,6 @@
         {% endif %}
 
         <div class="shop-main">
-
-            {# ---------- أزرار التصنيف: تبان فالهاتف فقط (فالحاسوب الشريط الجانبي يكفي) ---------- #}
-            {% if categories %}
-            <div class="category-filter-row category-filter-mobile">
-                <a href="{{ url_for('shop.home') }}"
-                   class="category-chip {{ 'is-active' if not active_category }}"
-                   data-cat="all">الكل</a>
-                {% for cat in categories %}
-                    <a href="{{ url_for('shop.home', category=cat.slug) }}"
-                       class="category-chip {{ 'is-active' if active_category == cat.slug }}"
-                       data-cat="{{ cat.slug }}">{{ cat.name }}</a>
-                {% endfor %}
-            </div>
-            {% endif %}
 
             <p class="shop-result-count" id="shopResultCount"></p>
 

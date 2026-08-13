@@ -1180,3 +1180,26 @@ def integrations():
         zr_configured=is_configured(),
         zr_result=zr_result,
     )
+
+
+@admin_bp.route("/settings", methods=["GET", "POST"])
+@login_required
+def settings():
+    """
+    إعدادات المتجر — خيارات صغيرة يتحكم فيها الأدمن بلا ما يلمس الكود.
+    """
+    from models import StoreSetting
+
+    if request.method == "POST":
+        # الخانات المربّعة (checkbox) ما تتبعثش كي تكون مطفية،
+        # فنعتمدو على وجودها فالنموذج.
+        StoreSetting.set("show_coupon_field", "1" if request.form.get("show_coupon_field") else "0")
+        db.session.commit()
+
+        flash("تحفظو الإعدادات", "success")
+        return redirect(url_for("admin.settings"))
+
+    return render_template(
+        "admin/settings.html",
+        show_coupon_field=StoreSetting.get_bool("show_coupon_field"),
+    )

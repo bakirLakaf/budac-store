@@ -2740,3 +2740,97 @@ body.drawer-open { overflow: hidden; }
     transition: background 0.15s, color 0.15s;
 }
 .btn-secondary:hover { background: var(--color-primary); color: #fff; }
+
+/* ════════════════════════════════════════════════════════════
+   تحديثات v21 — تركيز على الهاتف
+   ════════════════════════════════════════════════════════════ */
+
+/* ---------- 1) 🔴 الفراغ الجانبي (الهيدر والفوتر مقصوصين) ----------
+   السبب: عنصر خارج الشاشة كان يخلق تمرير أفقي. فصفحة RTL، أي شيء
+   يخرج لجهة اليسار يوسّع الصفحة والهيدر يبان منزاح.
+   الحل: نمنعو التمرير الأفقي على مستوى الصفحة كاملة. */
+html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* شبكة أمان: أي عنصر ما يتعداش عرض الشاشة */
+img, video, iframe, table { max-width: 100%; }
+
+/* ---------- 2) بطاقة "كل المنتجات" ---------- */
+.category-card-all .category-card-image {
+    background: var(--color-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.category-card-all .category-mono {
+    color: var(--color-gold);
+    font-size: 22px;
+}
+.category-card.is-active {
+    border-color: var(--color-gold);
+    background: #FFFCF4;
+    box-shadow: 0 0 0 2px rgba(201, 162, 39, 0.25);
+}
+
+/* ---------- 3) الفوتر فالهاتف ---------- */
+@media (max-width: 768px) {
+    .footer-intro { padding: 26px 0 20px; text-align: center; }
+    .footer-intro-title { font-size: 20px; }
+    .footer-intro-sub { font-size: 13px; }
+
+    /* الأعمدة كانت متزاحمة فأربع خانات ضيقة → عمودين */
+    .footer-inner,
+    .footer-columns {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 24px 16px;
+        text-align: start;
+    }
+
+    /* عمود العلامة يأخذ العرض كامل ويتوسّط */
+    .footer-brand-col {
+        grid-column: 1 / -1;
+        text-align: center;
+    }
+    .footer-brand-col img { margin-inline: auto; }
+
+    .footer-heading { font-size: 14px; margin-bottom: 10px; }
+    .footer-links a,
+    .footer-contact li { font-size: 13px; line-height: 2; }
+
+    .footer-social { justify-content: center; }
+    .footer-bottom { font-size: 12px; text-align: center; padding: 14px 0; }
+}
+
+@media (max-width: 420px) {
+    /* شاشة ضيقة بزاف → عمود واحد */
+    .footer-inner,
+    .footer-columns { grid-template-columns: 1fr !important; text-align: center; }
+    .footer-social { justify-content: center; }
+}
+
+/* ---------- 4) الأزرار العائمة: ما تغطّيش المحتوى ---------- */
+@media (max-width: 768px) {
+    /* مساحة تحت المحتوى باش الأزرار ما تخبّيش آخر سطر */
+    body { padding-bottom: 84px; }
+
+    .wa-float { inset-inline-start: 14px; bottom: 14px; }
+    .cart-float { inset-inline-start: 14px; bottom: 76px; width: 50px; height: 50px; }
+    .wa-float-label { display: none; }   /* الأيقونة تكفي فالهاتف */
+}
+
+/* ---------- 5) تحسينات عامة للهاتف ---------- */
+@media (max-width: 768px) {
+    .container { padding-inline: 14px; }
+
+    /* الهيدر: اللوغو وشريط البحث ما يتزاحموش */
+    .header-search { height: 42px; }
+    .header-search input { font-size: 15px; padding: 0 14px; }
+
+    .hero-title { font-size: 26px; line-height: 1.5; }
+    .section-heading { font-size: 21px; }
+
+    /* أزرار كبيرة كفاية للأصبع (48px = الحد الموصى به) */
+    .btn-primary { min-height: 48px; padding: 13px 24px; }
+}

@@ -454,6 +454,50 @@ class ShippingRate(db.Model):
 
 # ==================== مستخدم لوحة التحكم ====================
 
+class StoreSetting(db.Model):
+    """
+    إعدادات المتجر — جدول بسيط: مفتاح ← قيمة.
+
+    ⚠️ ليش هكذا بدل عمود لكل إعداد؟ باش نزيدو إعدادات جديدة بلا ما نبدلو
+    بنية قاعدة البيانات فكل مرة. القيم كلها نصوص، والدوال تحت تحوّلها.
+    """
+
+    __tablename__ = "store_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    value = db.Column(db.Text, nullable=True)
+
+    # ---------- القيم الافتراضية ----------
+    # كي ما يكونش المفتاح فقاعدة البيانات، نستعملو هاذي.
+    DEFAULTS = {
+        "show_coupon_field": "1",   # خانة كود الخصم فالسلة
+    }
+
+    @staticmethod
+    def get(key, default=None):
+        """يجيب قيمة إعداد كنص."""
+        row = StoreSetting.query.filter_by(key=key).first()
+        if row is not None and row.value is not None:
+            return row.value
+        return StoreSetting.DEFAULTS.get(key, default)
+
+    @staticmethod
+    def get_bool(key):
+        """يجيب إعداد كـTrue/False."""
+        return StoreSetting.get(key) == "1"
+
+    @staticmethod
+    def set(key, value):
+        """يحفظ إعداد. الحفظ فقاعدة البيانات يصرا مع commit برّا."""
+        row = StoreSetting.query.filter_by(key=key).first()
+        if row is None:
+            row = StoreSetting(key=key)
+            db.session.add(row)
+        row.value = str(value)
+        return row
+
+
 class AdminUser(db.Model):
     """
     حساب أدمن للوحة التحكم.
