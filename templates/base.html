@@ -21,14 +21,17 @@
     <meta name="theme-color" content="#2E1A47">
 
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <link rel="canonical" href="{{ request.url }}">
+    {# ⚠️ canonical بلا معاملات الرابط (?category=...).
+       بـrequest.url، كل فلتر تصنيف يولّي "صفحة مستقلة" فنظر جوجل،
+       فقوة الصفحة الرئيسية تتقسّم على 11 رابط بنفس المحتوى تقريبًا. #}
+    <link rel="canonical" href="{{ request.base_url }}">
 
     {# Open Graph: يخلي الرابط يبان بصورة وعنوان كي يتشارك فواتساب وفيسبوك #}
     <meta property="og:type" content="{% block og_type %}website{% endblock %}">
     <meta property="og:site_name" content="{{ store_name }}">
     <meta property="og:title" content="{% block og_title %}{{ store_name }} — ديكور و إكسسوارات{% endblock %}">
     <meta property="og:description" content="{% block og_description %}متجر جزائري لمستلزمات الديكور والحرف اليدوية. توصيل لكل الولايات، الدفع عند الاستلام.{% endblock %}">
-    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:url" content="{{ request.base_url }}">
     <meta property="og:image" content="{% block og_image %}{{ url_for('static', filename='img/brand/logo.png', _external=True) }}{% endblock %}">
     <meta property="og:locale" content="ar_DZ">
     <meta name="twitter:card" content="summary_large_image">

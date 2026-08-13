@@ -124,6 +124,46 @@ def create_app():
             "settings": _store_settings(),
         }
 
+    # ---------- رؤوس الحماية ----------
+    # ⚠️ رؤوس HTTP تحمي الزبون من هجمات فالمتصفح. Railway ما يزيدهمش
+    # وحدو، فنزيدوهم هنا. ما يأثروش على السرعة.
+    @app.after_request
+    def add_security_headers(response):
+        # يمنع المتصفح من "تخمين" نوع الملف — يسد ثغرة رفع ملف يبان صورة
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+
+        # يمنع أي موقع آخر من عرض متجرك داخل إطار (clickjacking):
+        # واحد يقدر يعرض متجرك بشفافية فوق أزرار مزيفة ويخلي الزبون يضغط
+        # على حاجة ما بغاهاش.
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+
+        # ما نبعتوش الرابط الكامل لمواقع خارجية (يحمي خصوصية الزبون)
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+
+        # يمنع المتصفح من طلب الكاميرا/الميكرو/الموقع باسم موقعك
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        )
+
+        # ⚠️ CSP: يحدّد من فين يتحمّل الكود والصور.
+        # فيه 'unsafe-inline' لأن القوالب فيها <script> و<style> مباشرة،
+        # وبيكسل فيسبوك/تيك توك يحتاجوها. حتى هكذا يمنع تحميل سكريبت من
+        # نطاق غريب — وهذا أهم حماية ضد XSS.
+        response.headers.setdefault("Content-Security-Policy", "; ".join([
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' https://connect.facebook.net "
+            "https://analytics.tiktok.com https://www.googletagmanager.com",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com data:",
+            "img-src 'self' data: https:",
+            "connect-src 'self' https://connect.facebook.net https://analytics.tiktok.com",
+            "frame-ancestors 'self'",
+            "base-uri 'self'",
+            "form-action 'self'",
+        ]))
+
+        return response
+
     # ---------- صفحات الخطأ ----------
     # ⚠️ بلاهم، الزائر يشوف صفحة بيضاء بالإنجليزية "Not Found" — يظن الموقع
     # مكسور ويخرج. صفحة عربية بزر رجوع تحافظ عليه.

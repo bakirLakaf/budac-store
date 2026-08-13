@@ -1120,8 +1120,22 @@ def order_send_to_carrier(order_id):
         flash(f"هاد الطلبية تبعثات من قبل — رقم التتبّع: {order.tracking_number}", "warning")
         return redirect(url_for("admin.order_detail", order_id=order.id))
 
+    # ⚠️ ZR يعرف الولايات بمعرّفاتو الخاصة (territoryId)، ماشي بالأسماء.
+    # بلا هاد المعرّف الطرد يتبعث بلا ولاية ويترفض.
+    from services.zrexpress import find_territory_id
+
+    territory_id = find_territory_id("zr", order.wilaya_code)
+
+    if not territory_id:
+        flash(
+            f"ولاية «{order.wilaya_name}» ما مربوطةش بمنطقة عند ZR. "
+            "روح للتكاملات واضغط «زامن الولايات».",
+            "error",
+        )
+        return redirect(url_for("admin.order_detail", order_id=order.id))
+
     try:
-        result = create_parcel(order)
+        result = create_parcel(order, territory_id=territory_id)
     except ZRError as e:
         flash(f"ما قدرناش نبعثو الطلبية: {e}", "error")
         return redirect(url_for("admin.order_detail", order_id=order.id))
@@ -1170,15 +1184,40 @@ def integrations():
     """صفحة التكاملات — اختبار الاتصال بشركات التوصيل."""
     from services.zrexpress import test_connection, is_configured
 
+    from services.zrexpress import sync_territories, ZRError
+    from models import Carrier, ShippingRate
+
     zr_result = None
-    if request.method == "POST" and request.form.get("test") == "zr":
-        ok, message = test_connection()
-        zr_result = {"ok": ok, "message": message}
+    sync_result = None
+
+    if request.method == "POST":
+        action = request.form.get("test") or request.form.get("action")
+
+        if action == "zr":
+            ok, message = test_connection()
+            zr_result = {"ok": ok, "message": message}
+
+        elif action == "sync_territories":
+            try:
+                sync_result = sync_territories()
+            except ZRError as e:
+                zr_result = {"ok": False, "message": str(e)}
+
+    # كم ولاية مربوطة دابا — نعرضوها للأدمن باش يعرف واش لازم يزامن
+    linked = 0
+    carrier = Carrier.query.filter_by(code="zr").first()
+    if carrier:
+        linked = ShippingRate.query.filter(
+            ShippingRate.carrier_id == carrier.id,
+            ShippingRate.carrier_territory_id.isnot(None),
+        ).count()
 
     return render_template(
         "admin/integrations.html",
         zr_configured=is_configured(),
         zr_result=zr_result,
+        sync_result=sync_result,
+        linked_wilayas=linked,
     )
 
 

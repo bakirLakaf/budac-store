@@ -104,7 +104,9 @@ def _cart_json():
     lines = cart_service.get_cart_lines()
     subtotal = cart_service.get_cart_subtotal(lines)
     return jsonify({
-        "count": sum(line.quantity for line in lines),
+        # ⚠️ عدد المنتجات المختلفة، ماشي مجموع الكميات — لازم يطابق
+        # get_cart_count() المستعملة فالهيدر، وإلا الرقمين يختلفو.
+        "count": len(lines),
         "subtotal": subtotal,
         "subtotal_display": f"{subtotal:,} دج",
         "lines": [

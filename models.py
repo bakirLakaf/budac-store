@@ -438,6 +438,12 @@ class ShippingRate(db.Model):
     home_price = db.Column(db.Integer, nullable=True)   # التوصيل للمنزل
     office_price = db.Column(db.Integer, nullable=True)  # التوصيل للمكتب (Stop Desk)
 
+    # ⚠️ معرّف الولاية عند الشركة (ZR يسميه territoryId).
+    # كل شركة عندها ترقيمها الخاص وما يوافقش ترقيم الولايات الجزائري.
+    # بلا هاد المعرّف، الطرد يتبعث بلا ولاية ويترفض عند الشركة.
+    # يتعمّر تلقائيًا من زر "زامن الولايات" فصفحة التكاملات.
+    carrier_territory_id = db.Column(db.String(60), nullable=True)
+
     carrier = db.relationship("Carrier", back_populates="rates")
 
     @property

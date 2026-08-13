@@ -31,6 +31,52 @@
     </div>
     {% endif %}
 
+    {# ---------- ربط الولايات بمناطق ZR ---------- #}
+    <div class="ic-sync">
+        <h3>ربط الولايات</h3>
+        <p class="hint">
+            ZR يعرف الولايات بأرقام خاصة بيه، ماشي بالأسماء. لازم نربطو
+            ولاياتك الـ58 بأرقامو <strong>مرة وحدة</strong>، وإلا الطرد يتبعث
+            بلا ولاية ويترفض.
+        </p>
+
+        <p class="ic-linked {{ 'is-ok' if linked_wilayas >= 55 else 'is-warn' }}">
+            {% if linked_wilayas == 0 %}
+                🔴 ماكانش حتى ولاية مربوطة — اضغط الزر تحت
+            {% else %}
+                {{ linked_wilayas }} ولاية مربوطة من 58
+            {% endif %}
+        </p>
+
+        <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="sync_territories">
+            <button type="submit" class="btn-admin">زامن الولايات مع ZR</button>
+        </form>
+
+        {% if sync_result %}
+        <div class="test-result {{ 'is-ok' if not sync_result.unmatched else 'is-warn' }}">
+            ✓ تربطات <strong>{{ sync_result.matched }}</strong> ولاية من
+            {{ sync_result.total }} (ZR عندو {{ sync_result.zr_count }} منطقة)
+
+            {% if sync_result.unmatched %}
+            <div class="sync-unmatched">
+                <strong>ما تربطوش ({{ sync_result.unmatched|length }}):</strong>
+                <ul>
+                    {% for w in sync_result.unmatched %}
+                    <li>{{ w }}</li>
+                    {% endfor %}
+                </ul>
+                <small>
+                    هاذو تحتاج تربطهم بيدك، ولا تتأكد أن أسماءهم فأسعار التوصيل
+                    تطابق أسماء ZR. الطلبيات لهاد الولايات تتبعث يدويًا.
+                </small>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
     <div class="ic-features">
         <h3>واش يخدم دابا</h3>
         <ul>

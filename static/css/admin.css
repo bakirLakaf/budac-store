@@ -440,3 +440,34 @@ body {
 }
 .calc-settings > *:not(summary) { padding-inline: 16px; }
 .calc-settings > *:last-child { padding-bottom: 14px; }
+
+/* ---------- ربط ولايات شركة التوصيل ---------- */
+.ic-sync {
+    margin-top: 22px;
+    padding-top: 20px;
+    border-top: 1px solid #E6E0D4;
+}
+.ic-sync h3 { margin: 0 0 6px; font-size: 16px; }
+
+.ic-linked {
+    display: inline-block;
+    margin: 10px 0 14px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.ic-linked.is-ok { background: #E4F5E8; color: #1B6B2F; }
+.ic-linked.is-warn { background: #FDF2D8; color: #8A6100; }
+
+.test-result.is-warn { background: #FDF2D8; color: #6B4E00; }
+
+.sync-unmatched {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    font-size: 13px;
+}
+.sync-unmatched ul { margin: 6px 0; padding-inline-start: 20px; }
+.sync-unmatched li { line-height: 1.8; }
+.sync-unmatched small { color: #6B6257; display: block; margin-top: 6px; }

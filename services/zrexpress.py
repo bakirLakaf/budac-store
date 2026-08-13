@@ -194,3 +194,154 @@ def test_connection():
         return True, "الاتصال نجح، لكن ما رجعت حتى منطقة — راجع حسابك عند ZR"
 
     return True, f"✓ الاتصال نجح — لقينا {len(territories)} منطقة"
+
+
+# ═══════════════════════════════════════════════════════════
+# ربط ولاياتنا بمناطق ZR
+# ═══════════════════════════════════════════════════════════
+
+def _normalize_arabic(text):
+    """
+    يوحّد النص العربي باش المقارنة تخدم رغم اختلاف الكتابة.
+
+    مثلاً "الجزائر" و "الجزایر" و "الجزائر  " يولّيو كيف كيف.
+    بلا هاد التوحيد، أغلب الولايات ما تتربطش.
+    """
+    if not text:
+        return ""
+
+    text = str(text).strip()
+
+    # توحيد أشكال الحروف اللي تتكتب بطرق مختلفة
+    replacements = {
+        "أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا",
+        "ى": "ي", "ئ": "ي", "ی": "ي",
+        "ة": "ه",
+        "ؤ": "و",
+        "ـ": "",          # التطويل
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    # نحيّدو التشكيل
+    text = "".join(ch for ch in text if not ("\u064B" <= ch <= "\u0652"))
+
+    # نحيّدو "ال" التعريف والمسافات الزائدة
+    text = " ".join(text.split())
+    if text.startswith("ال") and len(text) > 3:
+        text = text[2:]
+
+    return text.lower()
+
+
+def _extract_territory_fields(item):
+    """
+    يستخرج (المعرّف، الاسم، رمز الولاية) من عنصر منطقة عند ZR.
+
+    ⚠️ ما نعرفوش بالضبط أسماء الحقول اللي يرجعها ZR، فنجرّبو الاحتمالات
+    المعروفة. هكذا الكود ما يتكسرش إذا بدّلو التسمية.
+    """
+    tid = item.get("id") or item.get("territoryId") or item.get("code")
+
+    name = (item.get("name") or item.get("wilaya") or item.get("label")
+            or item.get("nameAr") or item.get("designation") or "")
+
+    # رمز الولاية (1-58) إذا كان موجود
+    code = (item.get("wilayaCode") or item.get("wilaya_code")
+            or item.get("stateCode") or item.get("number"))
+
+    return tid, name, code
+
+
+def sync_territories():
+    """
+    يجيب مناطق ZR ويربطها بولاياتنا فجدول shipping_rates.
+
+    يرجع dict فيه: matched (تربطو)، unmatched (ما تربطوش)، total.
+
+    الاستراتيجية — نجرّبو بالترتيب:
+      1) مطابقة برمز الولاية (الأدق إذا ZR يعطيه)
+      2) مطابقة بالاسم بعد التوحيد
+      3) مطابقة جزئية (الاسم داخل الاسم)
+    """
+    from models import db, Carrier, ShippingRate
+
+    carrier = Carrier.query.filter_by(code="zr").first()
+    if not carrier:
+        raise ZRError("شركة ZR Express ماكانتش فقاعدة البيانات")
+
+    territories = get_territories()
+    if not territories:
+        raise ZRError("ZR ما رجعش حتى منطقة")
+
+    # نبنيو فهرسين للبحث السريع
+    by_code, by_name = {}, {}
+    for item in territories:
+        tid, name, code = _extract_territory_fields(item)
+        if not tid:
+            continue
+        if code:
+            by_code[str(int(code)) if str(code).isdigit() else str(code)] = tid
+        if name:
+            by_name[_normalize_arabic(name)] = tid
+
+    rates = ShippingRate.query.filter_by(carrier_id=carrier.id).all()
+    matched, unmatched = 0, []
+
+    for rate in rates:
+        tid = None
+
+        # 1) بالرمز
+        code_key = str(int(rate.wilaya_code)) if str(rate.wilaya_code).isdigit() else str(rate.wilaya_code)
+        tid = by_code.get(code_key)
+
+        # 2) بالاسم الموحّد
+        if not tid:
+            tid = by_name.get(_normalize_arabic(rate.wilaya_name))
+
+        # 3) مطابقة جزئية
+        if not tid:
+            ours = _normalize_arabic(rate.wilaya_name)
+            for zr_name, zr_id in by_name.items():
+                if ours and (ours in zr_name or zr_name in ours):
+                    tid = zr_id
+                    break
+
+        if tid:
+            rate.carrier_territory_id = str(tid)
+            matched += 1
+        else:
+            unmatched.append(f"{rate.wilaya_code} ~ {rate.wilaya_name}")
+
+    db.session.commit()
+
+    return {
+        "total": len(rates),
+        "matched": matched,
+        "unmatched": unmatched,
+        "zr_count": len(territories),
+    }
+
+
+def find_territory_id(carrier_code, wilaya_code):
+    """
+    يجيب معرّف المنطقة المحفوظ لولاية معينة.
+    يرجع None إذا ما تربطش — والمستدعي يعرض خطأ واضح.
+    """
+    from models import Carrier, ShippingRate
+
+    carrier = Carrier.query.filter_by(code=carrier_code).first()
+    if not carrier:
+        return None
+
+    rate = ShippingRate.query.filter_by(
+        carrier_id=carrier.id, wilaya_code=str(wilaya_code).zfill(2)
+    ).first()
+
+    if not rate:
+        # نجرّبو بلا أصفار بادئة (احتياط لاختلاف التخزين)
+        rate = ShippingRate.query.filter_by(
+            carrier_id=carrier.id, wilaya_code=str(wilaya_code)
+        ).first()
+
+    return rate.carrier_territory_id if rate else None
