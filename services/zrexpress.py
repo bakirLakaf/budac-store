@@ -16,6 +16,7 @@
 ما نخسروش بيعة بسبب مشكل شبكة.
 """
 
+import json
 import os
 
 import requests
@@ -350,159 +351,6 @@ def _extract_territory_fields(item):
     return tid, name, code
 
 
-def sync_communes():
-    """
-    يزامن تغطية ZR: التوصيل للمنزل والمكتب.
-
-    ⚠️ قاعدة التصميم (مصححة بعد ما تبيّن أن canSend ديال البلديات غالط):
-
-      • التوصيل للمنزل → **كل بلديات الولاية** اللي ZR يوصل ليها.
-        المصدر: جدول أسعار ZR (صفحة Tarifs). إذا الولاية موجودة فيه،
-        كل بلدياتها متاحة. ZR يوصل للبلدية بالاسم، ما يحتاجش معرّف
-        لكل بلدية.
-
-      • التوصيل للمكتب → **من قائمة المكاتب الحقيقية** (Nos Bureaux).
-        ماشي من البلديات. الزبون يختار مكتب، والولاية اللي ماكانش فيها
-        مكتب ما تعرضش هاد الخيار.
-
-    المعرّفات (territories) نستعملوهم غير باش نعمّرو external_id لما
-    يتوفّر — يسهّل إنشاء الطرد، لكن غيابو ما يمنعش التوصيل.
-    """
-    from models import db, Carrier, Commune, CarrierCommune
-
-    carrier = Carrier.query.filter_by(code="zrexpress").first()
-    if not carrier:
-        raise ZRError("شركة ZR Express ماكانتش فقاعدة البيانات")
-
-    our_communes = Commune.query.all()
-    if not our_communes:
-        raise ZRError(
-            "البلديات ماكانتش فقاعدة البيانات. "
-            "شغّل: python seed_communes.py"
-        )
-
-    # ---------- 1) تغطية التوصيل للمنزل (من الأسعار) ----------
-    coverage = {}
-    coverage_source = "أسعار ZR"
-    try:
-        coverage = get_covered_wilayas()
-    except ZRError as e:
-        coverage_error = str(e)
-    else:
-        coverage_error = None
-
-    # ---------- 2) الولايات اللي فيها مكاتب ----------
-    office_wilayas = set()
-    office_count = 0
-    office_error = None
-    try:
-        offices = get_offices()
-        office_count = len(offices)
-        office_wilayas = {
-            o["wilaya_code"] for o in offices
-            if o["accepts_pickup"] and o["wilaya_code"]
-        }
-    except ZRError as e:
-        office_error = str(e)
-
-    # ⚠️ إذا الأسعار ما جاوش، نبنيو التغطية من الولايات اللي فيها مكاتب
-    # + الولايات اللي ظهرت فالمناطق. أحسن من تعطيل كلش.
-    if not coverage:
-        coverage_source = "المكاتب والمناطق (الأسعار ما توفّرتش)"
-        for code in office_wilayas:
-            coverage[code] = {"home": True, "office": True}
-
-    # ---------- 3) معرّفات البلديات (اختيارية) ----------
-    external_ids = {}
-    territories_error = None
-    try:
-        index = {}
-        for c in our_communes:
-            index[(c.wilaya_code, _normalize_arabic(c.name_ar))] = c
-            if c.name_fr:
-                index.setdefault((c.wilaya_code, _normalize_arabic(c.name_fr)), c)
-
-        for item in get_territories():
-            if (item.get("level") or "").lower() != "commune":
-                continue
-
-            tid = item.get("id")
-            if not tid:
-                continue
-
-            postal = str(item.get("postalCode") or "").strip()
-            w_code = postal[:2] if len(postal) >= 2 and postal[:2].isdigit() else None
-            if not w_code:
-                continue
-
-            commune = (
-                index.get((w_code, _normalize_arabic(item.get("nameArabic") or "")))
-                or index.get((w_code, _normalize_arabic(item.get("name") or "")))
-            )
-            if commune is None:
-                continue
-
-            # أول معرّف يكفي — ما نكتبوش فوقو بمنطقة فرعية أخرى
-            external_ids.setdefault(commune.id, str(tid))
-
-            # الولاية عندها منطقة عند ZR → تأكيد إضافي للتغطية
-            coverage.setdefault(w_code, {"home": True, "office": False})
-    except ZRError as e:
-        territories_error = str(e)
-
-    # ---------- 4) نكتبو الروابط ----------
-    existing = {
-        link.commune_id: link
-        for link in CarrierCommune.query.filter_by(carrier_id=carrier.id).all()
-    }
-
-    home_count, office_count_communes = 0, 0
-
-    for commune in our_communes:
-        entry = coverage.get(commune.wilaya_code)
-
-        has_home = bool(entry and entry.get("home"))
-        # المكتب: متاح إذا الولاية فيها مكتب فعلي
-        has_office = commune.wilaya_code in office_wilayas
-        if entry and entry.get("office") and office_wilayas:
-            has_office = has_office and True
-
-        link = existing.get(commune.id)
-        if link is None:
-            link = CarrierCommune(carrier_id=carrier.id, commune_id=commune.id)
-            db.session.add(link)
-            existing[commune.id] = link
-
-        link.external_id = external_ids.get(commune.id) or link.external_id or ""
-        link.has_home_delivery = has_home
-        link.has_pickup_point = has_office
-        link.can_send = has_home or has_office
-
-        if has_home:
-            home_count += 1
-        if has_office:
-            office_count_communes += 1
-
-    db.session.commit()
-
-    covered_wilayas = sorted(
-        code for code, v in coverage.items() if v.get("home")
-    )
-
-    warnings = [w for w in (coverage_error, office_error, territories_error) if w]
-
-    return {
-        "coverage_source": coverage_source,
-        "wilayas_covered": len(covered_wilayas),
-        "office_wilayas": len(office_wilayas),
-        "offices_total": office_count,
-        "home_communes": home_count,
-        "office_communes": office_count_communes,
-        "matched_ids": len(external_ids),
-        "our_total": len(our_communes),
-        "warnings": warnings,
-    }
-
 def find_territory_id(carrier_code, commune_external_id):
     """
     معرّف المنطقة اللي يتبعث لـZR = معرّف البلدية.
@@ -514,126 +362,38 @@ def find_territory_id(carrier_code, commune_external_id):
 
 
 # ═══════════════════════════════════════════════════════════
-# نقاط الاستلام (Stop Desk)
+# المكاتب — من ملف محلي، بلا API
 # ═══════════════════════════════════════════════════════════
 
-# المسارات المحتملة لقائمة المكاتب عند ZR.
-# ⚠️ نجرّبوهم بالترتيب لأن الحساب/الإصدار يقرّر واحد منهم. أول واحد يرد
-# ببيانات هو اللي نستعملو، ونسجّلو اسمو باش التشخيص يبيّن شنو خدم فعلاً.
-_OFFICE_ENDPOINTS = [
-    ("POST", "/agencies/search", {"page": 1, "pageSize": 500}),
-    ("POST", "/offices/search", {"page": 1, "pageSize": 500}),
-    ("POST", "/pickup-points/search", {"page": 1, "pageSize": 500}),
-    ("GET", "/agencies", None),
-    ("GET", "/offices", None),
-]
-
-
-def _fetch_offices_raw():
-    """
-    يجيب قائمة المكاتب الخام من ZR، ويرجّع (العناصر، المسار اللي خدم).
-
-    ⚠️ ما نخمّنوش مسار واحد ونعتبروه صحيح: نجرّبو الاحتمالات ونرجّعو
-    اللي رد فعلاً ببيانات. إذا كلهم فشلو، نرمي خطأ فيه التفاصيل باش
-    الأدمن يشوف المشكل الحقيقي بدل قائمة فارغة بلا سبب.
-    """
-    errors = []
-
-    for method, path, body in _OFFICE_ENDPOINTS:
-        try:
-            data = _request(method, path, **({"json": body} if body else {}))
-        except ZRError as e:
-            errors.append(f"{path}: {e}")
-            continue
-
-        if isinstance(data, list):
-            items = data
-        else:
-            items = data.get("data") or data.get("items") or data.get("results") or []
-
-        if items:
-            return items, path
-
-        errors.append(f"{path}: رد فارغ")
-
-    raise ZRError(
-        "ما لقيناش قائمة المكاتب عند ZR. جرّبنا: "
-        + " | ".join(errors[:5])
-    )
-
-
-def _office_wilaya_code(item):
-    """يستخرج رمز الولاية من مكتب — من الرمز البريدي أولاً ثم من حقول أخرى."""
-    postal = str(item.get("postalCode") or item.get("cp") or "").strip()
-    if len(postal) >= 2 and postal[:2].isdigit():
-        return postal[:2]
-
-    raw = (item.get("wilayaCode") or item.get("stateCode")
-           or item.get("wilaya") or item.get("territoryCode"))
-    if raw is not None and str(raw).strip().isdigit():
-        return str(int(str(raw).strip())).zfill(2)
-
-    return None
-
-
-def _office_accepts_pickup(item):
-    """
-    واش المكتب يقبل استلام الزبون.
-
-    ⚠️ فواجهة ZR الخانة اسمها Pickup (Oui/Non). بعض المكاتب مراكز فرز
-    داخلية ما يستقبلوش الزبائن — ما نعرضوهمش، وإلا الزبون يمشي لمكتب
-    مغلق فوجهو.
-    """
-    for key in ("pickup", "hasPickup", "isPickupPoint", "hasPickupPoint",
-                "allowPickup", "isStopDesk"):
-        if key in item:
-            value = item[key]
-            if isinstance(value, bool):
-                return value
-            if isinstance(value, str):
-                return value.strip().lower() in ("oui", "yes", "true", "1")
-
-    # ماكانش الحقل → نعتبروه مقبول (أحسن من إخفاء كل المكاتب)
-    return True
+_OFFICES_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "zr_offices.json")
+_offices_cache = None
 
 
 def get_offices():
     """
-    كل مكاتب ZR الحقيقية (اللي تبان فصفحة «Nos Bureaux»).
+    كل مكاتب ZR (79 مكتب) — من ملف محلي `data/zr_offices.json`.
 
-    هذا هو **المصدر الوحيد** لخيار «التوصيل للمكتب» — ماشي البلديات.
+    ⚠️ ليش ملف محلي وماشي API؟
+    ZR ما عندوش مسار API للمكاتب (جرّبنا 5 مسارات، كلهم رجعو 404).
+    القائمة ثابتة وتتبدّل نادرًا، فنخزّنوها عندنا. باش تحدّثها:
+    نسخ القائمة من صفحة «Nos Bureaux» عند ZR وحدّث الملف.
+
+    ملاحظة مهمة: رمز الولاية ماخوذ من **رقم اسم المكتب**، ماشي من الرمز
+    البريدي — بعض المكاتب الجديدة رمزها البريدي ديال الولاية القديمة
+    (مثلاً المنيعة 58 رمزها البريدي 47001).
     """
-    items, source = _fetch_offices_raw()
-    results = []
+    global _offices_cache
 
-    for it in items:
-        oid = it.get("id") or it.get("code") or it.get("agencyId")
-        if not oid:
-            continue
+    if _offices_cache is None:
+        with open(_OFFICES_FILE, encoding="utf-8") as f:
+            _offices_cache = json.load(f)
 
-        name = (it.get("nameArabic") or it.get("name")
-                or it.get("label") or "").strip()
-
-        results.append({
-            "id": str(oid),
-            "name": name or "مكتب",
-            "address": (it.get("address") or it.get("addressArabic") or "").strip(),
-            "commune": (it.get("commune") or it.get("city") or "").strip(),
-            "wilaya_code": _office_wilaya_code(it),
-            "accepts_pickup": _office_accepts_pickup(it),
-            "_source": source,
-        })
-
-    return results
+    return _offices_cache
 
 
 def get_pickup_points(wilaya_code=None):
-    """
-    مكاتب الاستلام لولاية معيّنة — للزبون فصفحة الطلب.
-
-    نعرضو فقط المكاتب اللي تقبل استلام الزبون (Pickup = Oui).
-    """
-    offices = get_offices()
+    """مكاتب الاستلام لولاية معيّنة — للزبون فصفحة الطلب."""
+    offices = [o for o in get_offices() if o.get("pickup")]
 
     if wilaya_code:
         target = str(wilaya_code).zfill(2)
@@ -641,22 +401,106 @@ def get_pickup_points(wilaya_code=None):
 
     return [
         {
-            "id": o["id"],
+            "id": o["name"],          # الاسم هو المعرّف — يتبعث لـZR كيما هو
             "name": o["name"],
-            "address": o["address"] or o["commune"],
+            "address": o.get("address") or o.get("commune", ""),
             "wilaya_code": o["wilaya_code"],
         }
-        for o in offices if o["accepts_pickup"]
+        for o in offices
     ]
 
 
 def get_office_wilayas():
+    """رموز الولايات اللي فيها مكتب استلام واحد على الأقل."""
+    return {o["wilaya_code"] for o in get_offices() if o.get("pickup")}
+
+
+# ═══════════════════════════════════════════════════════════
+# المزامنة — من بياناتنا المحلية، بلا API
+# ═══════════════════════════════════════════════════════════
+
+def sync_communes():
     """
-    رموز الولايات اللي فيها مكتب استلام واحد على الأقل.
-    نستعملوها باش نعرفو وين «التوصيل للمكتب» متاح فعلاً.
+    يبني تغطية ZR من **بياناتنا المحلية** — ما نطلبو والو من API.
+
+    القاعدة (بالضبط كيما طلب بكير):
+
+      🏠 التوصيل للمنزل
+         أي ولاية عندها سعر توصيل للمنزل فجدول «أسعار التوصيل»
+         → **كل بلدياتها** (من قائمتنا الرسمية 1541) متاحة.
+         ما نسألو ZR على البلديات — عندنا القائمة.
+
+      🏢 التوصيل للمكتب
+         من ملف المكاتب المحلي (79 مكتب). الولاية اللي فيها مكتب
+         يقبل استلام → خيار المكتب متاح فيها.
+
+    ⚠️ صفر ولا فارغ فسعر المنزل = الشركة ما توصلش لهاد الولاية.
     """
+    from models import db, Carrier, Commune, CarrierCommune, ShippingRate
+
+    carrier = Carrier.query.filter_by(code="zrexpress").first()
+    if not carrier:
+        raise ZRError("شركة ZR Express ماكانتش فقاعدة البيانات")
+
+    our_communes = Commune.query.all()
+    if not our_communes:
+        raise ZRError(
+            "البلديات ماكانتش فقاعدة البيانات. شغّل: python seed_communes.py"
+        )
+
+    # ---------- 1) ولايات التوصيل للمنزل (من أسعارنا) ----------
+    home_wilayas = {
+        r.wilaya_code
+        for r in ShippingRate.query.filter_by(carrier_id=carrier.id).all()
+        if r.home_price and r.home_price > 0
+    }
+
+    if not home_wilayas:
+        raise ZRError(
+            "ماكانش ولا ولاية عندها سعر توصيل للمنزل. "
+            "روح لـ«أسعار التوصيل» وعمّر الأسعار أولاً."
+        )
+
+    # ---------- 2) ولايات المكاتب (من الملف المحلي) ----------
+    office_wilayas = get_office_wilayas()
+    offices_total = len(get_offices())
+
+    # ---------- 3) نكتبو الروابط لكل بلدية ----------
+    existing = {
+        link.commune_id: link
+        for link in CarrierCommune.query.filter_by(carrier_id=carrier.id).all()
+    }
+
+    home_count, office_count = 0, 0
+
+    for commune in our_communes:
+        has_home = commune.wilaya_code in home_wilayas
+        has_office = commune.wilaya_code in office_wilayas
+
+        link = existing.get(commune.id)
+        if link is None:
+            link = CarrierCommune(carrier_id=carrier.id, commune_id=commune.id)
+            db.session.add(link)
+            existing[commune.id] = link
+
+        link.has_home_delivery = has_home
+        link.has_pickup_point = has_office
+        link.can_send = has_home or has_office
+
+        if has_home:
+            home_count += 1
+        if has_office:
+            office_count += 1
+
+    db.session.commit()
+
     return {
-        o["wilaya_code"]
-        for o in get_offices()
-        if o["accepts_pickup"] and o["wilaya_code"]
+        "coverage_source": "أسعار التوصيل عندنا + ملف المكاتب المحلي",
+        "wilayas_covered": len(home_wilayas),
+        "office_wilayas": len(office_wilayas),
+        "offices_total": offices_total,
+        "home_communes": home_count,
+        "office_communes": office_count,
+        "our_total": len(our_communes),
+        "warnings": [],
     }
