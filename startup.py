@@ -110,6 +110,7 @@ def _add_missing_columns(db):
         ("orders", "commune_external_id", "VARCHAR(80)"),
         ("orders", "pickup_point_id", "VARCHAR(80)"),
         ("orders", "pickup_point_name", "VARCHAR(200)"),
+        ("communes", "daira", "VARCHAR(150)"),
     ]
 
     inspector = inspect(db.engine)
@@ -156,7 +157,7 @@ if __name__ == "__main__":
             "No module named 'psycopg2'",
             "could not connect",        # قاعدة البيانات ما ترّدش
             "password authentication",  # بيانات دخول غالطة
-            "does not exist",           # قاعدة البيانات ماكانتش
+            'database "',               # قاعدة البيانات ماكانتش
             "could not translate host", # اسم السيرفر غالط
             "Connection refused",
             "timeout expired",

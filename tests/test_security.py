@@ -5,8 +5,8 @@
 """
 import os, sys, re, traceback
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "budac"))
-BASE = os.path.join(os.path.dirname(__file__), "..", "budac")
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+BASE = os.path.join(os.path.dirname(__file__), "..")
 os.environ.setdefault("SECRET_KEY", "test-key-for-testing-only")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 

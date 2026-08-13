@@ -5,7 +5,7 @@
 """
 import os, sys, traceback
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "budac"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("SECRET_KEY", "test-key-for-testing-only")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
@@ -212,7 +212,7 @@ def run():
 
     # البيانات الرسمية
     import json as _json, os as _os
-    data_file = _os.path.join(_os.path.dirname(__file__), "..", "budac",
+    data_file = _os.path.join(_os.path.dirname(__file__), "..",
                               "data", "algeria_communes.json")
     check("ملف البلديات الرسمي موجود", _os.path.exists(data_file))
     if _os.path.exists(data_file):
