@@ -24,6 +24,17 @@ def run():
     app = create_app()
 
     with app.app_context():
+        # ⚠️ نطبعو النسخة أول حاجة — باش نعرفو من سجلات Railway
+        # واش الكود الجديد وصل فعلاً، بلا ما نفتحو الموقع.
+        try:
+            from VERSION import VERSION, BUILD_NOTE
+            print("=" * 46)
+            print(f"  📦 نسخة الكود: {VERSION}")
+            print(f"     {BUILD_NOTE}")
+            print("=" * 46)
+        except Exception:
+            print("  ⚠️ ماكانش ملف VERSION.py — نسخة قديمة!")
+
         # ---------- 1) الجداول ----------
         print("🔧 نتحققو من جداول قاعدة البيانات...")
         db.create_all()
