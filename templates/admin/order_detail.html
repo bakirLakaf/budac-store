@@ -139,6 +139,27 @@
 
             <button type="submit" class="btn-admin btn-block">حفظ</button>
         </form>
+
+        {# ---------- منطقة الخطر ---------- #}
+        <div class="danger-zone">
+            <h2 class="section-title">حذف الطلبية</h2>
+            <p class="hint">
+                الحذف <strong>نهائي</strong> وما يترجعش.
+                المخزون يرجع تلقائيًا للمنتجات.
+                {% if order.tracking_number %}
+                <br>⚠️ هاد الطلبية مبعوثة لـZR — الحذف هنا
+                <strong>ما يلغيش الطرد</strong> عندهم.
+                {% endif %}
+            </p>
+
+            <form method="post" action="{{ url_for('admin.order_delete', order_id=order.id) }}"
+                  onsubmit="return confirm('تحذف الطلبية {{ order.order_number }} نهائيًا؟\n\nما ترجعش.')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-admin btn-block btn-danger">
+                    🗑️ احذف الطلبية نهائيًا
+                </button>
+            </form>
+        </div>
     </div>
 </div>
 

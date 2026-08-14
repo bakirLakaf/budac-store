@@ -1,0 +1,158 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">ربط YouCan</h1>
+
+<p class="muted" style="margin:-8px 0 22px;">
+    باش نستوردو المنتجات بالموديلات وصورها وأسعارها.
+</p>
+
+<!-- ═════ الحالة ═════ -->
+<div class="yc-status {{ 'is-ok' if connected else 'is-off' }}">
+    {% if connected %}
+        ✅ <strong>مربوط</strong> — التوكن محفوظ
+    {% else %}
+        ⚪ <strong>ماشي مربوط</strong> — تبع الخطوات تحت
+    {% endif %}
+</div>
+
+<!-- ═════ 1. الرابط ═════ -->
+<h2 class="form-section-title">1. حط رابط الرجوع عند YouCan</h2>
+
+<p class="hint">
+    فـ<code>partners.youcan.shop</code> ← تطبيقك ← <strong>Overview</strong> ←
+    خانة <strong>Allowed redirect URLs</strong>، الصق هاد الرابط
+    <strong>بالحرف</strong> واحفظ:
+</p>
+
+<div class="yc-copy">
+    <code id="redirectUri">{{ redirect_uri }}</code>
+    <button type="button" class="btn-admin btn-sm" id="copyBtn">انسخ</button>
+</div>
+
+<!-- ═════ 2. الاعتمادات ═════ -->
+<h2 class="form-section-title">2. الاعتمادات</h2>
+
+<p class="hint">من تبويب <strong>OAuth</strong> فنفس الصفحة.</p>
+
+<form method="post" action="{{ url_for('admin.youcan_save') }}"
+      class="admin-form" style="max-width:520px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label class="admin-field">
+        <span>Client ID</span>
+        <input type="text" name="client_id" value="{{ client_id }}"
+               placeholder="3042" dir="ltr">
+    </label>
+
+    <label class="admin-field">
+        <span>Client Secret</span>
+        <input type="password" name="client_secret" dir="ltr"
+               placeholder="{{ '••••••••••••  (محفوظ — اكتب جديد باش تبدّلو)' if has_secret else 'الصقو هنا' }}">
+        <small>يتخزّن فقاعدة البيانات وما يبانش مرة أخرى.</small>
+    </label>
+
+    <button type="submit" class="btn-admin">احفظ</button>
+</form>
+
+<!-- ═════ 3. الربط ═════ -->
+<h2 class="form-section-title">3. اربط</h2>
+
+{% if client_id and has_secret %}
+<p class="hint">
+    الزر يوديك لـYouCan باش توافق على تثبيت التطبيق فمتجرك، ويرجّعك هنا.
+</p>
+
+<p>
+    <a href="{{ url_for('admin.youcan_connect') }}" class="btn-admin">
+        🔗 {{ 'عاود الربط' if connected else 'اربط مع YouCan' }}
+    </a>
+</p>
+
+<p class="hint" style="margin-top:6px;">
+    ما خدمش؟ جرّب
+    <a href="{{ url_for('admin.youcan_connect', variant=1) }}">المسار البديل</a>
+    — توثيق YouCan ما يوضحش أي واحد يخدم لحسابك.
+</p>
+{% else %}
+<p class="hint">⚠️ عمّر Client ID و Secret فوق أولاً.</p>
+{% endif %}
+
+<!-- ═════ 4. التجربة ═════ -->
+{% if connected %}
+<h2 class="form-section-title">4. جرّب وابدا الاستيراد</h2>
+
+<div class="yc-actions">
+    <form method="post" action="{{ url_for('admin.youcan_test') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin">اختبر الاتصال</button>
+    </form>
+
+    <form method="post" action="{{ url_for('admin.youcan_disconnect') }}"
+          onsubmit="return confirm('تفك الربط؟ التوكن غادي يتمسح.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin btn-ghost">فك الربط</button>
+    </form>
+</div>
+
+<p class="hint" style="margin-top:14px;">
+    بعد ما ينجح الاختبار، شغّل الاستيراد من Terminal ديال Railway:
+</p>
+<pre class="yc-code">python import_from_youcan.py --wipe</pre>
+<p class="hint">
+    <code>--wipe</code> يمسح المنتجات القديمة قبل الاستيراد.
+    <strong>الطلبيات تبقى محفوظة.</strong>
+</p>
+{% endif %}
+
+<style>
+    .yc-status {
+        padding: 12px 16px; border-radius: 10px;
+        margin-bottom: 22px; font-size: 15px;
+    }
+    .yc-status.is-ok { background:#E8F3EA; border:1px solid #BFDCC5; }
+    .yc-status.is-off { background:#F5F1EA; border:1px solid #E7DFCF; }
+
+    .yc-copy {
+        display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+        background:#1E1828; color:#E8E2F0;
+        padding:12px 14px; border-radius:10px;
+        margin-bottom:8px;
+    }
+    .yc-copy code {
+        flex:1; min-width:200px; direction:ltr;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size:13.5px; word-break:break-all;
+    }
+
+    .yc-actions { display:flex; gap:10px; flex-wrap:wrap; }
+
+    .yc-code {
+        background:#1E1828; color:#E8E2F0;
+        padding:12px 14px; border-radius:10px;
+        direction:ltr; font-size:13.5px;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .form-section-title { margin-top: 28px; }
+</style>
+
+<script>
+document.getElementById('copyBtn').addEventListener('click', function () {
+    var text = document.getElementById('redirectUri').textContent.trim();
+    var btn = this;
+
+    navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = '✓ تنسخ';
+        setTimeout(function () { btn.textContent = 'انسخ'; }, 1800);
+    }).catch(function () {
+        // بعض المتصفحات تمنع النسخ بلا HTTPS — نحدّدو النص باش ينسخو يدويًا
+        var range = document.createRange();
+        range.selectNode(document.getElementById('redirectUri'));
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+        btn.textContent = 'اضغط Ctrl+C';
+    });
+});
+</script>
+
+{% endblock %}

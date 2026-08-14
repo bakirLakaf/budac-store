@@ -23,14 +23,30 @@
 </form>
 
 {% if orders %}
+{# الفورم يغلّف الجدول باش checkbox كل سطر يتبعث مع الحذف الجماعي #}
+<form method="post" action="{{ url_for('admin.orders_bulk_delete') }}" id="bulkForm">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+<div class="bulk-bar" id="bulkBar" hidden>
+    <span><strong id="bulkCount">0</strong> طلبية مختارة</span>
+    <button type="submit" class="btn-admin btn-sm btn-danger"
+            onclick="return confirm('تحذف الطلبيات المختارة نهائيًا؟ ما ترجعش.')">
+        🗑️ احذف المختارة
+    </button>
+</div>
+
 <table class="admin-table">
     <thead>
-        <tr><th>الرقم</th><th>الزبون</th><th>الهاتف</th><th>الولاية</th>
+        <tr>
+        <th style="width:34px"><input type="checkbox" id="bulkAll" aria-label="اختر الكل"></th>
+        <th>الرقم</th><th>الزبون</th><th>الهاتف</th><th>الولاية</th>
         <th>قطع</th><th>المجموع</th><th>الحالة</th><th>التاريخ</th><th></th></tr>
     </thead>
     <tbody>
         {% for o in orders %}
         <tr>
+            <td><input type="checkbox" name="order_ids" value="{{ o.id }}"
+                       class="bulk-check" aria-label="اختر {{ o.order_number }}"></td>
             <td><a href="{{ url_for('admin.order_detail', order_id=o.id) }}" class="row-link">{{ o.order_number }}</a></td>
             <td>{{ o.customer_name }}</td>
             <td dir="ltr">{{ o.customer_phone }}</td>
@@ -44,6 +60,37 @@
         {% endfor %}
     </tbody>
 </table>
+</form>
+
+<script>
+/**
+ * تحديد جماعي للطلبيات — لحذف طلبيات التجربة بسرعة.
+ * شريط الحذف يبان فقط كي تختار على الأقل وحدة.
+ */
+(function () {
+    var all = document.getElementById('bulkAll');
+    var bar = document.getElementById('bulkBar');
+    var count = document.getElementById('bulkCount');
+    var boxes = document.querySelectorAll('.bulk-check');
+
+    function refresh() {
+        var n = document.querySelectorAll('.bulk-check:checked').length;
+        count.textContent = n;
+        bar.hidden = n === 0;
+
+        // ⚠️ حالة وسطية كي البعض مختار فقط — أوضح من مربّع فارغ
+        all.indeterminate = n > 0 && n < boxes.length;
+        all.checked = n === boxes.length && n > 0;
+    }
+
+    all.addEventListener('change', function () {
+        boxes.forEach(function (b) { b.checked = all.checked; });
+        refresh();
+    });
+
+    boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+})();
+</script>
 {% else %}
 <div class="empty-box"><p>ماكاين حتى طلبية مطابقة.</p></div>
 {% endif %}

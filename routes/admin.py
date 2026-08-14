@@ -22,7 +22,7 @@ import os
 from models import (
     db, Product, Category, ProductImage, ProductVariant,
     Offer, OfferItem, Carrier, ShippingRate, AdminUser, Coupon, Order,
-    AbandonedCart, Review, UpsellRule, LandingPage,
+    AbandonedCart, Review, UpsellRule, LandingPage, StoreSetting,
 )
 from services.cart import CartLine
 from services.orders import restore_stock, reserve_stock, OrderError
@@ -1606,3 +1606,204 @@ def order_zr_send_test(order_id):
         flash(f"فشل: {e}", "error")
 
     return redirect(url_for("admin.order_zr_debug", order_id=order.id))
+
+
+@admin_bp.route("/orders/<int:order_id>/delete", methods=["POST"])
+@login_required
+def order_delete(order_id):
+    """
+    يحذف طلبية نهائيًا.
+
+    ⚠️ نقطتان مهمتان:
+
+    1) **المخزون**: إذا الطلبية مازالت نشطة (ماشي ملغاة)، المخزون
+       مازال محجوز عندها. لازم نرجّعوه قبل الحذف، وإلا المخزون
+       ينقص بلا سبب ويولّي غلط بصمت.
+
+    2) **الطرد عند ZR**: إذا الطلبية تبعثات، حذفها من عندنا
+       **ما يلغيش الطرد عند ZR**. نحذّرو الأدمن باش يلغيه يدويًا.
+    """
+    order = Order.query.get_or_404(order_id)
+    number = order.order_number
+
+    # نرجّعو المخزون إذا كان مازال محجوز
+    if order.status != Order.STATUS_CANCELLED:
+        restore_stock(order)
+
+    warning = None
+    if order.tracking_number:
+        warning = (
+            f"⚠️ الطلبية كانت مبعوثة لـZR (رقم التتبّع {order.tracking_number}). "
+            "الحذف هنا ما يلغيش الطرد — ألغيه من موقع ZR."
+        )
+
+    # أسطر الطلبية تتحذف معها (cascade)
+    for item in list(order.items):
+        db.session.delete(item)
+    db.session.delete(order)
+    db.session.commit()
+
+    flash(f"تم حذف الطلبية {number} نهائيًا", "success")
+    if warning:
+        flash(warning, "warning")
+
+    return redirect(url_for("admin.orders_list"))
+
+
+@admin_bp.route("/orders/bulk-delete", methods=["POST"])
+@login_required
+def orders_bulk_delete():
+    """
+    يحذف عدة طلبيات دفعة وحدة — مفيد لتنظيف طلبيات التجربة.
+
+    ⚠️ نرجّعو المخزون لكل طلبية نشطة، نفس منطق الحذف الفردي.
+    """
+    ids = request.form.getlist("order_ids", type=int)
+
+    if not ids:
+        flash("ما اخترت حتى طلبية", "warning")
+        return redirect(url_for("admin.orders_list"))
+
+    orders = Order.query.filter(Order.id.in_(ids)).all()
+    sent_count = 0
+
+    for order in orders:
+        if order.status != Order.STATUS_CANCELLED:
+            restore_stock(order)
+        if order.tracking_number:
+            sent_count += 1
+        for item in list(order.items):
+            db.session.delete(item)
+        db.session.delete(order)
+
+    db.session.commit()
+
+    flash(f"تم حذف {len(orders)} طلبية", "success")
+    if sent_count:
+        flash(
+            f"⚠️ {sent_count} منها كانت مبعوثة لـZR — "
+            "الطرود مازالت عندهم، ألغيها يدويًا.",
+            "warning",
+        )
+
+    return redirect(url_for("admin.orders_list"))
+
+
+# ==================== ربط YouCan ====================
+
+def _youcan_redirect_uri():
+    """
+    رابط الرجوع اللي يبعثو YouCan بعد الموافقة.
+
+    ⚠️ لازم يطابق **بالحرف** اللي فـ«Allowed redirect URLs» عند YouCan.
+    نبنيوه من الطلب الحالي باش يخدم على أي دومين بلا إعداد يدوي.
+    """
+    return url_for("admin.youcan_callback", _external=True, _scheme="https")
+
+
+@admin_bp.route("/youcan")
+@login_required
+def youcan_settings():
+    from services import youcan as yc
+
+    return render_template(
+        "admin/youcan.html",
+        client_id=yc.get_client_id(),
+        has_secret=bool(yc.get_client_secret()),
+        connected=yc.is_connected(),
+        redirect_uri=_youcan_redirect_uri(),
+    )
+
+
+@admin_bp.route("/youcan/save", methods=["POST"])
+@login_required
+def youcan_save():
+    from services import youcan as yc
+
+    yc.save_credentials(
+        request.form.get("client_id"),
+        request.form.get("client_secret"),
+    )
+    flash("تحفظو الاعتمادات", "success")
+    return redirect(url_for("admin.youcan_settings"))
+
+
+@admin_bp.route("/youcan/connect")
+@login_required
+def youcan_connect():
+    """يوجّه الأدمن لصفحة الموافقة عند YouCan."""
+    from services import youcan as yc
+    import secrets
+
+    try:
+        # ⚠️ state عشوائي يتحفظ ونقارنوه فالرجوع — حماية من CSRF
+        state = secrets.token_urlsafe(16)
+        StoreSetting.set(yc.SETTING_STATE, state)
+        db.session.commit()
+
+        variant = request.args.get("variant", type=int) or 0
+        url = yc.build_authorize_url(_youcan_redirect_uri(), state, variant)
+    except yc.YouCanError as e:
+        flash(str(e), "error")
+        return redirect(url_for("admin.youcan_settings"))
+
+    return redirect(url)
+
+
+@admin_bp.route("/youcan/callback")
+@login_required
+def youcan_callback():
+    """يستقبل رد YouCan ويبدّل الـcode بتوكن."""
+    from services import youcan as yc
+
+    error = request.args.get("error_description") or request.args.get("error")
+    if error:
+        flash(f"YouCan رفض الربط: {error}", "error")
+        return redirect(url_for("admin.youcan_settings"))
+
+    code = request.args.get("code")
+    if not code:
+        flash("ما وصلناش code من YouCan", "error")
+        return redirect(url_for("admin.youcan_settings"))
+
+    # نتأكدو أن الرد جاي من نفس الطلب اللي بعثناه
+    expected = StoreSetting.get(yc.SETTING_STATE)
+    if expected and request.args.get("state") != expected:
+        flash("state ماشي مطابق — توقّفنا (احتمال طلب مزوّر)", "error")
+        return redirect(url_for("admin.youcan_settings"))
+
+    try:
+        result = yc.exchange_code(code, _youcan_redirect_uri())
+    except yc.YouCanError as e:
+        flash(str(e), "error")
+        return redirect(url_for("admin.youcan_settings"))
+
+    flash("✅ تربط YouCan بنجاح — التوكن محفوظ", "success")
+    return redirect(url_for("admin.youcan_settings"))
+
+
+@admin_bp.route("/youcan/test", methods=["POST"])
+@login_required
+def youcan_test():
+    from services import youcan as yc
+
+    try:
+        result = yc.test_token()
+        flash(
+            f"✅ الاتصال نجح — {result['count']} منتج فمتجر YouCan",
+            "success",
+        )
+    except yc.YouCanError as e:
+        flash(f"🔴 {e}", "error")
+
+    return redirect(url_for("admin.youcan_settings"))
+
+
+@admin_bp.route("/youcan/disconnect", methods=["POST"])
+@login_required
+def youcan_disconnect():
+    from services import youcan as yc
+
+    yc.disconnect()
+    flash("تفك الربط — التوكن تمسح", "success")
+    return redirect(url_for("admin.youcan_settings"))

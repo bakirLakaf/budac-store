@@ -3020,3 +3020,25 @@ img, video, iframe, table { max-width: 100%; }
     display: flex; align-items: center; gap: 10px;
     margin-top: 10px; flex-wrap: wrap;
 }
+
+/* ---------- حذف الطلبيات ---------- */
+.danger-zone {
+    margin-top: 26px;
+    padding-top: 20px;
+    border-top: 2px solid #F3C9C4;
+}
+.danger-zone .section-title { color: #B4453E; }
+
+.bulk-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: #FDECEA;
+    border: 1px solid #F3C9C4;
+    border-radius: 10px;
+    font-size: 14px;
+}
+.bulk-bar[hidden] { display: none; }
+
+.bulk-check, #bulkAll { width: 17px; height: 17px; cursor: pointer; }

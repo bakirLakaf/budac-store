@@ -51,6 +51,9 @@
         <a href="{{ url_for('admin.shipping_list') }}" class="{{ 'is-active' if 'shipping' in request.endpoint or 'carrier' in request.endpoint }}">
             أسعار التوصيل
         </a>
+        <a href="{{ url_for('admin.youcan_settings') }}" class="{{ 'is-active' if 'youcan' in request.endpoint }}">
+            ربط YouCan
+        </a>
         <a href="{{ url_for('admin.integrations') }}" class="{{ 'is-active' if 'integration' in request.endpoint }}">
             التكاملات
         </a>
