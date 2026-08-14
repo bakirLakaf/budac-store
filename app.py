@@ -89,6 +89,13 @@ def create_app():
             return {"show_coupon_field": True}
 
     # متغيرات تكون متاحة فكل القوالب (templates) بلا ما نبعتوها فكل route
+    # ⚠️ تتبّع الزوار — قبل كل طلب. الدالة تبلع أخطاءها بنفسها
+    # باش ما تكسرش صفحة للزبون إذا صرا مشكل فقاعدة البيانات.
+    @app.before_request
+    def _track_visitors():
+        from services.analytics import track_request
+        track_request()
+
     @app.context_processor
     def inject_store_info():
         # عدّاد السلة متاح فكل صفحة (للأيقونة فالهيدر) بلا ما نمرروه فكل route

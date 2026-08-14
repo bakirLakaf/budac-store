@@ -1187,3 +1187,40 @@ class LandingPage(db.Model):
 
     def __repr__(self):
         return f"<LandingPage {self.slug}>"
+
+
+class SiteVisit(db.Model):
+    """
+    زوّار الموقع — مجمّعة باليوم.
+
+    ⚠️ ليش هاد التصميم وماشي سطر لكل زيارة؟
+    سطر لكل زيارة يعمّر قاعدة البيانات بسرعة (100 زائر × 10 صفحات =
+    1000 سطر فاليوم). هنا **سطر واحد لكل زائر فاليوم**، وعدد صفحاتو
+    يتزاد فنفس السطر. يعني:
+        عدد الزوار الفريدين = عدد الأسطر ديال هاد اليوم
+        عدد الزيارات        = مجموع views
+
+    ⚠️ الخصوصية: ما نخزّنوش IP ولا أي شي يعرّف الزائر. نخزّنو بصمة
+    مشفّرة (hash) تتبدّل كل يوم — كافية باش نفرقو بين الزوار فنفس
+    اليوم، وما تسمحش نتبعو زائر عبر الأيام.
+    """
+    __tablename__ = "site_visits"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    day = db.Column(db.Date, nullable=False, index=True)
+    visitor_key = db.Column(db.String(40), nullable=False)
+
+    views = db.Column(db.Integer, nullable=False, default=1)
+    first_page = db.Column(db.String(300), nullable=True)   # من وين دخل
+    referrer = db.Column(db.String(300), nullable=True)     # منين جا
+
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("day", "visitor_key", name="uq_visit_day_key"),
+        db.Index("ix_visit_day_key", "day", "visitor_key"),
+    )
+
+    def __repr__(self):
+        return f"<SiteVisit {self.day} views={self.views}>"
