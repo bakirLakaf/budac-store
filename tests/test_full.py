@@ -9,6 +9,21 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("SECRET_KEY", "test-key-for-testing-only")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+
+
+# ⚠️ SQLite يعطّل فرض المفاتيح الأجنبية افتراضيًا، بينما Postgres
+# (اللي يخدم فالإنتاج) يفرضها بصرامة. بلا هاد السطر، أخطاء الحذف
+# ما تبانش فالاختبار وتبان فالإنتاج — صرالنا هكذا مع wipe_products.
+@event.listens_for(Engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+    try:
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+    except Exception:
+        pass   # ماشي SQLite — Postgres يفرضها أصلاً
+
+
 from app import create_app
 from models import (db, Product, ProductVariant, Category, Offer, OfferItem,
                     Coupon, Order, Carrier, ShippingRate, AdminUser, StoreSetting,
