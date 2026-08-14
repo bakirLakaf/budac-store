@@ -518,7 +518,9 @@ def _read_checkout_form(form_data):
         "pickup_point_name": (form_data.get("pickup_point_name") or "").strip(),
         "address_note": (form_data.get("address_note") or "").strip(),
         "carrier_code": (form_data.get("carrier_code") or "").strip(),
-        "delivery_type": form_data.get("delivery_type") or "home",
+        # ⚠️ ما نفرضوش "home" كقيمة افتراضية — لازم الزبون يختار بنفسو.
+        # القيمة الفارغة تولّي خطأ واضح "اختر نوع التوصيل".
+        "delivery_type": (form_data.get("delivery_type") or "").strip(),
         "note": (form_data.get("note") or "").strip(),
     }
 
@@ -544,14 +546,24 @@ def _validate_checkout_form(form):
 
     if form["delivery_type"] not in ("home", "office"):
         errors.append("اختر نوع التوصيل")
-
     # ⚠️ التوصيل للمنزل يحتاج بلدية، والتوصيل للمكتب يحتاج مكتب.
     # ما نخلطوش بيناتهم: الشركة تحتاج معلومة مختلفة فكل حالة.
-    if form["delivery_type"] == "office":
+    elif form["delivery_type"] == "office":
         if not form.get("pickup_point_name"):
             errors.append("اختر مكتب الاستلام من القائمة")
     else:
         if not form["commune"]:
             errors.append("اختر البلدية من القائمة")
+
+    # ⚠️ تنظيف إجباري: كل نوع توصيل عندو حقولو.
+    # بلا هذا، الزبون اللي يبدّل من "مكتب" لـ"منزل" يخلي وراه اسم مكتب
+    # قديم فالحقل المخفي — وتتسجّل طلبية "توصيل للمنزل" فيها مكتب تبسة
+    # بينما الولاية الجزائر. الواجهة تنظّف كذلك، لكن السيرفر ما يثقش فيها.
+    if form["delivery_type"] == "office":
+        form["commune"] = ""
+        form["commune_id"] = ""
+    else:
+        form["pickup_point_id"] = ""
+        form["pickup_point_name"] = ""
 
     return errors

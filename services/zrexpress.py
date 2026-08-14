@@ -220,18 +220,36 @@ def create_parcel(order, territory_id=None):
     يرجع dict فيه trackingNumber وparcelId.
     يرمي ZRError إذا فشل — والمستدعي يقرر واش يدير.
     """
+    is_office = order.delivery_type == "office"
+
+    # ⚠️ كل نوع توصيل يبعث معلومة مختلفة:
+    #   • منزل → البلدية + العنوان الدقيق
+    #   • مكتب → اسم المكتب (البلدية ما عندهاش معنى هنا)
+    if is_office:
+        destination = order.pickup_point_name or order.wilaya_name
+        address = order.pickup_point_name or order.wilaya_name
+        commune = ""
+    else:
+        destination = order.commune or order.wilaya_name
+        address = order.address_note or order.commune or order.wilaya_name
+        commune = order.commune or ""
+
     payload = {
         "customerName": order.customer_name,
         "customerPhone": order.customer_phone,
-        "address": order.address_note or order.commune or order.wilaya_name,
-        "commune": order.commune or "",
+        "address": address,
+        "commune": commune,
+        "wilaya": order.wilaya_name or "",
         "amount": order.total,
-        "isStopDesk": order.delivery_type == "office",
+        "isStopDesk": is_office,
         "reference": order.order_number,
         "note": order.customer_note or "",
         "productsCount": order.item_count,
         "productName": "، ".join(item.item_name for item in order.items[:3])[:200],
     }
+
+    if is_office and order.pickup_point_id:
+        payload["pickupPointId"] = order.pickup_point_id
 
     if territory_id:
         payload["territoryId"] = territory_id
@@ -465,7 +483,44 @@ def sync_communes():
     office_wilayas = get_office_wilayas()
     offices_total = len(get_offices())
 
-    # ---------- 3) نكتبو الروابط لكل بلدية ----------
+    # ---------- 3) معرّفات البلديات (إثراء اختياري) ----------
+    # ⚠️ هاد الخطوة **ما تقررش التغطية** — التغطية تقرّرت فوق من بياناتنا.
+    # هنا غير نعمّرو external_id لأن ZR يحتاجو وقت إنشاء الطرد.
+    # إذا فشلت، التغطية تبقى صحيحة والطلبيات تتبعث بالاسم.
+    external_ids = {}
+    id_warning = None
+
+    try:
+        index = {}
+        for c in our_communes:
+            index[(c.wilaya_code, _normalize_arabic(c.name_ar))] = c
+            if c.name_fr:
+                index.setdefault((c.wilaya_code, _normalize_arabic(c.name_fr)), c)
+
+        for item in get_territories():
+            if (item.get("level") or "").lower() != "commune":
+                continue
+
+            tid = item.get("id")
+            postal = str(item.get("postalCode") or "").strip()
+            if not tid or len(postal) < 2 or not postal[:2].isdigit():
+                continue
+
+            w = postal[:2]
+            commune = (
+                index.get((w, _normalize_arabic(item.get("nameArabic") or "")))
+                or index.get((w, _normalize_arabic(item.get("name") or "")))
+            )
+            if commune is not None:
+                # أول معرّف يكفي — ما نكتبوش فوقو بمنطقة فرعية أخرى
+                external_ids.setdefault(commune.id, str(tid))
+    except Exception as e:
+        id_warning = (
+            f"ما قدرناش نجيبو معرّفات البلديات من ZR ({e}). "
+            "التغطية صحيحة، لكن الطلبيات الجديدة تتبعث بالاسم بلا معرّف."
+        )
+
+    # ---------- 4) نكتبو الروابط لكل بلدية ----------
     existing = {
         link.commune_id: link
         for link in CarrierCommune.query.filter_by(carrier_id=carrier.id).all()
@@ -482,6 +537,11 @@ def sync_communes():
             link = CarrierCommune(carrier_id=carrier.id, commune_id=commune.id)
             db.session.add(link)
             existing[commune.id] = link
+
+        # نحافظو على المعرّف القديم إذا الجديد ما توفّرش
+        new_id = external_ids.get(commune.id)
+        if new_id:
+            link.external_id = new_id
 
         link.has_home_delivery = has_home
         link.has_pickup_point = has_office
@@ -501,6 +561,7 @@ def sync_communes():
         "offices_total": offices_total,
         "home_communes": home_count,
         "office_communes": office_count,
+        "matched_ids": len(external_ids),
         "our_total": len(our_communes),
-        "warnings": [],
+        "warnings": [id_warning] if id_warning else [],
     }

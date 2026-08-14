@@ -1223,19 +1223,10 @@ def order_send_to_carrier(order_id):
         flash(f"هاد الطلبية تبعثات من قبل — رقم التتبّع: {order.tracking_number}", "warning")
         return redirect(url_for("admin.order_detail", order_id=order.id))
 
-    # ⚠️ ZR يعرف الولايات بمعرّفاتو الخاصة (territoryId)، ماشي بالأسماء.
-    # بلا هاد المعرّف الطرد يتبعث بلا ولاية ويترفض.
-    # ZR يحتاج معرّف **البلدية** (territoryId)، ماشي الولاية.
-    # الطلبية خزّناتو وقت الطلب.
-    territory_id = order.commune_external_id
-
-    if not territory_id:
-        flash(
-            "هاد الطلبية ما فيهاش معرّف البلدية (يمكن قديمة، ولا الزبون كتب "
-            "البلدية بيدو). ابعثها يدويًا من موقع ZR.",
-            "error",
-        )
-        return redirect(url_for("admin.order_detail", order_id=order.id))
+    # ⚠️ معرّف البلدية عند ZR (territoryId) يسهّل الأمور، لكن **ماشي إجباري**:
+    # ZR يقبل الطرد بالاسم كذلك. قبل، كنّا نمنعو الإرسال بلا معرّف — وهذا
+    # كان يحبس طلبيات صحيحة بلا سبب. دابا نبعثو ونخلّيو ZR يقرّر.
+    territory_id = order.commune_external_id or None
 
     try:
         result = create_parcel(order, territory_id=territory_id)

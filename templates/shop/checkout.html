@@ -47,7 +47,8 @@
                 <label class="field">
                     <span>نوع التوصيل *</span>
                     <select name="delivery_type" id="deliveryTypeSelect" required>
-                        <option value="home" {{ 'selected' if form.get('delivery_type', 'home') == 'home' }}>التوصيل للمنزل</option>
+                        <option value="">اختر نوع التوصيل</option>
+                        <option value="home" {{ 'selected' if form.get('delivery_type') == 'home' }}>التوصيل للمنزل</option>
                         <option value="office" {{ 'selected' if form.get('delivery_type') == 'office' }}>التوصيل لمكتب الشركة</option>
                     </select>
                 </label>
@@ -321,27 +322,43 @@
      * وواحد منهم بلا معنى.
      */
     function syncCommuneField() {
-        var isOffice = deliveryType.value === 'office';
+        var type = deliveryType.value;
+        var isOffice = type === 'office';
+        var isHome = type === 'home';
 
+        // ما اختارش بعد → نخبّيو الزوج، ما نعرضو حتى حقل
         if (communeField) {
-            communeField.hidden = isOffice;
-            if (communeSelect) communeSelect.required = !isOffice;
+            communeField.hidden = !isHome;
+            if (communeSelect) communeSelect.required = isHome;
         }
         if (pickupField) {
             pickupField.hidden = !isOffice;
             if (pickupSelect) pickupSelect.required = isOffice;
         }
 
+        // ⚠️ تنظيف: نمسحو حقول النوع الآخر باش ما تتبعثش مع الطلبية.
+        // بلا هذا، الزبون اللي يبدّل من مكتب لمنزل يخلي اسم مكتب قديم
+        // فالحقل المخفي — وتوصل طلبية "منزل" فيها مكتب من ولاية أخرى.
+        if (!isOffice && pickupSelect) {
+            pickupSelect.value = '';   // هو نفسو حقل pickup_point_name
+            if (pickupIdInput) pickupIdInput.value = '';
+        }
+        if (!isHome && communeSelect) {
+            communeSelect.value = '';
+            if (communeIdInput) communeIdInput.value = '';
+        }
+
         if (isOffice) {
             loadPickupPoints();
-        } else {
+        } else if (isHome) {
             loadCommunes();
         }
     }
 
     function updateShipping() {
-        if (!carrier.value || !wilaya.value) {
-            shippingDisplay.textContent = 'اختر الولاية والشركة';
+        // ⚠️ لازم النوع كذلك — السعر يختلف بين المنزل والمكتب
+        if (!carrier.value || !wilaya.value || !deliveryType.value) {
+            shippingDisplay.textContent = 'اختر الولاية والشركة ونوع التوصيل';
             totalDisplay.textContent = formatDZD(subtotal - discount);
             submitBtn.disabled = false;
             return;
