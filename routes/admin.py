@@ -13,7 +13,7 @@ from functools import wraps
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
-    session, flash, abort,
+    session, flash, abort, jsonify,
 )
 from sqlalchemy import func
 
@@ -225,8 +225,16 @@ def dashboard():
     ) or 0
     pending_reviews_count = Review.query.filter_by(is_approved=False).count()
 
+    # إحصائيات الزوار — من services/analytics
+    from services.analytics import get_summary
+    try:
+        visitors = get_summary()
+    except Exception:
+        visitors = None   # ⚠️ الجدول ممكن ما يكونش موجود بعد أول نشر
+
     return render_template(
         "admin/dashboard.html",
+        visitors=visitors,
         abandoned_new=abandoned_new,
         abandoned_value=abandoned_value,
         pending_reviews_count=pending_reviews_count,
@@ -438,8 +446,30 @@ def product_image_delete(product_id, image_id):
         )
         product.image_filename = remaining.image_filename if remaining else None
 
+    # ⚠️ الموديلات تشير للصورة بالاسم (ماشي بمفتاح أجنبي)، فحذف الصورة
+    # يخلّي موديلات تشير لملف ماكانش → صورة مكسورة عند الزبون.
+    # نفكّو الربط تلقائيًا: الأدمن يشوف «بلا صورة» ويختار وحدة أخرى.
+    cleared = (
+        ProductVariant.query
+        .filter_by(product_id=product.id, image_filename=image.image_filename)
+        .update({"image_filename": None}, synchronize_session=False)
+    )
+
     db.session.commit()
-    flash("تم حذف الصورة", "success")
+
+    if cleared:
+        flash(f"تم حذف الصورة — تحيّدت من {cleared} موديل", "success")
+    else:
+        flash("تم حذف الصورة", "success")
+
+    # طلب AJAX → نرجّعو JSON بدل إعادة تحميل الصفحة
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({
+            "ok": True,
+            "cleared_variants": cleared,
+            "main_image": product.image_filename,
+        })
+
     return redirect(url_for("admin.product_form", product_id=product_id))
 
 
@@ -493,24 +523,34 @@ def variant_image(variant_id):
     product = variant.product
 
     filename = (request.form.get("image_filename") or "").strip()
+    is_ajax = request.headers.get("X-Requested-With") == "fetch"
+
+    def reply(ok, message, category="success"):
+        """رد موحّد: JSON للـAJAX، وإعادة توجيه للفورم العادي."""
+        if is_ajax:
+            return jsonify({
+                "ok": ok,
+                "message": message,
+                "image": variant.image_filename,
+            }), (200 if ok else 400)
+
+        flash(message, category)
+        return redirect(url_for("admin.product_form", product_id=product.id))
 
     # فراغ = نحيّدو الربط
     if not filename:
         variant.image_filename = None
         db.session.commit()
-        flash(f"تحيّدت صورة «{variant.label}»", "success")
-        return redirect(url_for("admin.product_form", product_id=product.id))
+        return reply(True, f"تحيّدت صورة «{variant.label}»")
 
     # نتحققو أن الصورة فعلاً من صور هاد المنتج (أمان: ما نقبلوش أي اسم)
     valid = any(img.image_filename == filename for img in product.images)
     if not valid and filename != product.image_filename:
-        flash("هاد الصورة ماشي من صور هاد المنتج", "error")
-        return redirect(url_for("admin.product_form", product_id=product.id))
+        return reply(False, "هاد الصورة ماشي من صور هاد المنتج", "error")
 
     variant.image_filename = filename
     db.session.commit()
-    flash(f"تربطات صورة «{variant.label}»", "success")
-    return redirect(url_for("admin.product_form", product_id=product.id))
+    return reply(True, f"تربطات صورة «{variant.label}»")
 
 
 @admin_bp.route("/variants/<int:variant_id>/tiers", methods=["POST"])
@@ -1826,3 +1866,47 @@ def youcan_disconnect():
     yc.disconnect()
     flash("تفك الربط — التوكن تمسح", "success")
     return redirect(url_for("admin.youcan_settings"))
+
+
+@admin_bp.route("/shipping/sync-zr", methods=["POST"])
+@login_required
+def shipping_sync_zr():
+    """يحدّث أسعار ZR من جدول أسعارهم الرسمي."""
+    from services.zrexpress import sync_shipping_rates, ZRError
+
+    try:
+        result = sync_shipping_rates()
+    except ZRError as e:
+        flash(f"🔴 {e}", "error")
+        return redirect(url_for("admin.shipping_list"))
+
+    if result["changed"]:
+        flash(
+            f"✅ تحدّثو {result['changed']} ولاية "
+            f"({result['unchanged']} بلا تبديل، {result['from_zr']} وصلاتنا من ZR)",
+            "success",
+        )
+        # نعرضو أول التبديلات باش الأدمن يشوف واش صرا
+        for change in result["details"][:12]:
+            flash(
+                f"{change['wilaya']}: منزل {change['old_home'] or '—'} → "
+                f"{change['new_home'] or 'غير متوفر'} · "
+                f"مكتب {change['old_office'] or '—'} → "
+                f"{change['new_office'] or 'غير متوفر'}",
+                "info",
+            )
+    else:
+        flash(
+            f"الأسعار مطابقة أصلاً — ماكانش تبديل "
+            f"({result['unchanged']} ولاية)",
+            "success",
+        )
+
+    if result["missing"]:
+        flash(
+            f"⚠️ {len(result['missing'])} ولاية ماكانتش فأسعار ZR "
+            f"(خلّيناها كيما هي): {'، '.join(result['missing'][:8])}",
+            "warning",
+        )
+
+    return redirect(url_for("admin.shipping_list"))

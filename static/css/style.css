@@ -2993,34 +2993,6 @@ img, video, iframe, table { max-width: 100%; }
     .search-suggest-name { font-size: 13.5px; }
 }
 
-/* ---------- أسعار حسب الكمية ---------- */
-.tiers-table td { position: relative; }
-
-.tier-remove {
-    position: absolute;
-    inset-inline-end: 6px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 22px; height: 22px;
-    display: flex; align-items: center; justify-content: center;
-    border: none; border-radius: 50%;
-    background: #F3E7E5;
-    color: #B4453E;
-    font-size: 15px; font-weight: 700; line-height: 1;
-    cursor: pointer;
-    opacity: 0.55;
-    transition: opacity 0.12s ease, background 0.12s ease;
-}
-.tier-remove:hover { opacity: 1; background: #F0D5D2; }
-
-/* مساحة باش الزر ما يغطّيش الرقم */
-.tiers-table td:last-child input { padding-inline-end: 32px; }
-
-.tiers-actions {
-    display: flex; align-items: center; gap: 10px;
-    margin-top: 10px; flex-wrap: wrap;
-}
-
 /* ---------- حذف الطلبيات ---------- */
 .danger-zone {
     margin-top: 26px;
@@ -3042,3 +3014,469 @@ img, video, iframe, table { max-width: 100%; }
 .bulk-bar[hidden] { display: none; }
 
 .bulk-check, #bulkAll { width: 17px; height: 17px; cursor: pointer; }
+
+/* ---------- صورة الموديل + المعرض ---------- */
+.vimg { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.vimg-current {
+    position: relative;
+    width: 82px; height: 82px;
+    padding: 0;
+    border: 2px dashed #D9CFC0;
+    border-radius: 12px;
+    background: #FBF6EE;
+    cursor: pointer;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.15s ease;
+}
+.vimg-current:hover { border-color: var(--color-primary); }
+.vimg-current img { width: 100%; height: 100%; object-fit: cover; }
+
+.vimg-empty { font-size: 12px; color: var(--color-ink-soft); padding: 0 6px; text-align: center; }
+
+.vimg-edit {
+    position: absolute; inset-inline: 0; bottom: 0;
+    background: rgba(46,26,71,0.82); color: #fff;
+    font-size: 11px; font-weight: 700;
+    padding: 3px 0; text-align: center;
+}
+
+.vimg-state { font-size: 13px; font-weight: 600; }
+.vimg-state.is-busy { color: var(--color-ink-soft); }
+.vimg-state.is-ok { color: #4E7C59; }
+.vimg-state.is-bad { color: #B4453E; }
+
+/* ---------- المعرض المنبثق ---------- */
+.gal { position: fixed; inset: 0; z-index: 900; }
+.gal[hidden] { display: none; }
+
+.gal-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(34,28,43,0.55);
+}
+
+.gal-box {
+    position: absolute;
+    inset-inline: 50%; top: 50%;
+    transform: translate(50%, -50%);
+    width: min(680px, 92vw);
+    max-height: 82vh;
+    display: flex; flex-direction: column;
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 24px 60px -20px rgba(0,0,0,0.45);
+    overflow: hidden;
+}
+
+.gal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border);
+}
+.gal-head h3 { margin: 0; font-size: 17px; color: var(--color-primary); }
+
+.gal-x {
+    width: 32px; height: 32px;
+    border: none; border-radius: 50%;
+    background: var(--color-bg);
+    font-size: 20px; line-height: 1;
+    cursor: pointer; color: var(--color-ink);
+}
+.gal-x:hover { background: #EFE8DC; }
+
+.gal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 10px;
+    padding: 18px 20px;
+    overflow-y: auto;
+}
+
+.gal-item {
+    position: relative;
+    aspect-ratio: 1;
+    padding: 0;
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-bg);
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color 0.12s ease, transform 0.12s ease;
+}
+.gal-item:hover { border-color: var(--color-primary); transform: translateY(-2px); }
+.gal-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.gal-item.is-current { border-color: var(--color-gold); border-width: 3px; }
+.gal-item.is-current::after {
+    content: "✓";
+    position: absolute; top: 5px; inset-inline-end: 5px;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--color-gold); color: var(--color-primary);
+    border-radius: 50%; font-weight: 800; font-size: 13px;
+}
+
+.gal-none {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12.5px; font-weight: 600;
+    color: var(--color-ink-soft);
+}
+
+/* ═══════════════════════════════════════════════════
+   بطاقة الموديل — لوحة التحكم
+
+   ⚠️ المشكل قبل: الموديلات كانت تبان كتلة وحدة طويلة، صعيب
+   تعرف وين يخلص موديل ويبدا الآخر. الحل: بطاقة بخلفية دافئة
+   وشريط ذهبي على الجنب — يفصل بصريًا بلا ضجيج.
+   ═══════════════════════════════════════════════════ */
+
+.variant-card {
+    position: relative;
+    margin-bottom: 18px;
+    padding: 0;
+    background: linear-gradient(180deg, #FFFDF8 0%, #FBF6EE 100%);
+    border: 1px solid #E9DFC9;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px -6px rgba(46, 26, 71, 0.18);
+    transition: box-shadow 0.16s ease, border-color 0.16s ease;
+}
+.variant-card:hover {
+    border-color: var(--color-gold);
+    box-shadow: 0 6px 20px -10px rgba(201, 162, 39, 0.4);
+}
+
+/* الشريط الذهبي — العلامة الفارقة بين موديل وموديل */
+.variant-card::before {
+    content: "";
+    position: absolute;
+    inset-block: 0; inset-inline-start: 0;
+    width: 5px;
+    background: linear-gradient(180deg, var(--color-gold) 0%, #E0C25A 100%);
+}
+
+/* ---------- رأس البطاقة ---------- */
+.variant-head {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px 14px 18px;
+    background: rgba(232, 217, 168, 0.22);
+    border-bottom: 1px solid #EDE3D0;
+}
+
+.variant-img-cell { flex: 0 0 auto; }
+
+.variant-thumb {
+    width: 54px; height: 54px;
+    border-radius: 12px;
+    object-fit: cover;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 8px -3px rgba(46, 26, 71, 0.3);
+    display: block;
+}
+.variant-thumb-empty {
+    display: flex; align-items: center; justify-content: center;
+    background: #EFE8DC;
+    color: var(--color-ink-soft);
+    font-size: 20px; font-weight: 700;
+}
+
+.variant-info { flex: 1; min-width: 0; }
+
+.variant-name {
+    display: block;
+    font-size: 16px; font-weight: 800;
+    color: var(--color-primary);
+    line-height: 1.35;
+}
+.variant-meta {
+    display: block; margin-top: 3px;
+    font-size: 12.5px; color: var(--color-ink-soft);
+}
+.tag-default {
+    background: var(--color-gold-soft);
+    color: var(--color-primary);
+    padding: 1px 7px; border-radius: 999px;
+    font-size: 11px; font-weight: 700;
+}
+
+.variant-del-form { flex: 0 0 auto; }
+
+/* ---------- أقسام البطاقة ---------- */
+.variant-section {
+    padding: 16px 20px 16px 18px;
+    border-bottom: 1px dashed #EDE3D0;
+}
+.variant-section:last-child { border-bottom: none; }
+
+.variant-section-title {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px; font-weight: 800;
+    color: var(--color-primary);
+    letter-spacing: 0.2px;
+}
+
+/* ═══════════ جدول أسعار الكمية ═══════════ */
+
+.tiers-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 6px;
+}
+
+.tiers-table th {
+    padding: 0 4px 2px;
+    text-align: start;
+    font-size: 11.5px; font-weight: 700;
+    color: var(--color-ink-soft);
+}
+
+.tiers-table td { padding: 0 4px; vertical-align: middle; }
+
+.tiers-table input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid #E4DBCA;
+    border-radius: 10px;
+    background: #fff;
+    font-family: inherit; font-size: 14.5px;
+    /* الأرقام ثابتة العرض — الجدول ما يرقصش كي تكتب */
+    font-variant-numeric: tabular-nums;
+}
+.tiers-table input:focus {
+    outline: none;
+    border-color: var(--color-gold);
+    box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.16);
+}
+
+/* عمود زر المسح — عرض ثابت باش الحقول ما تتقلّصش */
+.tiers-x-col { width: 40px; }
+.tiers-table th.tiers-x-col { padding: 0; }
+
+.tier-remove {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    margin-inline: auto;
+    border: 1.5px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: #C08A85;
+    font-size: 17px; font-weight: 700; line-height: 1;
+    cursor: pointer;
+    transition: all 0.13s ease;
+}
+.tier-remove:hover {
+    background: #FDECEA;
+    border-color: #F0D5D2;
+    color: #B4453E;
+}
+.tier-remove:focus-visible {
+    outline: 2px solid #B4453E;
+    outline-offset: 1px;
+}
+
+.tiers-actions {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 12px; flex-wrap: wrap;
+}
+
+/* الشاشات الصغيرة: الجدول يتحوّل لبطاقات */
+@media (max-width: 620px) {
+    .tiers-table thead { display: none; }
+    .tiers-table, .tiers-table tbody, .tiers-table tr, .tiers-table td {
+        display: block; width: 100%;
+    }
+    .tiers-table tr {
+        position: relative;
+        margin-bottom: 12px;
+        padding: 12px 44px 12px 12px;
+        background: #fff;
+        border: 1px solid #E4DBCA;
+        border-radius: 12px;
+    }
+    .tiers-table td { padding: 4px 0; }
+
+    /* ⚠️ فالموبايل الحقول بلا رؤوس — نزيدو تسمية لكل وحدة */
+    .tiers-table td:nth-child(1)::before { content: "من (حبة)"; }
+    .tiers-table td:nth-child(2)::before { content: "إلى (حبة)"; }
+    .tiers-table td:nth-child(3)::before { content: "سعر الحبة (دج)"; }
+    .tiers-table td::before {
+        display: block; margin-bottom: 4px;
+        font-size: 11.5px; font-weight: 700;
+        color: var(--color-ink-soft);
+    }
+
+    .tiers-x-col {
+        position: absolute;
+        top: 10px; inset-inline-end: 8px;
+        width: auto; padding: 0 !important;
+    }
+    .tiers-x-col::before { content: none !important; }
+}
+
+/* أداة وصول: نص للقارئ الصوتي فقط */
+.sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* رقم الموديل — يسهّل الإشارة ليه («الموديل 3») */
+.variant-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px;
+    margin-inline-end: 8px;
+    background: var(--color-primary);
+    color: var(--color-gold-soft);
+    border-radius: 7px;
+    font-size: 12px; font-weight: 800;
+    vertical-align: 2px;
+}
+
+.btn-icon { display: inline-flex; align-items: center; gap: 5px; }
+
+@media (max-width: 520px) {
+    .btn-icon-text { display: none; }   /* أيقونة فقط — الشاشة ضيقة */
+    .variant-head { flex-wrap: wrap; }
+}
+
+/* ═══════════════ لوحة الزوار ═══════════════ */
+
+.vis-panel {
+    margin-bottom: 28px;
+    padding: 20px 22px;
+    background: linear-gradient(180deg, #FFFDF8 0%, #FBF6EE 100%);
+    border: 1px solid #E9DFC9;
+    border-radius: 18px;
+}
+
+.vis-head {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+.vis-head h2 { margin: 0; font-size: 18px; color: var(--color-primary); }
+.vis-note { font-size: 12.5px; color: var(--color-ink-soft); }
+
+/* ---------- البطاقات ---------- */
+.vis-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 22px;
+}
+
+.vis-card {
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid #EDE3D0;
+    border-radius: 13px;
+}
+.vis-card.is-lead {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+.vis-card.is-lead .vis-label { color: var(--color-gold-soft); }
+.vis-card.is-lead .vis-value { color: #fff; }
+.vis-card.is-lead .vis-sub { color: rgba(232, 217, 168, 0.85); }
+
+.vis-label {
+    display: block;
+    font-size: 12.5px; font-weight: 600;
+    color: var(--color-ink-soft);
+}
+.vis-value {
+    display: block; margin: 4px 0 2px;
+    font-size: 30px; font-weight: 800; line-height: 1;
+    color: var(--color-primary);
+    font-variant-numeric: tabular-nums;
+}
+.vis-sub { font-size: 12.5px; color: var(--color-ink-soft); }
+
+.vis-delta {
+    display: inline-block; margin-inline-start: 6px;
+    font-weight: 700;
+}
+.vis-delta.is-up { color: #7FD69B; }
+.vis-delta.is-down { color: #F0A9A3; }
+
+/* ---------- الرسم البياني ---------- */
+.vis-chart {
+    display: flex; align-items: flex-end; gap: 5px;
+    height: 140px;
+    padding: 10px 4px 0;
+    background: #fff;
+    border: 1px solid #EDE3D0;
+    border-radius: 13px;
+    margin-bottom: 18px;
+}
+
+.vis-bar-wrap {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-end;
+    height: 100%;
+    min-width: 0;
+}
+
+.vis-bar {
+    width: 100%;
+    max-width: 34px;
+    /* ⚠️ حد أدنى باش اليوم بلا زوّار يبقى يبان كخط رقيق */
+    min-height: 3px;
+    background: linear-gradient(180deg, var(--color-gold) 0%, #D9B03A 100%);
+    border-radius: 6px 6px 0 0;
+    position: relative;
+    transition: background 0.15s ease;
+}
+.vis-bar-wrap:hover .vis-bar { background: var(--color-primary); }
+
+.vis-bar-num {
+    position: absolute; top: -17px; inset-inline: 0;
+    text-align: center;
+    font-size: 11px; font-weight: 700;
+    color: var(--color-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.vis-bar-day {
+    margin-top: 6px;
+    font-size: 10.5px; color: var(--color-ink-soft);
+    white-space: nowrap;
+}
+
+/* ---------- القوائم ---------- */
+.vis-lists {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+}
+.vis-lists h3 {
+    margin: 0 0 8px;
+    font-size: 13px; font-weight: 800;
+    color: var(--color-primary);
+}
+.vis-lists ul { list-style: none; margin: 0; padding: 0; }
+.vis-lists li {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 8px 12px; margin-bottom: 5px;
+    background: #fff;
+    border: 1px solid #EDE3D0;
+    border-radius: 9px;
+    font-size: 13.5px;
+}
+.vis-lists li span {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vis-lists li strong {
+    color: var(--color-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 620px) {
+    .vis-chart { height: 116px; gap: 3px; }
+    .vis-bar-day { font-size: 9px; }
+    .vis-bar-num { display: none; }   /* ضيقة بزاف — التلميح يكفي */
+    .vis-value { font-size: 26px; }
+}

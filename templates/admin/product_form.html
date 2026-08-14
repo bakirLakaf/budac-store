@@ -146,19 +146,22 @@
                         <span class="image-main-tag">★ رئيسية</span>
                     {% endif %}
 
+                    {# ⚠️ ماكانش فورم هنا: هاد الكتلة داخل الفورم الرئيسي،
+                       والفورم داخل فورم HTML غير صالح — المتصفح يحيّد
+                       الداخلي والأزرار تبعث الفورم الخارجي بدل عملها.
+                       نستعملو formaction: زر يبعث لمسار خاص بيه. #}
                     <div class="image-item-actions">
                         {% if not is_main %}
-                        <form method="post" action="{{ url_for('admin.product_image_make_main', product_id=product.id, image_id=img.id) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="img-btn img-btn-main" title="اجعلها الصورة الرئيسية">★</button>
-                        </form>
+                        <button type="submit" class="img-btn img-btn-main"
+                                title="اجعلها الصورة الرئيسية"
+                                formaction="{{ url_for('admin.product_image_make_main', product_id=product.id, image_id=img.id) }}"
+                                formnovalidate>★</button>
                         {% endif %}
 
-                        <form method="post" action="{{ url_for('admin.product_image_delete', product_id=product.id, image_id=img.id) }}"
-                              onsubmit="return confirm('تمسح هاد الصورة؟')">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="img-btn img-btn-del" title="حذف">×</button>
-                        </form>
+                        <button type="submit" class="img-btn img-btn-del" title="حذف"
+                                formaction="{{ url_for('admin.product_image_delete', product_id=product.id, image_id=img.id) }}"
+                                formnovalidate
+                                onclick="return confirm('تمسح هاد الصورة؟ غادي تتحيّد من الموديلات اللي تستعملها.')">×</button>
                     </div>
                 </div>
                 {% endfor %}
@@ -204,7 +207,9 @@
             </div>
 
             <div class="variant-info">
-                <strong class="variant-name">{{ v.label }}</strong>
+                <strong class="variant-name">
+                    <span class="variant-num">{{ loop.index }}</span>{{ v.label }}
+                </strong>
                 <span class="variant-meta">
                     السعر العادي: {{ v.price_display }}
                     {% if v.sku %} · SKU: {{ v.sku }}{% endif %}
@@ -216,7 +221,10 @@
                   onsubmit="return confirm('تمسح الموديل «{{ v.label }}» وكل أسعارو؟')"
                   class="variant-del-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn-admin btn-sm btn-danger">حذف الموديل</button>
+                <button type="submit" class="btn-admin btn-sm btn-danger btn-icon"
+                        title="حذف الموديل «{{ v.label }}»">
+                    🗑️ <span class="btn-icon-text">حذف</span>
+                </button>
             </form>
         </div>
 
@@ -225,28 +233,25 @@
             <label class="variant-section-title">صورة الموديل</label>
 
             {% if product.images %}
-            <form method="post" action="{{ url_for('admin.variant_image', variant_id=v.id) }}"
-                  class="variant-img-picker">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {# ⚠️ ماشي فورم — الحفظ يمشي بـfetch بلا إعادة تحميل الصفحة #}
+            <div class="vimg" data-variant="{{ v.id }}"
+                 data-url="{{ url_for('admin.variant_image', variant_id=v.id) }}"
+                 data-label="{{ v.label }}">
 
-                <div class="img-choices">
-                    <label class="img-choice {{ 'is-picked' if not v.image_filename }}">
-                        <input type="radio" name="image_filename" value=""
-                               {{ 'checked' if not v.image_filename }}>
-                        <span class="img-choice-none">بلا صورة</span>
-                    </label>
+                <button type="button" class="vimg-current"
+                        aria-label="بدّل صورة {{ v.label }}">
+                    {% if v.image_filename %}
+                    <img src="{{ url_for('static', filename='img/products/' + (v.image_filename | thumb)) }}"
+                         alt="{{ v.label }}">
+                    {% else %}
+                    <span class="vimg-empty">اختر صورة</span>
+                    {% endif %}
+                    <span class="vimg-edit">تبديل</span>
+                </button>
 
-                    {% for img in product.images %}
-                    <label class="img-choice {{ 'is-picked' if v.image_filename == img.image_filename }}">
-                        <input type="radio" name="image_filename" value="{{ img.image_filename }}"
-                               {{ 'checked' if v.image_filename == img.image_filename }}>
-                        <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}" alt="">
-                    </label>
-                    {% endfor %}
-                </div>
+                <span class="vimg-state" role="status"></span>
+            </div>
 
-                <button type="submit" class="btn-admin btn-sm">احفظ الصورة</button>
-            </form>
             {% else %}
             <p class="hint">ارفع صور المنتج أولاً (فوق)، وبعدها تقدر تختار لكل موديل صورتو.</p>
             {% endif %}
@@ -267,15 +272,22 @@
 
                 <table class="tiers-table">
                     <thead>
-                        <tr><th>من (حبة)</th><th>إلى (حبة)</th><th>سعر الحبة (دج)</th></tr>
+                        {# ⚠️ عمود رابع مستقل لزر المسح — قبل كان بموضع مطلق
+                           جوّا خانة السعر، فيطيح تحت الحقل ويكسر المحاذاة. #}
+                        <tr>
+                            <th>من (حبة)</th>
+                            <th>إلى (حبة)</th>
+                            <th>سعر الحبة (دج)</th>
+                            <th class="tiers-x-col"><span class="sr-only">مسح</span></th>
+                        </tr>
                     </thead>
                     <tbody class="tiers-body" data-variant="{{ v.id }}">
                         {% for t in v.price_tiers %}
                         <tr>
                             <td><input type="number" name="min_quantity" value="{{ t.min_quantity }}" min="1"></td>
                             <td><input type="number" name="max_quantity" value="{{ t.max_quantity or '' }}" min="1" placeholder="بلا حد"></td>
-                            <td>
-                                <input type="number" name="unit_price" value="{{ t.unit_price }}" min="0">
+                            <td><input type="number" name="unit_price" value="{{ t.unit_price }}" min="0"></td>
+                            <td class="tiers-x-col">
                                 <button type="button" class="tier-remove" title="امسح هاد السطر"
                                         aria-label="امسح السطر">×</button>
                             </td>
@@ -286,8 +298,8 @@
                         <tr>
                             <td><input type="number" name="min_quantity" min="1" placeholder="مثلاً 100"></td>
                             <td><input type="number" name="max_quantity" min="1" placeholder="بلا حد"></td>
-                            <td>
-                                <input type="number" name="unit_price" min="0" placeholder="مثلاً 420">
+                            <td><input type="number" name="unit_price" min="0" placeholder="مثلاً 420"></td>
+                            <td class="tiers-x-col">
                                 <button type="button" class="tier-remove" title="امسح هاد السطر"
                                         aria-label="امسح السطر">×</button>
                             </td>
@@ -335,6 +347,39 @@
 </div>
 {% endif %}
 
+
+{% if product and product.images %}
+{# ═══════ معرض اختيار صورة الموديل ═══════ #}
+<div class="gal" id="imgGallery" hidden>
+    <div class="gal-backdrop" data-close></div>
+
+    <div class="gal-box" role="dialog" aria-modal="true" aria-labelledby="galTitle">
+        <div class="gal-head">
+            <h3 id="galTitle">اختر صورة لـ<span id="galLabel"></span></h3>
+            <button type="button" class="gal-x" data-close aria-label="سكّر">×</button>
+        </div>
+
+        <div class="gal-grid">
+            <button type="button" class="gal-item gal-none" data-file="">
+                <span>بلا صورة</span>
+            </button>
+
+            {# ⚠️ الصور هنا هي **نفسها** صور المنتج فوق. إذا مسحت صورة
+               من فوق، تختفي من هنا تلقائيًا ومن الموديلات اللي كانت
+               تستعملها — نفس المصدر، بلا نسخ. #}
+            {% for img in product.images %}
+            <button type="button" class="gal-item"
+                    data-file="{{ img.image_filename }}"
+                    data-thumb="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}">
+                <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
+                     alt="" loading="lazy">
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 <script>
@@ -354,8 +399,8 @@
         tr.innerHTML =
             '<td><input type="number" name="min_quantity" min="1" placeholder="مثلاً 100"></td>' +
             '<td><input type="number" name="max_quantity" min="1" placeholder="بلا حد"></td>' +
-            '<td>' +
-                '<input type="number" name="unit_price" min="0" placeholder="مثلاً 420">' +
+            '<td><input type="number" name="unit_price" min="0" placeholder="مثلاً 420"></td>' +
+            '<td class="tiers-x-col">' +
                 '<button type="button" class="tier-remove" title="امسح هاد السطر" ' +
                 'aria-label="امسح السطر">×</button>' +
             '</td>';
@@ -387,6 +432,128 @@
                 tr.querySelectorAll('input').forEach(function (i) { i.value = ''; });
             }
         }
+    });
+})();
+</script>
+
+<script>
+/**
+ * صورة الموديل — معرض منبثق + حفظ بلا إعادة تحميل.
+ *
+ * ⚠️ ليش تبدّل عن الشريط القديم؟
+ *   • الشريط يطوّل الصفحة بشكل مرهق مع كل موديل زايد
+ *   • كان لازم ضغطتين: اختر ثم احفظ — دابا ضغطة وحدة
+ *   • كل حفظ كان يعيد تحميل الصفحة ويرجّعك لفوق
+ */
+(function () {
+    'use strict';
+
+    var gallery = document.getElementById('imgGallery');
+    if (!gallery) return;
+
+    var label = document.getElementById('galLabel');
+    var current = null;   // عنصر .vimg اللي فتح المعرض
+
+    // ---------- فتح وسكّر ----------
+
+    function open(box) {
+        current = box;
+        label.textContent = box.dataset.label || '';
+
+        // نعلّمو الصورة الحالية
+        var picked = box.querySelector('img');
+        var pickedSrc = picked ? picked.getAttribute('src') : '';
+
+        gallery.querySelectorAll('.gal-item').forEach(function (item) {
+            var isCurrent = item.dataset.thumb
+                ? item.dataset.thumb === pickedSrc
+                : !picked;                      // «بلا صورة»
+            item.classList.toggle('is-current', isCurrent);
+        });
+
+        gallery.hidden = false;
+        document.body.style.overflow = 'hidden';
+    }
+
+    function close() {
+        gallery.hidden = true;
+        document.body.style.overflow = '';
+        current = null;
+    }
+
+    // ---------- الحفظ ----------
+
+    function save(file, thumb) {
+        if (!current) return;
+
+        var box = current;
+        var state = box.querySelector('.vimg-state');
+        var btn = box.querySelector('.vimg-current');
+
+        close();
+        state.textContent = 'جاري الحفظ...';
+        state.className = 'vimg-state is-busy';
+
+        var body = new FormData();
+        body.append('image_filename', file);
+        body.append('csrf_token', box.dataset.csrf || getCsrf());
+
+        fetch(box.dataset.url, {
+            method: 'POST',
+            body: body,
+            headers: { 'X-Requested-With': 'fetch' },
+        })
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+            .then(function (res) {
+                if (!res.ok || !res.d.ok) {
+                    throw new Error(res.d.message || 'فشل الحفظ');
+                }
+
+                // نحدّثو الصورة المعروضة بلا ما نعاودو نحمّلو الصفحة
+                btn.innerHTML = file
+                    ? '<img src="' + thumb + '" alt="">' +
+                      '<span class="vimg-edit">تبديل</span>'
+                    : '<span class="vimg-empty">اختر صورة</span>' +
+                      '<span class="vimg-edit">تبديل</span>';
+
+                state.textContent = '✓ تحفظ';
+                state.className = 'vimg-state is-ok';
+                setTimeout(function () { state.textContent = ''; }, 2200);
+            })
+            .catch(function (err) {
+                state.textContent = '🔴 ' + err.message;
+                state.className = 'vimg-state is-bad';
+            });
+    }
+
+    /** يجيب رمز CSRF من أي فورم فالصفحة */
+    function getCsrf() {
+        var input = document.querySelector('input[name="csrf_token"]');
+        return input ? input.value : '';
+    }
+
+    // ---------- الأحداث ----------
+
+    document.addEventListener('click', function (e) {
+        var opener = e.target.closest('.vimg-current');
+        if (opener) {
+            open(opener.closest('.vimg'));
+            return;
+        }
+
+        if (e.target.closest('[data-close]')) {
+            close();
+            return;
+        }
+
+        var item = e.target.closest('.gal-item');
+        if (item && gallery.contains(item)) {
+            save(item.dataset.file || '', item.dataset.thumb || '');
+        }
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !gallery.hidden) close();
     });
 })();
 </script>

@@ -3,6 +3,34 @@
 
 <h1 class="page-title">أسعار التوصيل</h1>
 
+{# ⚠️ سعر فارغ = الخدمة غير متوفرة لهاد الولاية، ماشي مجاني. #}
+<div class="zr-sync-bar">
+    <div>
+        <strong>ZR Express</strong> — حدّث الأسعار من جدولهم الرسمي
+        <br><small class="muted">
+            الأسعار الأخرى (World / Yalidine) ما تتلمسش. سعر فارغ = غير متوفر.
+        </small>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.shipping_sync_zr') }}"
+          onsubmit="return confirm('تحدّث أسعار ZR من موقعهم؟ الأسعار الحالية غادي تتبدّل.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin">🔄 زامن أسعار ZR</button>
+    </form>
+</div>
+
+<style>
+    .zr-sync-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 16px; flex-wrap: wrap;
+        margin-bottom: 22px; padding: 14px 18px;
+        background: #FBF6EE;
+        border: 1px solid var(--color-border);
+        border-radius: 12px;
+        font-size: 14.5px;
+    }
+</style>
+
 {% if carriers %}
 <div class="carrier-tabs">
     {% for c in carriers %}

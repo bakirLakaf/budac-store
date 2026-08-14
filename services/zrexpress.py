@@ -300,7 +300,10 @@ def get_delivery_rates():
 
 def _rate_wilaya_code(item):
     """يستخرج رمز الولاية من سطر سعر."""
-    for key in ("wilayaCode", "stateCode", "code", "destinationCode", "number"):
+    # ⚠️ ندعمو camelCase و snake_case — ZR يبدّل التسمية بين المسارات،
+    # وأي مفتاح ناقص معناه الولاية تتجاهل بصمت وسعرها ما يتحدّثش.
+    for key in ("wilayaCode", "wilaya_code", "stateCode", "state_code",
+                "code", "destinationCode", "destination_code", "number"):
         raw = item.get(key)
         if raw is not None and str(raw).strip().isdigit():
             return str(int(str(raw).strip())).zfill(2)
@@ -1048,3 +1051,91 @@ def search_territory(commune_name, wilaya_code=None):
                     return str(item.get("id")), attempts
 
     return None, attempts
+
+
+def sync_shipping_rates():
+    """
+    يحدّث أسعار التوصيل ديال ZR من جدول أسعارهم الرسمي.
+
+    ⚠️ ليش هاد الدالة؟
+    الأسعار كانت تتعمّر يدويًا وتقادمت. ZR يبدّلها من وقت لوقت،
+    والسعر الغالط معناه خسارة فكل طلبية ولا زبون يهرب.
+
+    القواعد:
+      • سعر 0 ولا فارغ = **الخدمة غير متوفرة** (ماشي مجاني).
+        نحطو None باش الولاية ما تبانش للزبون فهاد النوع.
+      • ما نلمسوش الشركات الأخرى — ZR فقط.
+
+    يرجّع تقرير مفصّل: شنو تبدّل وشنو بقى.
+    """
+    from models import db, Carrier, ShippingRate
+
+    carrier = Carrier.query.filter_by(code="zrexpress").first()
+    if not carrier:
+        raise ZRError("شركة ZR Express ماكانتش فقاعدة البيانات")
+
+    rates_from_zr = get_delivery_rates()
+    if not rates_from_zr:
+        raise ZRError(
+            "ZR ما ردّش بأسعار. تأكد أن المفاتيح صحيحة، "
+            "ولا عمّر الأسعار يدويًا من صفحة «أسعار التوصيل»."
+        )
+
+    # نبنيو خريطة: رمز الولاية → (سعر المنزل، سعر المكتب)
+    incoming = {}
+    for item in rates_from_zr:
+        code = _rate_wilaya_code(item)
+        if not code:
+            continue
+
+        home = _rate_price(item, "homePrice", "home", "domicile", "deliveryPrice")
+        office = _rate_price(item, "officePrice", "office", "stopDesk",
+                             "stopdeskPrice", "desk")
+
+        # إذا الولاية تكررت، ناخذو أعلى سعر متوفر (أأمن من الأقل)
+        old = incoming.get(code)
+        if old:
+            home = max(filter(None, [home, old[0]]), default=None)
+            office = max(filter(None, [office, old[1]]), default=None)
+
+        incoming[code] = (home, office)
+
+    our_rates = ShippingRate.query.filter_by(carrier_id=carrier.id).all()
+
+    changes = []
+    unchanged = 0
+    missing = []
+
+    for rate in our_rates:
+        new = incoming.get(rate.wilaya_code)
+
+        if new is None:
+            missing.append(f"{rate.wilaya_code} ~ {rate.wilaya_name}")
+            continue
+
+        new_home, new_office = new
+
+        if rate.home_price == new_home and rate.office_price == new_office:
+            unchanged += 1
+            continue
+
+        changes.append({
+            "wilaya": f"{rate.wilaya_code} ~ {rate.wilaya_name}",
+            "old_home": rate.home_price,
+            "new_home": new_home,
+            "old_office": rate.office_price,
+            "new_office": new_office,
+        })
+
+        rate.home_price = new_home
+        rate.office_price = new_office
+
+    db.session.commit()
+
+    return {
+        "from_zr": len(incoming),
+        "changed": len(changes),
+        "unchanged": unchanged,
+        "missing": missing,
+        "details": changes[:60],
+    }

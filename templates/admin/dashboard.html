@@ -3,6 +3,90 @@
 
 <h1 class="page-title">نظرة عامة</h1>
 
+{% if visitors %}
+{# ═══════════ الزوار ═══════════ #}
+<section class="vis-panel">
+    <div class="vis-head">
+        <h2>👥 الزوار</h2>
+        <span class="vis-note">بلا الأدمن والبوتات</span>
+    </div>
+
+    <div class="vis-cards">
+        <div class="vis-card is-lead">
+            <span class="vis-label">اليوم</span>
+            <strong class="vis-value">{{ visitors.stats.today.visitors }}</strong>
+            <span class="vis-sub">
+                {{ visitors.stats.today.views }} زيارة
+                {% if visitors.change is not none %}
+                <span class="vis-delta {{ 'is-up' if visitors.change >= 0 else 'is-down' }}">
+                    {{ '▲' if visitors.change >= 0 else '▼' }} {{ visitors.change | abs }}%
+                </span>
+                {% endif %}
+            </span>
+        </div>
+
+        <div class="vis-card">
+            <span class="vis-label">أمس</span>
+            <strong class="vis-value">{{ visitors.stats.yesterday.visitors }}</strong>
+            <span class="vis-sub">{{ visitors.stats.yesterday.views }} زيارة</span>
+        </div>
+
+        <div class="vis-card">
+            <span class="vis-label">آخر 7 أيام</span>
+            <strong class="vis-value">{{ visitors.stats.week.visitors }}</strong>
+            <span class="vis-sub">{{ visitors.stats.week.views }} زيارة</span>
+        </div>
+
+        <div class="vis-card">
+            <span class="vis-label">آخر 30 يوم</span>
+            <strong class="vis-value">{{ visitors.stats.month.visitors }}</strong>
+            <span class="vis-sub">{{ visitors.stats.month.views }} زيارة</span>
+        </div>
+    </div>
+
+    {# ⚠️ رسم بأعمدة CSS — بلا مكتبة، يحمّل فورًا #}
+    <div class="vis-chart" role="img"
+         aria-label="زوّار آخر 14 يوم">
+        {% for d in visitors.daily %}
+        <div class="vis-bar-wrap" title="{{ d.label }} — {{ d.visitors }} زائر ({{ d.views }} زيارة)">
+            <div class="vis-bar"
+                 style="height: {{ (d.visitors / visitors.peak * 100) if visitors.peak else 0 }}%">
+                {% if d.visitors %}<span class="vis-bar-num">{{ d.visitors }}</span>{% endif %}
+            </div>
+            <span class="vis-bar-day">{{ d.label }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if visitors.sources or visitors.landing %}
+    <div class="vis-lists">
+        {% if visitors.sources %}
+        <div>
+            <h3>منين جاو (30 يوم)</h3>
+            <ul>
+                {% for s in visitors.sources %}
+                <li><span>{{ s.name }}</span><strong>{{ s.count }}</strong></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if visitors.landing %}
+        <div>
+            <h3>أول صفحة زاروها</h3>
+            <ul>
+                {% for l in visitors.landing %}
+                <li><span dir="ltr">{{ l.path }}</span><strong>{{ l.count }}</strong></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
+
 <div class="stat-grid">
     <div class="stat-card {{ 'stat-highlight' if pending_orders }}">
         <span class="stat-value">{{ pending_orders }}</span>
