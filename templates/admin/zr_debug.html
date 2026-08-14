@@ -12,6 +12,13 @@
 <table class="admin-table">
     <tbody>
         <tr>
+            <td>نسخة الكود الشغّالة</td>
+            <td>
+                <strong style="font-size:17px;color:#2E1A47;">{{ app_version }}</strong>
+                <br><small class="muted">{{ build_note }}</small>
+            </td>
+        </tr>
+        <tr>
             <td>المفاتيح</td>
             <td>
                 {% if config_ok %}
@@ -73,7 +80,16 @@
 
 <table class="admin-table">
     <tbody>
-        <tr><td>مناطق وصلاتنا من ZR</td><td><strong>{{ territory_diag.total_territories }}</strong></td></tr>
+        <tr>
+            <td>مناطق وصلاتنا من ZR</td>
+            <td>
+                <strong>{{ territory_diag.total_territories }}</strong>
+                — منها <strong>{{ territory_diag.unique_ids }}</strong> فريدة
+                {% if territory_diag.unique_ids < territory_diag.total_territories %}
+                <br><small style="color:#B4453E">⚠️ فيه تكرار — ZR يتجاهل الترقيم</small>
+                {% endif %}
+            </td>
+        </tr>
         <tr><td>منها من نوع commune</td><td><strong>{{ territory_diag.commune_level }}</strong></td></tr>
         <tr><td>حجم الفهرس</td><td>{{ territory_diag.index_size }}</td></tr>
         <tr>
@@ -99,6 +115,24 @@
         </tr>
     </tbody>
 </table>
+
+{% if territory_diag.search_attempts %}
+<p style="margin-top:14px;"><strong>محاولات البحث المباشر:</strong></p>
+<table class="admin-table">
+    <tbody>
+    {% for a in territory_diag.search_attempts %}
+        <tr>
+            <td><code>{{ a.key or '—' }}</code></td>
+            <td>
+                {% if a.error %}<span style="color:#B4453E">{{ a.error }}</span>
+                {% elif a.matched %}<strong style="color:#4E7C59">✓ لقيناها ({{ a.count }} نتيجة)</strong>
+                {% else %}{{ a.count }} نتيجة — ماكانش تطابق{% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
 
 {% if territory_diag.suggestions %}
 <p style="margin-top:12px;"><strong>أسماء قريبة عند ZR:</strong></p>

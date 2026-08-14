@@ -157,36 +157,97 @@ def _request(method, path, **kwargs):
         return {}
 
 
-def get_territories(max_pages=20):
+def _extract_items(data):
+    """يستخرج قائمة العناصر من رد ZR مهما كان اسم الحقل."""
+    if isinstance(data, list):
+        return data
+    if not isinstance(data, dict):
+        return []
+    for key in ("items", "data", "results", "records"):
+        value = data.get(key)
+        if isinstance(value, list):
+            return value
+    return []
+
+
+# ⚠️ طرق الترقيم المحتملة. ZR **يتجاهل** `page` بصمت ويرجّع نفس الصفحة
+# الأولى فكل مرة — كشفناها من التشخيص: 20 صفحة × 200 = 4000 «منطقة»،
+# لكن المعرّفات الفريدة 200 فقط. لهذا نجرّبو عدة أسماء ونكشفو التكرار.
+_PAGINATION_STYLES = [
+    ("pageNumber", lambda n, size: {"pageNumber": n, "pageSize": size}),
+    ("pageIndex", lambda n, size: {"pageIndex": n, "pageSize": size}),
+    ("skip", lambda n, size: {"skip": (n - 1) * size, "take": size}),
+    ("offset", lambda n, size: {"offset": (n - 1) * size, "limit": size}),
+    ("page", lambda n, size: {"page": n, "pageSize": size}),
+]
+
+_territories_cache = None
+
+
+def get_territories(max_pages=40, page_size=500, force=False):
     """
-    قائمة المناطق عند ZR مع معرّفاتها — **كل الصفحات**.
+    كل مناطق ZR مع معرّفاتها.
 
-    ⚠️ ZR يرجّع النتائج على صفحات. الطلب الأول كان يجيب 200 فقط ويظن
-    أنها كل شيء. إذا المناطق هي البلديات (1541 فالجزائر)، كنا ناخذو
-    13% منها فقط — والباقي ما يتربطش أبدًا.
+    ⚠️ درسان تعلّمناهم من التشخيص الحقيقي:
 
-    max_pages : حد أمان باش ما ندخلوش فحلقة لا نهائية إذا ZR بدّل الرد.
+    1) ZR يتجاهل `page` بصمت. كنا نجيبو نفس الـ200 عنصر 20 مرة ونظنو
+       عندنا 4000 منطقة. النتيجة: 90% من البلديات ما كانتش عندنا
+       (غرداية مثلاً)، والطلبيات ترفض بـ400 بلا رسالة.
+
+    2) الحل: نجرّبو عدة أسماء للترقيم، ونكشفو التكرار بمقارنة
+       المعرّفات. إذا صفحة ما جابت حتى معرّف جديد → الطريقة ما تخدمش.
+
+    نرجّعو العناصر **الفريدة** فقط.
     """
-    all_items = []
-    page = 1
+    global _territories_cache
 
-    while page <= max_pages:
-        data = _request("POST", "/territories/search",
-                        json={"page": page, "pageSize": 200})
+    if _territories_cache is not None and not force:
+        return _territories_cache
 
-        items = data.get("data") or data.get("items") or []
-        if not items:
+    best = []
+
+    for style_name, build in _PAGINATION_STYLES:
+        seen_ids = set()
+        items = []
+        page = 1
+
+        while page <= max_pages:
+            try:
+                data = _request("POST", "/territories/search",
+                                json=build(page, page_size))
+            except ZRError:
+                break
+
+            batch = _extract_items(data)
+            if not batch:
+                break
+
+            # ⚠️ نعدّو الجداد فقط — إذا صفر، الترقيم ما يتطبّقش
+            fresh = [
+                it for it in batch
+                if it.get("id") and it["id"] not in seen_ids
+            ]
+            for it in fresh:
+                seen_ids.add(it["id"])
+                items.append(it)
+
+            if not fresh:
+                break  # نفس الصفحة تتعاود — هاد الطريقة ما تخدمش
+
+            if len(batch) < page_size:
+                break  # صفحة ناقصة = الأخيرة
+
+            page += 1
+
+        if len(items) > len(best):
+            best = items
+
+        # ⚠️ إذا لقينا أكثر من صفحة كاملة، الطريقة تخدم — نوقفو هنا
+        if len(items) > page_size:
             break
 
-        all_items.extend(items)
-
-        # وقفنا إذا الصفحة ناقصة (يعني هي الأخيرة)
-        if len(items) < 200:
-            break
-
-        page += 1
-
-    return all_items
+    _territories_cache = best
+    return best
 
 
 def inspect_territories(sample=3):
@@ -623,6 +684,15 @@ def lookup_territory_id(wilaya_code, commune_name):
     if not wilaya_code or not commune_name:
         return None
 
+    # 1) البحث المباشر أولاً — أسرع وما يعتمدش على الترقيم المعطوب
+    try:
+        found, _ = search_territory(commune_name, wilaya_code)
+        if found:
+            return found
+    except Exception:
+        pass
+
+    # 2) احتياط: الفهرس الكامل (يخدم فقط إذا الترقيم يخدم عند ZR)
     try:
         index = _build_territory_index()
     except ZRError:
@@ -838,13 +908,27 @@ def diagnose_territory_lookup(wilaya_code, commune_name):
         "total_territories": 0,
         "commune_level": 0,
         "index_size": 0,
+        "unique_ids": 0,
         "wilaya_found": False,
         "wilaya_communes": [],
         "match": None,
+        "search_match": None,
+        "search_attempts": [],
     }
 
+    # ⚠️ نجرّبو البحث المباشر أولاً ونسجّلو النتيجة — هو الطريقة
+    # الوحيدة اللي تخدم إذا الترقيم معطوب عند ZR
     try:
-        items = get_territories()
+        found, attempts = search_territory(commune_name, wilaya_code)
+        result["search_match"] = found
+        result["search_attempts"] = attempts
+        if found:
+            result["match"] = found
+    except Exception as e:
+        result["search_attempts"] = [{"error": str(e)[:150]}]
+
+    try:
+        items = get_territories(force=True)
     except Exception as e:
         result["error"] = f"ما قدرناش نجيبو المناطق من ZR: {e}"
         return result
@@ -861,6 +945,7 @@ def diagnose_territory_lookup(wilaya_code, commune_name):
         return result
 
     result["total_territories"] = len(items)
+    result["unique_ids"] = len({it.get("id") for it in items if it.get("id")})
     result["commune_level"] = sum(
         1 for it in items if (it.get("level") or "").lower() == "commune"
     )
@@ -888,7 +973,9 @@ def diagnose_territory_lookup(wilaya_code, commune_name):
     result["wilaya_found"] = bool(names)
     result["wilaya_communes"] = names[:60]
 
-    result["match"] = index.get((target, result["normalized"]))
+    result["match"] = result.get("search_match") or index.get(
+        (target, result["normalized"])
+    )
 
     if not result["match"] and names:
         # اقتراحات: أسماء تبدا بنفس الحروف
@@ -896,3 +983,64 @@ def diagnose_territory_lookup(wilaya_code, commune_name):
         result["suggestions"] = [n for n in names if n.startswith(prefix)][:10]
 
     return result
+
+
+# ⚠️ صيغ البحث المحتملة فـ/territories/search.
+# نستعملو البحث بدل جلب 4000 منطقة على صفحات — الترقيم عند ZR
+# ما يخدمش (يتجاهل `page` ويرجّع نفس الصفحة الأولى دايمًا).
+_SEARCH_KEYS = ["search", "searchTerm", "name", "query", "keyword", "term"]
+
+
+def search_territory(commune_name, wilaya_code=None):
+    """
+    يدوّر على بلدية عند ZR **بالبحث المباشر** — بلا ترقيم.
+
+    ⚠️ ليش هاد الطريقة؟
+    ZR يتجاهل معامل الترقيم: كل صفحة ترجّع نفس الـ200 عنصر. يعني ما
+    نقدروش نجيبو الـ3880 بلدية كاملين مهما درنا. لكن المسار اسمو
+    «search» — فنبعثو اسم البلدية ونخليو ZR هو يدوّر.
+
+    نجرّبو عدة أسماء للحقل لأن التوثيق ما يوضحوش.
+
+    يرجّع (المعرّف، تفاصيل المحاولات) — التفاصيل للتشخيص.
+    """
+    if not commune_name:
+        return None, [{"note": "ماكانش اسم بلدية"}]
+
+    target_wilaya = str(wilaya_code).zfill(2) if wilaya_code else None
+    wanted = _normalize_arabic(commune_name)
+    attempts = []
+
+    for key in _SEARCH_KEYS:
+        body = {key: commune_name, "pageSize": 200}
+
+        try:
+            data = _request("POST", "/territories/search", json=body)
+        except ZRError as e:
+            attempts.append({"key": key, "error": str(e)[:120]})
+            continue
+
+        items = _extract_items(data)
+        attempts.append({"key": key, "count": len(items)})
+
+        if not items:
+            continue
+
+        # ⚠️ لو ZR تجاهل البحث، يرجّع نفس الـ200 العامة. نتأكدو أن
+        # النتائج فيها فعلاً الاسم المطلوب قبل ما نثقو فيها.
+        for item in items:
+            if (item.get("level") or "").lower() != "commune":
+                continue
+
+            postal = str(item.get("postalCode") or "").strip()
+            item_wilaya = postal[:2] if len(postal) >= 2 and postal[:2].isdigit() else None
+
+            if target_wilaya and item_wilaya != target_wilaya:
+                continue
+
+            for name in (item.get("nameArabic"), item.get("name")):
+                if name and _normalize_arabic(name) == wanted:
+                    attempts[-1]["matched"] = True
+                    return str(item.get("id")), attempts
+
+    return None, attempts

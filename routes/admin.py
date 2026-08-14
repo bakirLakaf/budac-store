@@ -1563,6 +1563,8 @@ def order_zr_debug(order_id):
                                      ensure_ascii=False, indent=2)
             if zr.LAST_EXCHANGE.get("payload") else None
         ),
+        app_version=__import__("VERSION").VERSION,
+        build_note=__import__("VERSION").BUILD_NOTE,
         config_ok=bool(os.environ.get("ZR_TENANT_ID", "").strip()
                        and os.environ.get("ZR_API_KEY", "").strip()),
         base_url=zr.BASE_URL,
