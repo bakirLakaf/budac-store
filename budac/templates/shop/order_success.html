@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}تم استلام طلبيتك — {{ store_name }}{% endblock %}
+{% block content %}
+
+<section class="success-page">
+    <div class="container">
+        <div class="success-card">
+            <div class="success-icon">✓</div>
+            <h1 class="success-title">شكرًا على طلبيتك!</h1>
+            <p class="success-sub">غادي نتصلو بيك على <strong>{{ order.customer_phone }}</strong> باش نأكدو الطلبية.</p>
+
+            <div class="order-number-box">
+                <span class="onb-label">رقم طلبيتك</span>
+                <div class="onb-row">
+                    <span class="onb-value" id="orderNumber">{{ order.order_number }}</span>
+                    <button type="button" class="onb-copy" id="copyOrderBtn"
+                            data-number="{{ order.order_number }}" aria-label="نسخ الرقم">نسخ</button>
+                </div>
+                <small>احتفظ بيه — تقدر تتبّع طلبيتك بيه</small>
+            </div>
+
+            <script>
+            (function () {
+                var btn = document.getElementById("copyOrderBtn");
+                if (!btn) return;
+
+                btn.addEventListener("click", function () {
+                    var text = btn.dataset.number;
+
+                    function done() {
+                        btn.textContent = "✓ تم";
+                        btn.classList.add("is-copied");
+                        setTimeout(function () {
+                            btn.textContent = "نسخ";
+                            btn.classList.remove("is-copied");
+                        }, 1800);
+                    }
+
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text).then(done);
+                    } else {
+                        var tmp = document.createElement("textarea");
+                        tmp.value = text;
+                        tmp.style.position = "fixed"; tmp.style.opacity = "0";
+                        document.body.appendChild(tmp); tmp.select();
+                        try { document.execCommand("copy"); done(); } catch (e) {}
+                        document.body.removeChild(tmp);
+                    }
+                });
+            })();
+            </script>
+
+            <div class="order-recap">
+                <h2 class="summary-title">تفاصيل الطلبية</h2>
+
+                <ul class="checkout-items">
+                    {% for item in order.items %}
+                    <li>
+                        <span class="ci-name">
+                            {{ item.item_name }}
+                            {% if item.variant_label %}<small>({{ item.variant_label }})</small>{% endif %}
+                            <span class="ci-qty">×{{ item.quantity }}</span>
+                        </span>
+                        <span class="ci-price">{{ item.line_total_display }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <div class="summary-row"><span>المنتجات</span><span>{{ "{:,}".format(order.subtotal) }} دج</span></div>
+                {% if order.discount_amount %}
+                <div class="summary-row summary-discount"><span>الخصم ({{ order.coupon_code }})</span><span>-{{ "{:,}".format(order.discount_amount) }} دج</span></div>
+                {% endif %}
+                <div class="summary-row">
+                    <span>التوصيل — {{ order.carrier_name }}</span>
+                    <span>
+                        {% if order.shipping_discount %}<s>{{ "{:,}".format(order.shipping_price) }}</s> مجاني
+                        {% else %}{{ "{:,}".format(order.shipping_price) }} دج{% endif %}
+                    </span>
+                </div>
+                <div class="summary-row summary-total"><span>المجموع</span><span>{{ order.total_display }}</span></div>
+
+                <div class="delivery-recap">
+                    <p><strong>{{ order.delivery_type_label }}</strong></p>
+                    <p>{{ order.wilaya_code }} ~ {{ order.wilaya_name }}{% if order.commune %} — {{ order.commune }}{% endif %}</p>
+                    {% if order.address_note %}<p class="muted">{{ order.address_note }}</p>{% endif %}
+                    <p class="payment-note">💵 الدفع عند الاستلام</p>
+                </div>
+            </div>
+
+            <div class="success-actions">
+                <a href="{{ url_for('shop.home') }}" class="btn-primary">كمّل التسوق</a>
+                <a href="{{ url_for('cart.track_order') }}" class="btn-ghost-link">تتبّع الطلبية</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}لوحة التحكم — {{ store_name }}{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+</head>
+<body class="admin-body">
+
+<aside class="admin-sidebar">
+    <div class="admin-brand">
+        <span class="admin-brand-name">{{ store_name }}</span>
+        <span class="admin-brand-sub">لوحة التحكم</span>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="{{ url_for('admin.dashboard') }}" class="{{ 'is-active' if request.endpoint == 'admin.dashboard' }}">
+            نظرة عامة
+        </a>
+        <a href="{{ url_for('admin.orders_list') }}" class="{{ 'is-active' if 'order' in request.endpoint }}">
+            الطلبيات
+        </a>
+        <a href="{{ url_for('admin.products_list') }}" class="{{ 'is-active' if 'product' in request.endpoint or 'variant' in request.endpoint }}">
+            المنتجات
+        </a>
+        <a href="{{ url_for('admin.categories_list') }}" class="{{ 'is-active' if 'categor' in request.endpoint }}">
+            التصنيفات
+        </a>
+        <a href="{{ url_for('admin.offers_list') }}" class="{{ 'is-active' if 'offer' in request.endpoint }}">
+            العروض الخاصة
+        </a>
+        <a href="{{ url_for('admin.abandoned_list') }}" class="{{ 'is-active' if 'abandoned' in request.endpoint }}">
+            السلات المتروكة
+            {% if pending_abandoned %}<span class="nav-badge">{{ pending_abandoned }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin.reviews_list') }}" class="{{ 'is-active' if 'review' in request.endpoint }}">
+            التقييمات
+            {% if pending_reviews %}<span class="nav-badge">{{ pending_reviews }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin.upsells_list') }}" class="{{ 'is-active' if 'upsell' in request.endpoint }}">
+            الاقتراحات
+        </a>
+        <a href="{{ url_for('admin.coupons_list') }}" class="{{ 'is-active' if 'coupon' in request.endpoint }}">
+            كوبونات الخصم
+        </a>
+        <a href="{{ url_for('admin.landing_list') }}" class="{{ 'is-active' if 'landing' in request.endpoint }}">
+            صفحات الهبوط
+        </a>
+        <a href="{{ url_for('admin.shipping_list') }}" class="{{ 'is-active' if 'shipping' in request.endpoint or 'carrier' in request.endpoint }}">
+            أسعار التوصيل
+        </a>
+        <a href="{{ url_for('admin.integrations') }}" class="{{ 'is-active' if 'integration' in request.endpoint }}">
+            التكاملات
+        </a>
+
+        <a href="{{ url_for('admin.settings') }}" class="{{ 'is-active' if 'settings' in request.endpoint }}">
+            ⚙️ الإعدادات
+        </a>
+    </nav>
+
+    <div class="admin-sidebar-footer">
+        <a href="{{ url_for('shop.home') }}" target="_blank" class="admin-view-store">عرض المتجر ↗</a>
+        <form method="post" action="{{ url_for('admin.logout') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="admin-logout">خروج ({{ session.admin_username }})</button>
+        </form>
+    </div>
+</aside>
+
+<main class="admin-main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-stack">
+            {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

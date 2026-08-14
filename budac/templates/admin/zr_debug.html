@@ -1,0 +1,197 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">تشخيص ZR — {{ order.order_number }}</h1>
+
+<p style="margin: -8px 0 20px;">
+    <a href="{{ url_for('admin.order_detail', order_id=order.id) }}">← رجوع للطلبية</a>
+</p>
+
+<!-- ═════ 1. الإعدادات ═════ -->
+<h2 class="form-section-title">1. الإعدادات</h2>
+<table class="admin-table">
+    <tbody>
+        <tr>
+            <td>المفاتيح</td>
+            <td>
+                {% if config_ok %}
+                    <strong style="color:#4E7C59">✓ معمّرة</strong>
+                {% else %}
+                    <strong style="color:#B4453E">✗ ناقصة</strong>
+                    — حط <code>ZR_TENANT_ID</code> و <code>ZR_API_KEY</code> فمتغيرات Railway
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td>رابط الـAPI</td>
+            <td><code dir="ltr">{{ base_url }}</code></td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ═════ 2. الفحص المحلي ═════ -->
+<h2 class="form-section-title">2. الفحص المحلي</h2>
+{% if problems %}
+<div class="lp-errors" style="background:#FDECEA;border:1px solid #F3C9C4;padding:14px 18px;border-radius:12px;">
+    <strong>مشاكل لازم تتصلّح قبل الإرسال:</strong>
+    <ul style="margin:8px 0 0;padding-inline-start:20px;">
+        {% for p in problems %}<li>{{ p }}</li>{% endfor %}
+    </ul>
+</div>
+{% else %}
+<p style="color:#4E7C59;font-weight:600;">✓ بيانات الطلبية سليمة من جهتنا</p>
+{% endif %}
+
+<!-- ═════ 3. الـpayload ═════ -->
+<h2 class="form-section-title">3. شنو نبعثو لـZR</h2>
+{% if build_error %}
+<p style="color:#B4453E;">ما قدرناش نبنيو الطلب: {{ build_error }}</p>
+{% else %}
+<pre class="zr-code" dir="ltr">{{ preview }}</pre>
+
+{% if 'territoryId' in preview %}
+<p style="color:#4E7C59;font-weight:600;">✓ معرّف الوجهة (territoryId) موجود</p>
+{% else %}
+<div class="lp-errors" style="background:#FFF6E5;border:1px solid #E8D9A8;padding:14px 18px;border-radius:12px;">
+    <strong>⚠️ ماكانش <code>territoryId</code></strong>
+    <p style="margin:6px 0 0;font-size:14px;">
+        ZR يحدّد الوجهة بهاد المعرّف، ماشي بأسماء الولاية والبلدية.
+        بلاه يرد بـ400 <b>بلا أي رسالة</b> — بالضبط اللي شفتو.
+        <br>زر التجربة تحت يدوّر عليه تلقائيًا من مناطق ZR ويحفظو.
+    </p>
+</div>
+{% endif %}
+{% endif %}
+
+<!-- ═════ 3ب. تشخيص معرّف الوجهة ═════ -->
+{% if territory_diag %}
+<h2 class="form-section-title">3ب. ليش ما لقيناش المعرّف</h2>
+
+{% if territory_diag.error %}
+<p style="color:#B4453E;font-weight:600;">🔴 {{ territory_diag.error }}</p>
+{% endif %}
+
+<table class="admin-table">
+    <tbody>
+        <tr>
+            <td>مناطق وصلاتنا من ZR</td>
+            <td>
+                <strong>{{ territory_diag.total_territories }}</strong>
+                — منها <strong>{{ territory_diag.unique_ids }}</strong> فريدة
+                {% if territory_diag.unique_ids < territory_diag.total_territories %}
+                <br><small style="color:#B4453E">⚠️ فيه تكرار — ZR يتجاهل الترقيم</small>
+                {% endif %}
+            </td>
+        </tr>
+        <tr><td>منها من نوع commune</td><td><strong>{{ territory_diag.commune_level }}</strong></td></tr>
+        <tr><td>حجم الفهرس</td><td>{{ territory_diag.index_size }}</td></tr>
+        <tr>
+            <td>ولاية {{ territory_diag.wilaya_code }} موجودة؟</td>
+            <td>
+                {% if territory_diag.wilaya_found %}
+                <strong style="color:#4E7C59">✓ نعم — {{ territory_diag.wilaya_communes|length }} بلدية</strong>
+                {% else %}
+                <strong style="color:#B4453E">✗ لا — ZR ما عندوش مناطق بهاد الرمز</strong>
+                {% endif %}
+            </td>
+        </tr>
+        <tr><td>نبحثو على</td><td><code>{{ territory_diag.normalized }}</code></td></tr>
+        <tr>
+            <td>النتيجة</td>
+            <td>
+                {% if territory_diag.match %}
+                <strong style="color:#4E7C59">✓ {{ territory_diag.match }}</strong>
+                {% else %}
+                <strong style="color:#B4453E">✗ ما لقيناهش</strong>
+                {% endif %}
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+{% if territory_diag.suggestions %}
+<p style="margin-top:12px;"><strong>أسماء قريبة عند ZR:</strong></p>
+<pre class="zr-code">{{ territory_diag.suggestions | join('\n') }}</pre>
+{% endif %}
+
+{% if territory_diag.wilaya_communes %}
+<details style="margin-top:12px;">
+    <summary style="cursor:pointer;font-weight:700;">
+        شوف أسماء بلديات هاد الولاية كيما هي عند ZR
+        ({{ territory_diag.wilaya_communes|length }})
+    </summary>
+    <pre class="zr-code">{{ territory_diag.wilaya_communes | join('\n') }}</pre>
+</details>
+{% endif %}
+
+{% else %}
+<p style="margin-top:14px;">
+    <a href="{{ url_for('admin.order_zr_debug', order_id=order.id, check_territory=1) }}"
+       class="btn-admin btn-sm">🔍 افحص ليش ما لقيناش المعرّف</a>
+    <br><small class="muted">ياخذ 20–40 ثانية — يجيب كل مناطق ZR.</small>
+</p>
+{% endif %}
+
+<!-- ═════ 4. آخر رد ═════ -->
+<h2 class="form-section-title">4. آخر رد من ZR</h2>
+{% if last and last.get('status') %}
+<table class="admin-table">
+    <tbody>
+        <tr><td>المسار</td><td><code dir="ltr">{{ last.method }} {{ last.path }}</code></td></tr>
+        <tr>
+            <td>كود الحالة</td>
+            <td>
+                <strong style="color:{{ '#4E7C59' if last.status < 400 else '#B4453E' }}">
+                    {{ last.status }}
+                </strong>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<p style="margin-top:14px;font-weight:700;">الرد الخام:</p>
+<pre class="zr-code" dir="ltr">{{ last.response or '(فارغ)' }}</pre>
+
+{% if last_payload %}
+<p style="margin-top:14px;font-weight:700;">اللي بعثناه وقتها:</p>
+<pre class="zr-code" dir="ltr">{{ last_payload }}</pre>
+{% endif %}
+
+{% else %}
+<p class="muted">مازال ما بعثنا والو من آخر إعادة تشغيل. اضغط الزر تحت.</p>
+{% endif %}
+
+<!-- ═════ 5. تجربة ═════ -->
+<h2 class="form-section-title">5. جرّب الإرسال</h2>
+<p class="muted" style="font-size:14px;">
+    يبعث فعليًا لـZR ويرجّعك هنا بالرد الكامل.
+    {% if order.tracking_number %}
+    <br>⚠️ هاد الطلبية عندها رقم تتبّع — التجربة ممكن تنشئ طرد مكرر.
+    {% endif %}
+</p>
+
+<form method="post" action="{{ url_for('admin.order_zr_send_test', order_id=order.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn-admin"
+            onclick="return confirm('نبعثو الطلبية لـZR دابا؟')">
+        جرّب الإرسال وشوف الرد
+    </button>
+</form>
+
+<style>
+    .zr-code {
+        background: #1E1828;
+        color: #E8E2F0;
+        padding: 14px 16px;
+        border-radius: 12px;
+        font-size: 13px;
+        line-height: 1.6;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .form-section-title { margin-top: 28px; }
+</style>
+
+{% endblock %}

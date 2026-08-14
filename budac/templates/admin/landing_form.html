@@ -1,0 +1,155 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+{# القيمة: من الفورم المرفوض أولاً، وإلا من الصفحة المحفوظة، وإلا الافتراضي #}
+{% macro val(key, default='') %}{{ form.get(key) if form.get(key) is not none else (page[key] if page and page[key] is not none else default) }}{% endmacro %}
+
+<h1 class="page-title">
+    {{ 'تعديل صفحة الهبوط' if page else 'صفحة هبوط جديدة' }}
+</h1>
+
+<form method="post" class="admin-form" style="max-width: 720px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <!-- ═════ الأساسيات ═════ -->
+    <h2 class="form-section-title">الأساسيات</h2>
+
+    <label class="admin-field">
+        <span>اسم داخلي *</span>
+        <input type="text" name="internal_name" required
+               value="{{ val('internal_name') }}"
+               placeholder="مثلاً: حملة شريط الإضاءة — أوت">
+        <small>للتنظيم عندك فقط، الزبون ما يشوفوش.</small>
+    </label>
+
+    <label class="admin-field">
+        <span>الرابط *</span>
+        <input type="text" name="slug" required
+               value="{{ val('slug') }}"
+               placeholder="strip-promo" dir="ltr">
+        <small>الصفحة تولّي على <code>budacdz.com/lp/<b>الرابط</b></code> — حروف لاتينية وشرطات.</small>
+    </label>
+
+    <label class="admin-field">
+        <span>المنتج *</span>
+        <select name="product_id" required>
+            <option value="">اختر المنتج</option>
+            {% for p in products %}
+            <option value="{{ p.id }}"
+                {{ 'selected' if (form.get('product_id') or (page.product_id if page else none)) == p.id }}>
+                {{ p.name }} — {{ "{:,}".format(p.price) }} دج
+            </option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <!-- ═════ المحتوى ═════ -->
+    <h2 class="form-section-title">المحتوى</h2>
+
+    <label class="admin-field">
+        <span>العنوان الرئيسي *</span>
+        <input type="text" name="headline" required maxlength="200"
+               value="{{ val('headline') }}"
+               placeholder="نوّر إطاراتك بلمسة واحدة">
+        <small>أول حاجة يقراها الزائر. ركّز على الفايدة، ماشي اسم المنتج.</small>
+    </label>
+
+    <label class="admin-field">
+        <span>العنوان الفرعي</span>
+        <input type="text" name="subheadline" maxlength="300"
+               value="{{ val('subheadline') }}"
+               placeholder="شريط LED يلصق فثواني — بلا أدوات ولا كهربائي">
+    </label>
+
+    <label class="admin-field">
+        <span>المميزات</span>
+        <textarea name="benefits" rows="5"
+                  placeholder="تركيب بلا أدوات&#10;إضاءة تدوم 5 سنين&#10;ضمان 6 أشهر">{{ val('benefits') }}</textarea>
+        <small><b>سطر لكل ميزة.</b> تبان كقائمة بعلامات ✓.</small>
+    </label>
+
+    <label class="admin-field">
+        <span>الوصف</span>
+        <textarea name="body" rows="6">{{ val('body') }}</textarea>
+        <small>سطر لكل فقرة.</small>
+    </label>
+
+    <label class="admin-field">
+        <span>نص زر الطلب</span>
+        <input type="text" name="cta_text" maxlength="80"
+               value="{{ val('cta_text', 'اطلب الآن') }}">
+    </label>
+
+    <!-- ═════ السعر ═════ -->
+    <h2 class="form-section-title">السعر</h2>
+
+    <div class="form-row">
+        <label class="admin-field">
+            <span>سعر الحملة (دج)</span>
+            <input type="number" name="campaign_price" min="0"
+                   value="{{ val('campaign_price') }}">
+            <small>خليه فارغ باش ياخذ سعر المنتج العادي.</small>
+        </label>
+
+        <label class="admin-field">
+            <span>السعر المشطوب (دج)</span>
+            <input type="number" name="compare_at_price" min="0"
+                   value="{{ val('compare_at_price') }}">
+            <small>يبان مشطوب، ونسبة الخصم تتحسب تلقائيًا.</small>
+        </label>
+    </div>
+
+    <label class="admin-checkbox">
+        <input type="checkbox" name="free_shipping"
+               {{ 'checked' if (page.free_shipping if page else false) }}>
+        <span>التوصيل مجاني فهاد الصفحة</span>
+    </label>
+
+    <!-- ═════ الإقناع ═════ -->
+    <h2 class="form-section-title">عناصر الإقناع</h2>
+
+    <label class="admin-field">
+        <span>تنبيه المخزون</span>
+        <input type="text" name="stock_warning" maxlength="120"
+               value="{{ val('stock_warning') }}"
+               placeholder="باقي 7 قطع فقط">
+        <small>⚠️ اكتب رقم حقيقي. الزبون اللي يرجع ويلقى نفس الرقم يحس بالخداع.</small>
+    </label>
+
+    <label class="admin-checkbox">
+        <input type="checkbox" name="show_countdown"
+               {{ 'checked' if (page.show_countdown if page else false) }}>
+        <span>عرض عدّاد تنازلي</span>
+    </label>
+
+    <div class="form-row">
+        <label class="admin-field">
+            <span>مدة العدّاد (ساعات)</span>
+            <input type="number" name="countdown_hours" min="1" max="168"
+                   value="{{ val('countdown_hours', 24) }}">
+        </label>
+
+        <label class="admin-field">
+            <span>أقصى كمية للطلبية</span>
+            <input type="number" name="max_quantity" min="1" max="100"
+                   value="{{ val('max_quantity', 10) }}">
+        </label>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="btn-admin">
+            {{ 'حفظ التعديلات' if page else 'إنشاء الصفحة' }}
+        </button>
+        <a href="{{ url_for('admin.landing_list') }}" class="btn-admin btn-ghost">إلغاء</a>
+    </div>
+</form>
+
+{% if page %}
+<p style="margin-top: 18px;">
+    <a href="{{ url_for('landing.view', slug=page.slug) }}" target="_blank" rel="noopener">
+        شوف الصفحة ↗
+    </a>
+</p>
+{% endif %}
+
+{% endblock %}

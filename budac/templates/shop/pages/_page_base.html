@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} — {{ store_name }}{% endblock %}
+{% block content %}
+<section class="static-page">
+    <div class="container container-narrow">
+        <h1 class="page-heading">{{ page_title }}</h1>
+        <div class="page-content">
+            {% block page_body %}{% endblock %}
+        </div>
+    </div>
+</section>
+{% endblock %}
