@@ -44,6 +44,9 @@ def create_app():
     from routes.cart import cart_bp
     app.register_blueprint(cart_bp)
 
+    from routes.landing import landing_bp
+    app.register_blueprint(landing_bp)
+
     # ⚠️ إذا الصور مخزّنة فقرص دائم (UPLOAD_ROOT)، Flask ما يعرفش يخدمها
     # لأنها برّا مجلد static. نزيدو مسار يخدمها.
     upload_root = app.config.get("UPLOAD_ROOT", "")

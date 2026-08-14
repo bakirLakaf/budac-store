@@ -1080,3 +1080,110 @@ class UpsellRule(db.Model):
 
     def __repr__(self):
         return f"<UpsellRule {self.trigger_product_id} → {self.suggested_product_id}>"
+
+
+class LandingPage(db.Model):
+    """
+    صفحة هبوط لحملة إعلانية — منتج واحد + فورم طلب مباشر.
+
+    ⚠️ ليش منفصلة عن صفحة المنتج العادية؟
+    صفحة المنتج فيها هيدر، تصنيفات، منتجات مقترحة، سلة... كلها تشتّت
+    الزائر اللي جاي من إعلان. صفحة الهبوط تحذف كلش وتخلي هدف واحد:
+    يعمّر الفورم. هذا يرفع نسبة التحويل بشكل ملحوظ.
+
+    الفورم يُنشئ الطلبية مباشرة — بلا مرور بالسلة.
+    """
+    __tablename__ = "landing_pages"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # الرابط: /lp/<slug>  — قصير وواضح باش يتحط فالإعلان
+    slug = db.Column(db.String(160), nullable=False, unique=True, index=True)
+    internal_name = db.Column(db.String(160), nullable=False)   # للأدمن فقط
+
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey("product_variants.id"), nullable=True)
+
+    # ---------- المحتوى ----------
+    headline = db.Column(db.String(200), nullable=False)
+    subheadline = db.Column(db.String(300), nullable=True)
+    body = db.Column(db.Text, nullable=True)          # وصف مطوّل — سطر لكل فقرة
+    benefits = db.Column(db.Text, nullable=True)      # مميزات — سطر لكل وحدة
+    cta_text = db.Column(db.String(80), nullable=False, default="اطلب الآن")
+
+    # صورة الغلاف. إذا فارغة، ناخذو صورة المنتج
+    hero_image = db.Column(db.String(255), nullable=True)
+
+    # ---------- السعر ----------
+    # سعر خاص بالحملة. إذا None، ناخذو سعر المنتج العادي
+    campaign_price = db.Column(db.Integer, nullable=True)
+    compare_at_price = db.Column(db.Integer, nullable=True)   # السعر المشطوب
+
+    # ---------- عناصر الإقناع ----------
+    show_countdown = db.Column(db.Boolean, nullable=False, default=False)
+    countdown_hours = db.Column(db.Integer, nullable=False, default=24)
+    stock_warning = db.Column(db.String(120), nullable=True)   # "باقي 7 قطع فقط"
+    free_shipping = db.Column(db.Boolean, nullable=False, default=False)
+
+    # ---------- إعدادات ----------
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    max_quantity = db.Column(db.Integer, nullable=False, default=10)
+
+    # ---------- إحصائيات ----------
+    view_count = db.Column(db.Integer, nullable=False, default=0)
+    order_count = db.Column(db.Integer, nullable=False, default=0)
+
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    product = db.relationship("Product", foreign_keys=[product_id])
+    variant = db.relationship("ProductVariant", foreign_keys=[variant_id])
+
+    @property
+    def unit_price(self):
+        """السعر المعتمد: سعر الحملة، وإلا سعر التنويعة، وإلا سعر المنتج."""
+        if self.campaign_price:
+            return self.campaign_price
+        if self.variant and self.variant.price:
+            return self.variant.price
+        return self.product.price if self.product else 0
+
+    @property
+    def image_filename(self):
+        """صورة الغلاف، وإلا صورة المنتج."""
+        if self.hero_image:
+            return self.hero_image
+        return self.product.image_filename if self.product else None
+
+    @property
+    def benefit_lines(self):
+        """المميزات كقائمة — سطر فارغ يتجاهل."""
+        if not self.benefits:
+            return []
+        return [ln.strip() for ln in self.benefits.splitlines() if ln.strip()]
+
+    @property
+    def body_paragraphs(self):
+        """فقرات الوصف."""
+        if not self.body:
+            return []
+        return [ln.strip() for ln in self.body.splitlines() if ln.strip()]
+
+    @property
+    def has_discount(self):
+        return bool(self.compare_at_price and self.compare_at_price > self.unit_price)
+
+    @property
+    def discount_percent(self):
+        if not self.has_discount:
+            return 0
+        return round((1 - self.unit_price / self.compare_at_price) * 100)
+
+    @property
+    def conversion_rate(self):
+        """نسبة التحويل — كم زائر ولّى زبون."""
+        if not self.view_count:
+            return 0
+        return round(self.order_count / self.view_count * 100, 1)
+
+    def __repr__(self):
+        return f"<LandingPage {self.slug}>"
