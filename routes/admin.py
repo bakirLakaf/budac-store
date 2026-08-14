@@ -17,10 +17,12 @@ from flask import (
 )
 from sqlalchemy import func
 
+import os
+
 from models import (
     db, Product, Category, ProductImage, ProductVariant,
     Offer, OfferItem, Carrier, ShippingRate, AdminUser, Coupon, Order,
-    AbandonedCart, Review, UpsellRule,
+    AbandonedCart, Review, UpsellRule, LandingPage,
 )
 from services.cart import CartLine
 from services.orders import restore_stock, reserve_stock, OrderError
@@ -1371,3 +1373,195 @@ def settings():
         "admin/settings.html",
         show_coupon_field=StoreSetting.get_bool("show_coupon_field"),
     )
+
+
+# ==================== صفحات الهبوط ====================
+
+def _read_landing_form(data):
+    """يقرا فورم صفحة الهبوط — مشترك بين الإنشاء والتعديل."""
+    return {
+        "internal_name": (data.get("internal_name") or "").strip(),
+        "slug": slugify(data.get("slug") or ""),
+        "product_id": data.get("product_id", type=int),
+        "variant_id": data.get("variant_id", type=int) or None,
+        "headline": (data.get("headline") or "").strip(),
+        "subheadline": (data.get("subheadline") or "").strip() or None,
+        "body": (data.get("body") or "").strip() or None,
+        "benefits": (data.get("benefits") or "").strip() or None,
+        "cta_text": (data.get("cta_text") or "").strip() or "اطلب الآن",
+        "campaign_price": data.get("campaign_price", type=int) or None,
+        "compare_at_price": data.get("compare_at_price", type=int) or None,
+        "show_countdown": bool(data.get("show_countdown")),
+        "countdown_hours": data.get("countdown_hours", type=int) or 24,
+        "stock_warning": (data.get("stock_warning") or "").strip() or None,
+        "free_shipping": bool(data.get("free_shipping")),
+        "max_quantity": data.get("max_quantity", type=int) or 10,
+    }
+
+
+@admin_bp.route("/landing-pages")
+@login_required
+def landing_list():
+    pages = LandingPage.query.order_by(LandingPage.created_at.desc()).all()
+    return render_template("admin/landing_list.html", pages=pages)
+
+
+@admin_bp.route("/landing-pages/new", methods=["GET", "POST"])
+@login_required
+def landing_new():
+    products = Product.query.filter_by(is_active=True).order_by(Product.name).all()
+
+    if request.method == "POST":
+        form = _read_landing_form(request.form)
+
+        errors = []
+        if not form["internal_name"]:
+            errors.append("اكتب اسم داخلي للصفحة")
+        if not form["slug"]:
+            errors.append("الرابط مطلوب")
+        elif LandingPage.query.filter_by(slug=form["slug"]).first():
+            errors.append(f"الرابط «{form['slug']}» مستعمل من قبل")
+        if not form["product_id"]:
+            errors.append("اختر المنتج")
+        if not form["headline"]:
+            errors.append("اكتب العنوان الرئيسي")
+
+        if errors:
+            for e in errors:
+                flash(e, "error")
+            return render_template("admin/landing_form.html",
+                                   page=None, products=products, form=form)
+
+        page = LandingPage(**form)
+        db.session.add(page)
+        db.session.commit()
+
+        flash(f"تم إنشاء صفحة الهبوط — الرابط: /lp/{page.slug}", "success")
+        return redirect(url_for("admin.landing_list"))
+
+    return render_template("admin/landing_form.html",
+                           page=None, products=products, form={})
+
+
+@admin_bp.route("/landing-pages/<int:page_id>/edit", methods=["GET", "POST"])
+@login_required
+def landing_edit(page_id):
+    page = LandingPage.query.get_or_404(page_id)
+    products = Product.query.filter_by(is_active=True).order_by(Product.name).all()
+
+    if request.method == "POST":
+        form = _read_landing_form(request.form)
+
+        errors = []
+        if not form["slug"]:
+            errors.append("الرابط مطلوب")
+        else:
+            clash = LandingPage.query.filter(
+                LandingPage.slug == form["slug"],
+                LandingPage.id != page.id,
+            ).first()
+            if clash:
+                errors.append(f"الرابط «{form['slug']}» مستعمل فصفحة أخرى")
+        if not form["headline"]:
+            errors.append("اكتب العنوان الرئيسي")
+
+        if errors:
+            for e in errors:
+                flash(e, "error")
+            return render_template("admin/landing_form.html",
+                                   page=page, products=products, form=form)
+
+        for key, value in form.items():
+            setattr(page, key, value)
+        db.session.commit()
+
+        flash("تم حفظ التعديلات", "success")
+        return redirect(url_for("admin.landing_list"))
+
+    return render_template("admin/landing_form.html",
+                           page=page, products=products, form={})
+
+
+@admin_bp.route("/landing-pages/<int:page_id>/toggle", methods=["POST"])
+@login_required
+def landing_toggle(page_id):
+    page = LandingPage.query.get_or_404(page_id)
+    page.is_active = not page.is_active
+    db.session.commit()
+    state = "مفعّلة" if page.is_active else "معطّلة"
+    flash(f"صفحة «{page.internal_name}» ولات {state}", "success")
+    return redirect(url_for("admin.landing_list"))
+
+
+@admin_bp.route("/landing-pages/<int:page_id>/delete", methods=["POST"])
+@login_required
+def landing_delete(page_id):
+    page = LandingPage.query.get_or_404(page_id)
+    name = page.internal_name
+    db.session.delete(page)
+    db.session.commit()
+    flash(f"تم حذف صفحة «{name}»", "success")
+    return redirect(url_for("admin.landing_list"))
+
+
+@admin_bp.route("/orders/<int:order_id>/zr-debug")
+@login_required
+def order_zr_debug(order_id):
+    """
+    تشخيص الإرسال لـZR — يعرض بالضبط شنو نبعثو وشنو يرد.
+
+    ⚠️ ليش هاد الصفحة؟
+    ZR يرد بـ400 «One or more validation errors» بلا تفاصيل فبعض الحالات.
+    بلا ما نشوفو الـpayload الحقيقي والرد الخام، أي إصلاح يكون تخمين.
+    """
+    from services import zrexpress as zr
+
+    order = Order.query.get_or_404(order_id)
+
+    # نبنيو نفس الـpayload اللي غادي يتبعث — بلا ما نبعثوه
+    preview, build_error = None, None
+    try:
+        import json as _json
+        payload = zr.build_parcel_payload(order, order.commune_external_id or None)
+        # ⚠️ ensure_ascii=False باش العربية تبان كيما هي، ماشي \u0627\u0644...
+        preview = _json.dumps(payload, ensure_ascii=False, indent=2)
+    except Exception as e:
+        build_error = str(e)
+
+    return render_template(
+        "admin/zr_debug.html",
+        order=order,
+        preview=preview,
+        build_error=build_error,
+        problems=zr._check_parcel_data(order),
+        last=zr.LAST_EXCHANGE,
+        last_payload=(
+            __import__("json").dumps(zr.LAST_EXCHANGE.get("payload"),
+                                     ensure_ascii=False, indent=2)
+            if zr.LAST_EXCHANGE.get("payload") else None
+        ),
+        config_ok=bool(os.environ.get("ZR_TENANT_ID", "").strip()
+                       and os.environ.get("ZR_API_KEY", "").strip()),
+        base_url=zr.BASE_URL,
+    )
+
+
+@admin_bp.route("/orders/<int:order_id>/zr-send-test", methods=["POST"])
+@login_required
+def order_zr_send_test(order_id):
+    """
+    يجرّب الإرسال ويرجّع للتشخيص — بلا ما يغيّر حالة الطلبية.
+
+    مفيد باش نجرّبو تعديلات على الـpayload بلا ما نخربو الطلبية.
+    """
+    from services import zrexpress as zr
+
+    order = Order.query.get_or_404(order_id)
+
+    try:
+        zr.create_parcel(order, territory_id=order.commune_external_id or None)
+        flash("نجح الإرسال التجريبي — شوف الرد تحت", "success")
+    except Exception as e:
+        flash(f"فشل: {e}", "error")
+
+    return redirect(url_for("admin.order_zr_debug", order_id=order.id))

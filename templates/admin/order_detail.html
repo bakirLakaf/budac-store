@@ -111,6 +111,7 @@
                 <p class="hint">
                     يحتاج مفاتيح ZR فـ.env —
                     <a href="{{ url_for('admin.integrations') }}">شوف التكاملات</a>
+                    · <a href="{{ url_for('admin.order_zr_debug', order_id=order.id) }}">🔍 تشخيص الإرسال</a>
                 </p>
             {% endif %}
         </div>

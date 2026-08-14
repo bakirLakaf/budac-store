@@ -52,6 +52,11 @@ def _headers():
     }
 
 
+# ⚠️ نخزّنو آخر طلب ورد لـZR فالذاكرة باش صفحة التشخيص تعرضهم.
+# ماشي فقاعدة البيانات: بيانات مؤقتة، وتتمسح مع إعادة التشغيل.
+LAST_EXCHANGE = {}
+
+
 def _request(method, path, **kwargs):
     """
     ينفّذ طلب لـZR ويترجم الأخطاء لرسائل عربية مفهومة.
@@ -68,6 +73,20 @@ def _request(method, path, **kwargs):
         raise ZRError("ZR Express ما ردّش فالوقت — عاود جرّب بعد شوية")
     except requests.RequestException as e:
         raise ZRError(f"ما قدرناش نوصلو لـZR Express: {e}")
+
+    # نسجّلو التبادل قبل أي رمي خطأ
+    try:
+        body_preview = response.text[:4000]
+    except Exception:
+        body_preview = ""
+
+    LAST_EXCHANGE.update({
+        "method": method,
+        "path": path,
+        "payload": kwargs.get("json"),
+        "status": response.status_code,
+        "response": body_preview,
+    })
 
     if response.status_code == 401:
         raise ZRError("مفاتيح ZR Express غير صحيحة — راجع ZR_TENANT_ID و ZR_API_KEY")
@@ -271,32 +290,20 @@ def _check_parcel_data(order):
     return problems
 
 
-def create_parcel(order, territory_id=None):
+def build_parcel_payload(order, territory_id=None):
     """
-    ينشئ طرد عند ZR Express من طلبية عندنا.
-
-    order        : كائن Order
-    territory_id : معرّف الولاية عند ZR (إذا معروف)
-
-    يرجع dict فيه trackingNumber وparcelId.
-    يرمي ZRError إذا فشل — والمستدعي يقرر واش يدير.
+    يبني الـpayload اللي يتبعث لـZR — منفصل باش صفحة التشخيص تعرضو
+    بلا ما تبعث حاجة.
     """
-    # نفحصو أولاً — أحسن رسالة عربية واضحة من 400 غامض
-    problems = _check_parcel_data(order)
-    if problems:
-        raise ZRError("الطلبية ما تقبلهاش ZR: " + " | ".join(problems))
-
     is_office = order.delivery_type == "office"
 
     # ⚠️ كل نوع توصيل يبعث معلومة مختلفة:
     #   • منزل → البلدية + العنوان الدقيق
     #   • مكتب → اسم المكتب (البلدية ما عندهاش معنى هنا)
     if is_office:
-        destination = order.pickup_point_name or order.wilaya_name
         address = order.pickup_point_name or order.wilaya_name
         commune = ""
     else:
-        destination = order.commune or order.wilaya_name
         address = order.address_note or order.commune or order.wilaya_name
         commune = order.commune or ""
 
@@ -326,6 +333,23 @@ def create_parcel(order, territory_id=None):
 
     if territory_id:
         payload["territoryId"] = territory_id
+
+    return payload
+
+
+def create_parcel(order, territory_id=None):
+    """
+    ينشئ طرد عند ZR Express من طلبية عندنا.
+
+    يرجع dict فيه tracking_number وparcel_id.
+    يرمي ZRError إذا فشل — والمستدعي يقرر واش يدير.
+    """
+    # نفحصو أولاً — أحسن رسالة عربية واضحة من 400 غامض
+    problems = _check_parcel_data(order)
+    if problems:
+        raise ZRError("الطلبية ما تقبلهاش ZR: " + " | ".join(problems))
+
+    payload = build_parcel_payload(order, territory_id)
 
     data = _request("POST", "/parcels", json=payload)
 
