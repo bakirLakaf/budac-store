@@ -573,15 +573,21 @@ def wipe_products():
     يمسح كل المنتجات والصور والموديلات قبل الاستيراد.
 
     ⚠️ **ما يمسّش الطلبيات.** أسطر الطلبية (OrderItem) تخزّن اسم المنتج
-    وسعرو وقت البيع كنص، فالطلبيات القديمة تبقى تبان صحيحة حتى بعد
-    مسح المنتج. هذا مقصود — السجل التجاري ما يتغيّرش.
+    وسعرو وصورتو وقت البيع كنص، فالطلبيات القديمة تبقى تبان صحيحة حتى
+    بعد مسح المنتج. هذا مقصود — السجل التجاري ما يتغيّرش.
 
-    نمسحو كذلك أي روابط تشير للمنتجات (اقتراحات، عناصر عروض) باش
-    ما يبقاش مفتاح أجنبي معلّق.
+    ⚠️ درس من Postgres:
+    ما يكفيش نمسحو المنتجات — لازم **نفصلو الروابط أولاً**. أسطر
+    الطلبية عندها مفاتيح أجنبية (product_id, variant_id, offer_id)،
+    وPostgres يرفض حذف صف مازال مرتبط. SQLite متساهل ويقبل، لهذا
+    الخطأ ما بانش فالتطوير المحلي.
+
+    الحل: نحطّو المفاتيح NULL (الحقول nullable أصلاً) — السطر يبقى
+    كامل بالاسم والسعر، غير الرابط يتفكّ.
     """
     from models import (
         ProductImage, ProductVariant, VariantPriceTier,
-        UpsellRule, OfferItem, Review,
+        UpsellRule, OfferItem, Review, OrderItem,
     )
 
     counts = {
@@ -594,16 +600,38 @@ def wipe_products():
     for label, n in counts.items():
         print(f"   {label}: {n}")
 
-    # ⚠️ الترتيب مهم: نبداو بالأبناء وإلا المفاتيح الأجنبية تمنع الحذف
+    # ---------- 1) نفكّو روابط أسطر الطلبيات ----------
+    detached = (
+        OrderItem.query
+        .filter(
+            (OrderItem.product_id.isnot(None))
+            | (OrderItem.variant_id.isnot(None))
+            | (OrderItem.offer_id.isnot(None))
+        )
+        .update(
+            {"product_id": None, "variant_id": None, "offer_id": None},
+            synchronize_session=False,
+        )
+    )
+    if detached:
+        print(f"   🔗 فكّينا {detached} سطر طلبية (الأسماء والأسعار باقية)")
+
+    db.session.commit()
+
+    # ---------- 2) نمسحو من الأبناء للآباء ----------
     VariantPriceTier.query.delete(synchronize_session=False)
     UpsellRule.query.delete(synchronize_session=False)
     OfferItem.query.delete(synchronize_session=False)
     Review.query.delete(synchronize_session=False)
+    db.session.commit()
+
     ProductVariant.query.delete(synchronize_session=False)
     ProductImage.query.delete(synchronize_session=False)
-    Product.query.delete(synchronize_session=False)
-
     db.session.commit()
+
+    Product.query.delete(synchronize_session=False)
+    db.session.commit()
+
     print("   ✅ تفرّغو — الطلبيات ما تمسّتش")
 
 
