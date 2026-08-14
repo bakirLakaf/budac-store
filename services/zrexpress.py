@@ -818,3 +818,81 @@ def sync_communes():
         "our_total": len(our_communes),
         "warnings": [id_warning] if id_warning else [],
     }
+
+
+def diagnose_territory_lookup(wilaya_code, commune_name):
+    """
+    يشرح **ليش** البحث عن معرّف المنطقة نجح ولا فشل.
+
+    ⚠️ ضروري لأن lookup_territory_id يرجّع None بلا سبب. بلا هاد التشخيص
+    ما نعرفوش واش المشكل: ZR ما ردّش، ولا الولاية ماكانتش، ولا الاسم
+    مكتوب بطريقة مختلفة.
+
+    يرجّع dict فيه كل التفاصيل — صفحة التشخيص تعرضهم.
+    """
+    result = {
+        "wilaya_code": wilaya_code,
+        "commune_name": commune_name,
+        "normalized": _normalize_arabic(commune_name or ""),
+        "error": None,
+        "total_territories": 0,
+        "commune_level": 0,
+        "index_size": 0,
+        "wilaya_found": False,
+        "wilaya_communes": [],
+        "match": None,
+    }
+
+    try:
+        items = get_territories()
+    except Exception as e:
+        result["error"] = f"ما قدرناش نجيبو المناطق من ZR: {e}"
+        return result
+
+    # ⚠️ ZR ممكن يرد بحاجة ماشي قائمة — ما نثقوش ونكرشو فالتشخيص نفسو
+    if not isinstance(items, list):
+        result["error"] = (
+            f"ZR رجّع نوع غير متوقع ({type(items).__name__}) بدل قائمة مناطق"
+        )
+        return result
+
+    if not items:
+        result["error"] = "ZR رجّع قائمة مناطق فارغة"
+        return result
+
+    result["total_territories"] = len(items)
+    result["commune_level"] = sum(
+        1 for it in items if (it.get("level") or "").lower() == "commune"
+    )
+
+    if not result["commune_level"]:
+        levels = sorted({(it.get("level") or "?") for it in items[:200]})
+        result["error"] = (
+            "ماكانش ولا منطقة من نوع «commune». "
+            f"الأنواع الموجودة: {', '.join(levels)}"
+        )
+        return result
+
+    try:
+        index = _build_territory_index(force=True)
+    except Exception as e:
+        result["error"] = f"فشل بناء الفهرس: {e}"
+        return result
+
+    result["index_size"] = len(index)
+
+    target = str(wilaya_code or "").zfill(2)
+
+    # كل بلديات هاد الولاية فالفهرس — باش نشوفو الأسماء كيما هي عند ZR
+    names = sorted({k[1] for k in index.keys() if k[0] == target})
+    result["wilaya_found"] = bool(names)
+    result["wilaya_communes"] = names[:60]
+
+    result["match"] = index.get((target, result["normalized"]))
+
+    if not result["match"] and names:
+        # اقتراحات: أسماء تبدا بنفس الحروف
+        prefix = result["normalized"][:3]
+        result["suggestions"] = [n for n in names if n.startswith(prefix)][:10]
+
+    return result

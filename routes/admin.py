@@ -1239,8 +1239,15 @@ def order_send_to_carrier(order_id):
             if territory_id:
                 order.commune_external_id = territory_id
                 db.session.commit()
-        except Exception:
-            pass  # ما لقيناش — نكملو ونخليو ZR يقرر
+            else:
+                # ⚠️ ما نبلعوش الفشل بصمت — الأدمن لازم يعرف
+                flash(
+                    f"ما لقيناش معرّف البلدية «{order.commune}» عند ZR. "
+                    "اضغط «افحص ليش ما لقيناش المعرّف» فصفحة التشخيص.",
+                    "warning",
+                )
+        except Exception as e:
+            flash(f"فشل البحث عن معرّف البلدية: {e}", "warning")
 
     try:
         result = create_parcel(order, territory_id=territory_id)
@@ -1546,6 +1553,10 @@ def order_zr_debug(order_id):
         preview=preview,
         build_error=build_error,
         problems=zr._check_parcel_data(order),
+        territory_diag=(
+            zr.diagnose_territory_lookup(order.wilaya_code, order.commune)
+            if request.args.get("check_territory") else None
+        ),
         last=zr.LAST_EXCHANGE,
         last_payload=(
             __import__("json").dumps(zr.LAST_EXCHANGE.get("payload"),
@@ -1578,8 +1589,13 @@ def order_zr_send_test(order_id):
                 order.commune_external_id = territory_id
                 db.session.commit()
                 flash(f"لقينا معرّف البلدية وحفظناه: {territory_id}", "success")
-        except Exception:
-            pass
+            else:
+                flash(
+                    f"ما لقيناش معرّف «{order.commune}» — شوف القسم 3ب تحت",
+                    "warning",
+                )
+        except Exception as e:
+            flash(f"فشل البحث عن المعرّف: {e}", "warning")
 
     try:
         zr.create_parcel(order, territory_id=territory_id)
