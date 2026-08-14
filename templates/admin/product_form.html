@@ -274,22 +274,33 @@
                         <tr>
                             <td><input type="number" name="min_quantity" value="{{ t.min_quantity }}" min="1"></td>
                             <td><input type="number" name="max_quantity" value="{{ t.max_quantity or '' }}" min="1" placeholder="بلا حد"></td>
-                            <td><input type="number" name="unit_price" value="{{ t.unit_price }}" min="0"></td>
+                            <td>
+                                <input type="number" name="unit_price" value="{{ t.unit_price }}" min="0">
+                                <button type="button" class="tier-remove" title="امسح هاد السطر"
+                                        aria-label="امسح السطر">×</button>
+                            </td>
                         </tr>
                         {% endfor %}
 
-                        {# صفوف فارغة باش الأدمن يزيد بلا ما يضغط زر #}
-                        {% for _ in range(2) %}
+                        {# صف فارغ واحد — والباقي يتزاد بزر «+» بلا حدود #}
                         <tr>
                             <td><input type="number" name="min_quantity" min="1" placeholder="مثلاً 100"></td>
                             <td><input type="number" name="max_quantity" min="1" placeholder="بلا حد"></td>
-                            <td><input type="number" name="unit_price" min="0" placeholder="مثلاً 420"></td>
+                            <td>
+                                <input type="number" name="unit_price" min="0" placeholder="مثلاً 420">
+                                <button type="button" class="tier-remove" title="امسح هاد السطر"
+                                        aria-label="امسح السطر">×</button>
+                            </td>
                         </tr>
-                        {% endfor %}
                     </tbody>
                 </table>
 
-                <button type="submit" class="btn-admin btn-sm">احفظ الأسعار</button>
+                <div class="tiers-actions">
+                    <button type="button" class="btn-admin btn-sm btn-ghost tier-add">
+                        + زيد عرض آخر
+                    </button>
+                    <button type="submit" class="btn-admin btn-sm">احفظ الأسعار</button>
+                </div>
             </form>
         </div>
 
@@ -325,3 +336,57 @@
 {% endif %}
 
 {% endblock %}
+
+<script>
+/**
+ * أسعار حسب الكمية — إضافة/مسح صفوف بلا حدود.
+ *
+ * ⚠️ ليش JS وماشي صفوف ثابتة؟
+ * قبل كانو صفّين فارغين فقط. الأدمن اللي يحتاج 4 عروض ولا 5 كان لازم
+ * يحفظ ويعاود يفتح فكل مرة. دابا يزيد قد ما يحب فنفس الصفحة.
+ */
+(function () {
+    'use strict';
+
+    /** يبني صف فارغ جديد */
+    function makeRow() {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td><input type="number" name="min_quantity" min="1" placeholder="مثلاً 100"></td>' +
+            '<td><input type="number" name="max_quantity" min="1" placeholder="بلا حد"></td>' +
+            '<td>' +
+                '<input type="number" name="unit_price" min="0" placeholder="مثلاً 420">' +
+                '<button type="button" class="tier-remove" title="امسح هاد السطر" ' +
+                'aria-label="امسح السطر">×</button>' +
+            '</td>';
+        return tr;
+    }
+
+    document.addEventListener('click', function (e) {
+        // ---------- زيد عرض ----------
+        var addBtn = e.target.closest('.tier-add');
+        if (addBtn) {
+            var body = addBtn.closest('form').querySelector('.tiers-body');
+            var row = makeRow();
+            body.appendChild(row);
+            row.querySelector('input').focus();   // الفوكس على «من» مباشرة
+            return;
+        }
+
+        // ---------- امسح سطر ----------
+        var removeBtn = e.target.closest('.tier-remove');
+        if (removeBtn) {
+            var tr = removeBtn.closest('tr');
+            var tbody = tr.parentNode;
+
+            // ⚠️ نخليو دايمًا سطر واحد على الأقل — وإلا الأدمن يلقى
+            // جدول فارغ بلا طريقة يزيد بيها بلا زر
+            if (tbody.querySelectorAll('tr').length > 1) {
+                tr.remove();
+            } else {
+                tr.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+            }
+        }
+    });
+})();
+</script>

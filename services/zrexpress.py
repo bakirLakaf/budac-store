@@ -22,6 +22,10 @@ import os
 import requests
 
 BASE_URL = "https://api.zrexpress.app/api/v1.0"
+
+# ⚠️ اسم موحّد يتبعث لـZR بدل أسماء المنتجات الحقيقية.
+# باش نبدّلو، غيّر هاد السطر فقط.
+ZR_PRODUCT_LABEL = "أكسسوارات"
 TIMEOUT = 25
 
 
@@ -80,12 +84,27 @@ def _request(method, path, **kwargs):
     except Exception:
         body_preview = ""
 
+    # ⚠️ الرد الفارغ ما يقولش والو. نسجّلو الهيدرز وحجم المحتوى —
+    # فأوقات السبب يبان فيهم (نوع المحتوى، ضغط، رأس خطأ خاص).
+    try:
+        headers = {
+            k: v for k, v in response.headers.items()
+            if k.lower() in (
+                "content-type", "content-length", "content-encoding",
+                "x-error", "x-error-message", "www-authenticate", "date",
+            )
+        }
+    except Exception:
+        headers = {}
+
     LAST_EXCHANGE.update({
         "method": method,
         "path": path,
         "payload": kwargs.get("json"),
         "status": response.status_code,
         "response": body_preview,
+        "headers": headers,
+        "content_length": len(response.content or b""),
     })
 
     if response.status_code == 401:
@@ -439,37 +458,20 @@ def build_parcel_payload(order, territory_id=None):
         phone = "0" + phone[3:]
 
     # ---------- قائمة المنتجات ----------
-    ordered_products = []
-    for item in order.items:
-        label = item.item_name or "منتج"
-        if getattr(item, "variant_label", None):
-            label = f"{label} ({item.variant_label})"
+    # ⚠️ نبعثو سطر واحد ثابت «أكسسوارات» بكمية 1، ماشي تفاصيل المنتجات.
+    # ليش؟
+    #   • ما نكشفوش لشركة التوصيل شنو نبيعو بالضبط ولا الأسعار
+    #   • أسماء منتجات طويلة ولا رموز غريبة تسبّب رفض من ZR
+    #   • عامل التوصيل ما يحتاجش التفاصيل — يحتاج المبلغ فقط
+    # المبلغ الحقيقي يمشي فحقل amount، وهو اللي يتحصّل من الزبون.
+    ordered_products = [{
+        "productName": ZR_PRODUCT_LABEL,
+        "quantity": 1,
+        "price": order.total,
+        "stockType": "none",
+    }]
 
-        ordered_products.append({
-            "productName": label[:200],
-            "quantity": item.quantity,
-            "price": item.unit_price,
-            # ⚠️ "none" = السلعة عندنا، ماشي مخزّنة فمستودع ZR.
-            # ZR يشترط: إما كل المنتجات "warehouse"، ولا خليط من
-            # "local" و"none". نستعملو "none" لكلهم — يحقق الشرط.
-            "stockType": "none",
-        })
-
-    # حماية: ZR يرفض القائمة الفارغة صراحةً
-    if not ordered_products:
-        ordered_products.append({
-            "productName": order.order_number,
-            "quantity": 1,
-            "price": order.total,
-            "stockType": "none",
-        })
-
-    # ---------- الوصف ----------
-    # ⚠️ إجباري عند ZR. نبنيوه من أسماء المنتجات — هو اللي يقراه
-    # عامل التوصيل باش يعرف واش فالطرد.
-    description = "، ".join(p["productName"] for p in ordered_products)[:250]
-    if not description.strip():
-        description = f"طلبية {order.order_number}"
+    description = ZR_PRODUCT_LABEL
 
     payload = {
         "customerName": (order.customer_name or "").strip(),
@@ -988,7 +990,9 @@ def diagnose_territory_lookup(wilaya_code, commune_name):
 # ⚠️ صيغ البحث المحتملة فـ/territories/search.
 # نستعملو البحث بدل جلب 4000 منطقة على صفحات — الترقيم عند ZR
 # ما يخدمش (يتجاهل `page` ويرجّع نفس الصفحة الأولى دايمًا).
-_SEARCH_KEYS = ["search", "searchTerm", "name", "query", "keyword", "term"]
+# ⚠️ الترتيب مهم: `keyword` هو اللي يخدم فعلاً عند ZR (مؤكّد بالتشخيص).
+# الباقي يتجاهلو ZR ويرجّع 200 نتيجة عامة — نخليوهم كاحتياط فقط.
+_SEARCH_KEYS = ["keyword", "search", "searchTerm", "name", "query", "term"]
 
 
 def search_territory(commune_name, wilaya_code=None):
