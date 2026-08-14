@@ -49,12 +49,18 @@
 {% else %}
 <pre class="zr-code" dir="ltr">{{ preview }}</pre>
 
-<p class="muted" style="font-size:13.5px;">
-    ⚠️ <code>territoryId</code> فارغ معناه الطلبية ما عندهاش معرّف بلدية.
-    ZR ممكن يقبل بالاسم، وممكن يرفض. إذا الرد تحت ذكر
-    <code>territoryId</code>، روح لـ<a href="{{ url_for('admin.integrations') }}">التكاملات</a>
-    وزامن البلديات.
-</p>
+{% if 'territoryId' in preview %}
+<p style="color:#4E7C59;font-weight:600;">✓ معرّف الوجهة (territoryId) موجود</p>
+{% else %}
+<div class="lp-errors" style="background:#FFF6E5;border:1px solid #E8D9A8;padding:14px 18px;border-radius:12px;">
+    <strong>⚠️ ماكانش <code>territoryId</code></strong>
+    <p style="margin:6px 0 0;font-size:14px;">
+        ZR يحدّد الوجهة بهاد المعرّف، ماشي بأسماء الولاية والبلدية.
+        بلاه يرد بـ400 <b>بلا أي رسالة</b> — بالضبط اللي شفتو.
+        <br>زر التجربة تحت يدوّر عليه تلقائيًا من مناطق ZR ويحفظو.
+    </p>
+</div>
+{% endif %}
 {% endif %}
 
 <!-- ═════ 4. آخر رد ═════ -->

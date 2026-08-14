@@ -1210,7 +1210,7 @@ def order_send_to_carrier(order_id):
     ⚠️ الفشل ما يكسرش الطلبية: إذا ZR ما ردّش، الطلبية تبقى كيما هي والأدمن
     يقدر يبعثها يدويًا أو يعاود يجرّب. ما نخسروش بيعة بسبب مشكل شبكة.
     """
-    from services.zrexpress import create_parcel, ZRError, is_configured
+    from services.zrexpress import create_parcel, ZRError, lookup_territory_id, is_configured
 
     order = db.session.get(Order, order_id) or abort(404)
 
@@ -1229,6 +1229,18 @@ def order_send_to_carrier(order_id):
     # ZR يقبل الطرد بالاسم كذلك. قبل، كنّا نمنعو الإرسال بلا معرّف — وهذا
     # كان يحبس طلبيات صحيحة بلا سبب. دابا نبعثو ونخلّيو ZR يقرّر.
     territory_id = order.commune_external_id or None
+
+    # ⚠️ ZR يحدّد الوجهة بـterritoryId، ماشي بأسماء الولاية والبلدية.
+    # بلاه يرد بـ400 بلا رسالة. إذا الطلبية ما عندهاش معرّف محفوظ
+    # (قديمة، ولا الزبون كتب البلدية بيدو)، ندوّرو عليه دابا ونحفظوه.
+    if not territory_id and order.delivery_type != "office" and order.commune:
+        try:
+            territory_id = lookup_territory_id(order.wilaya_code, order.commune)
+            if territory_id:
+                order.commune_external_id = territory_id
+                db.session.commit()
+        except Exception:
+            pass  # ما لقيناش — نكملو ونخليو ZR يقرر
 
     try:
         result = create_parcel(order, territory_id=territory_id)
@@ -1558,8 +1570,19 @@ def order_zr_send_test(order_id):
 
     order = Order.query.get_or_404(order_id)
 
+    territory_id = order.commune_external_id or None
+    if not territory_id and order.delivery_type != "office" and order.commune:
+        try:
+            territory_id = zr.lookup_territory_id(order.wilaya_code, order.commune)
+            if territory_id:
+                order.commune_external_id = territory_id
+                db.session.commit()
+                flash(f"لقينا معرّف البلدية وحفظناه: {territory_id}", "success")
+        except Exception:
+            pass
+
     try:
-        zr.create_parcel(order, territory_id=order.commune_external_id or None)
+        zr.create_parcel(order, territory_id=territory_id)
         flash("نجح الإرسال التجريبي — شوف الرد تحت", "success")
     except Exception as e:
         flash(f"فشل: {e}", "error")

@@ -137,6 +137,15 @@ def _request(method, path, **kwargs):
         except Exception:
             detail = response.text[:300]
 
+        # ⚠️ رد فارغ بلا تفاصيل: التحقق من الحقول عدا، والرفض من مكان آخر.
+        # الأرجح الوجهة (territoryId) ناقصة ولا غير معروفة عند ZR.
+        if not (detail or "").strip():
+            detail = (
+                "رد فارغ بلا تفاصيل. غالبًا الوجهة ماشي مضبوطة — "
+                "تأكد أن الطلبية عندها معرّف بلدية (territoryId)، "
+                "وزامن البلديات من صفحة التكاملات."
+            )
+
         raise ZRError(f"ZR Express رجع خطأ ({response.status_code}): {detail}")
 
     if not response.content:
@@ -562,6 +571,65 @@ def find_territory_id(carrier_code, commune_external_id):
     الإرسال يبقى يخدم بنفس المعرّف اللي اختارو الزبون.
     """
     return commune_external_id or None
+
+
+# نخزّنو فهرس المناطق فالذاكرة — 4000 منطقة، ما نجيبوهمش فكل طلبية
+_territory_index = None
+
+
+def _build_territory_index(force=False):
+    """
+    يبني فهرس {(رمز الولاية, اسم مطبّع): معرّف ZR} من مناطق ZR.
+
+    ⚠️ الفهرس فالذاكرة فقط: يتبنى مرة وحدة ويتمسح مع إعادة التشغيل.
+    4000 منطقة على عدة صفحات = 30 ثانية، فما نعاودوهاش فكل إرسال.
+    """
+    global _territory_index
+
+    if _territory_index is not None and not force:
+        return _territory_index
+
+    index = {}
+    for item in get_territories():
+        if (item.get("level") or "").lower() != "commune":
+            continue
+
+        tid = item.get("id")
+        postal = str(item.get("postalCode") or "").strip()
+        if not tid or len(postal) < 2 or not postal[:2].isdigit():
+            continue
+
+        wilaya = postal[:2]
+        for name in (item.get("nameArabic"), item.get("name")):
+            if name:
+                # أول معرّف يكفي — ما نكتبوش فوقو بمنطقة فرعية أخرى
+                index.setdefault((wilaya, _normalize_arabic(name)), str(tid))
+
+    _territory_index = index
+    return index
+
+
+def lookup_territory_id(wilaya_code, commune_name):
+    """
+    يدوّر على معرّف المنطقة عند ZR من رمز الولاية واسم البلدية.
+
+    ⚠️ ليش هاد الدالة؟
+    ZR يحدّد الوجهة بـterritoryId، ماشي بأسماء الولاية والبلدية. الطلبيات
+    القديمة (ولا اللي الزبون كتب فيها البلدية بيدو) ما عندهاش المعرّف
+    محفوظ. بدل ما نرفضو الإرسال، نبحثو عليه مباشرة.
+
+    يرجع المعرّف ولا None — والمستدعي يقرر.
+    """
+    if not wilaya_code or not commune_name:
+        return None
+
+    try:
+        index = _build_territory_index()
+    except ZRError:
+        return None
+
+    key = (str(wilaya_code).zfill(2), _normalize_arabic(commune_name))
+    return index.get(key)
 
 
 # ═══════════════════════════════════════════════════════════
