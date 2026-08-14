@@ -77,12 +77,32 @@ def _request(method, path, **kwargs):
         raise ZRError("ما لقيناش المطلوب عند ZR Express")
 
     if response.status_code >= 400:
-        # ZR يرجع تفاصيل الخطأ فـ"detail" أو "title"
+        # ⚠️ ZR مبني على ASP.NET: أخطاء التحقق تجي فـ"errors" على شكل
+        #    {"errors": {"customerPhone": ["The field is required"]}}
+        #    و"title" يعطي غير الجملة العامة "One or more validation errors
+        #    occurred" — بلا فايدة. لازم نقراو "errors" وإلا ما نعرفوش
+        #    شنو الحقل الغالط.
+        detail = ""
         try:
             payload = response.json()
-            detail = payload.get("detail") or payload.get("title") or response.text[:200]
+
+            field_errors = payload.get("errors")
+            if isinstance(field_errors, dict) and field_errors:
+                parts = []
+                for field, messages in field_errors.items():
+                    if isinstance(messages, list):
+                        text = "، ".join(str(m) for m in messages)
+                    else:
+                        text = str(messages)
+                    parts.append(f"{field}: {text}")
+                detail = " | ".join(parts)
+
+            if not detail:
+                detail = (payload.get("detail") or payload.get("message")
+                          or payload.get("title") or response.text[:300])
         except Exception:
-            detail = response.text[:200]
+            detail = response.text[:300]
+
         raise ZRError(f"ZR Express رجع خطأ ({response.status_code}): {detail}")
 
     if not response.content:
@@ -210,6 +230,47 @@ def get_covered_wilayas():
     return coverage
 
 
+def _check_parcel_data(order):
+    """
+    يفحص بيانات الطلبية قبل ما نبعثوها لـZR.
+
+    ⚠️ ZR يرد بـ400 «One or more validation errors» بلا ما يقول شنو ناقص
+    فبعض الحالات. هاد الفحص يمسك المشاكل المعروفة ويعطي رسالة عربية
+    واضحة تقول بالضبط شنو لازم يتصلّح.
+    """
+    problems = []
+
+    digits = "".join(c for c in (order.customer_phone or "") if c.isdigit())
+    if digits.startswith("00213"):
+        digits = "0" + digits[5:]
+    elif digits.startswith("213"):
+        digits = "0" + digits[3:]
+
+    valid_mobile = len(digits) == 10 and digits[:2] in ("05", "06", "07")
+    valid_landline = len(digits) == 9 and digits[:2] in ("02", "03", "04")
+
+    if not (valid_mobile or valid_landline):
+        problems.append(
+            f"رقم الهاتف «{order.customer_phone}» غير صحيح — "
+            "ZR يقبل غير أرقام جزائرية (05/06/07 + 8 أرقام)"
+        )
+
+    if not order.customer_name or len(order.customer_name.strip()) < 3:
+        problems.append("اسم الزبون قصير بزاف")
+
+    if order.delivery_type == "office":
+        if not order.pickup_point_name:
+            problems.append("التوصيل لمكتب بلا اسم مكتب")
+    else:
+        if not order.commune:
+            problems.append("التوصيل للمنزل بلا بلدية")
+
+    if not order.total or order.total <= 0:
+        problems.append("مبلغ الطلبية صفر")
+
+    return problems
+
+
 def create_parcel(order, territory_id=None):
     """
     ينشئ طرد عند ZR Express من طلبية عندنا.
@@ -220,6 +281,11 @@ def create_parcel(order, territory_id=None):
     يرجع dict فيه trackingNumber وparcelId.
     يرمي ZRError إذا فشل — والمستدعي يقرر واش يدير.
     """
+    # نفحصو أولاً — أحسن رسالة عربية واضحة من 400 غامض
+    problems = _check_parcel_data(order)
+    if problems:
+        raise ZRError("الطلبية ما تقبلهاش ZR: " + " | ".join(problems))
+
     is_office = order.delivery_type == "office"
 
     # ⚠️ كل نوع توصيل يبعث معلومة مختلفة:
@@ -234,9 +300,16 @@ def create_parcel(order, territory_id=None):
         address = order.address_note or order.commune or order.wilaya_name
         commune = order.commune or ""
 
+    # ⚠️ نبعثو الهاتف أرقام فقط — ZR يرفض المسافات والرموز
+    phone = "".join(c for c in (order.customer_phone or "") if c.isdigit())
+    if phone.startswith("00213"):
+        phone = "0" + phone[5:]
+    elif phone.startswith("213"):
+        phone = "0" + phone[3:]
+
     payload = {
-        "customerName": order.customer_name,
-        "customerPhone": order.customer_phone,
+        "customerName": (order.customer_name or "").strip(),
+        "customerPhone": phone,
         "address": address,
         "commune": commune,
         "wilaya": order.wilaya_name or "",

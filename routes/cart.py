@@ -534,9 +534,31 @@ def _validate_checkout_form(form):
     if not form["name"] or len(form["name"]) < 3:
         errors.append("اكتب اسمك ولقبك كاملين")
 
+    # ⚠️ التحقق القديم كان يقبل أي 9 أرقام — حتى 0123456789.
+    # ZR يرفض هاد الأرقام بـ400، والطلبية تتحبس عندنا بلا ما نفهمو ليش.
+    # أحسن نمنعوه وقت الطلب بدل ما نكتشفوه وقت الإرسال.
+    #
+    # الأرقام الجزائرية الصحيحة:
+    #   جوال : 05/06/07 + 8 أرقام  (مثال 0666255200)
+    #   ثابت : 02/03/04 + 7 أرقام  (مثال 032123456)
     phone_digits = "".join(c for c in form["phone"] if c.isdigit())
-    if len(phone_digits) < 9:
-        errors.append("رقم الهاتف غير صحيح")
+
+    # نحيّدو رمز الدولة إذا كتبو (+213 ولا 00213)
+    if phone_digits.startswith("00213"):
+        phone_digits = "0" + phone_digits[5:]
+    elif phone_digits.startswith("213"):
+        phone_digits = "0" + phone_digits[3:]
+
+    is_mobile = len(phone_digits) == 10 and phone_digits[:2] in ("05", "06", "07")
+    is_landline = len(phone_digits) == 9 and phone_digits[:2] in ("02", "03", "04")
+
+    if not (is_mobile or is_landline):
+        errors.append(
+            "رقم الهاتف غير صحيح — لازم يبدا بـ05 ولا 06 ولا 07 (مثال: 0666255200)"
+        )
+    else:
+        # نخزّنو الرقم منظّف — بلا مسافات ولا رموز
+        form["phone"] = phone_digits
 
     if not form["wilaya_code"]:
         errors.append("اختر الولاية")

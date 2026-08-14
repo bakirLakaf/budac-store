@@ -2883,3 +2883,112 @@ img, video, iframe, table { max-width: 100%; }
     font-weight: 600;
     color: #8A6100;
 }
+
+/* ═══════════════ البحث الفوري (قائمة الاقتراحات) ═══════════════ */
+
+/* ⚠️ الفورم لازم يكون relative باش القائمة تتموضع تحتو */
+.header-search { position: relative; }
+
+.search-suggest {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    left: 0;
+    z-index: 200;
+    max-height: 65vh;
+    overflow-y: auto;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 16px 40px -12px rgba(46, 26, 71, 0.35);
+    padding: 6px;
+}
+.search-suggest[hidden] { display: none; }
+
+.search-suggest-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--color-ink);
+    transition: background 0.12s ease;
+}
+.search-suggest-item:hover,
+.search-suggest-item.is-active {
+    background: var(--color-bg);
+}
+
+.search-suggest-img {
+    flex: 0 0 46px;
+    width: 46px; height: 46px;
+    border-radius: 9px;
+    overflow: hidden;
+    background: var(--color-bg);
+    display: flex; align-items: center; justify-content: center;
+}
+.search-suggest-img img {
+    width: 100%; height: 100%; object-fit: cover;
+}
+.search-suggest-noimg { font-size: 20px; opacity: 0.5; }
+
+.search-suggest-info { min-width: 0; flex: 1; }
+
+.search-suggest-name {
+    display: block;
+    font-size: 14px; font-weight: 600;
+    /* الاسم الطويل يتقصّ بدل ما يكسّر التصميم */
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.search-suggest-name mark {
+    background: var(--color-gold-soft);
+    color: inherit;
+    border-radius: 3px;
+    padding: 0 1px;
+}
+
+.search-suggest-meta {
+    display: block;
+    font-size: 12.5px;
+    color: var(--color-ink-soft);
+    margin-top: 2px;
+}
+.search-suggest-out {
+    color: var(--color-blush);
+    font-weight: 600;
+    margin-inline-start: 8px;
+}
+
+.search-suggest-empty {
+    padding: 18px 12px;
+    text-align: center;
+    font-size: 13.5px;
+    color: var(--color-ink-soft);
+}
+
+.search-suggest-all {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+    padding: 10px;
+    border: none;
+    border-top: 1px solid var(--color-border);
+    background: none;
+    color: var(--color-primary);
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 0 0 9px 9px;
+}
+.search-suggest-all:hover { background: var(--color-bg); }
+
+/* فالموبايل القائمة تاخذ عرض الشاشة كامل */
+@media (max-width: 720px) {
+    .search-suggest {
+        max-height: 55vh;
+    }
+    .search-suggest-img { flex-basis: 40px; width: 40px; height: 40px; }
+    .search-suggest-name { font-size: 13.5px; }
+}

@@ -318,6 +318,53 @@ def offer_detail(slug):
     return render_template("shop/offer.html", offer=offer)
 
 
+@shop_bp.route("/api/search-suggest")
+def api_search_suggest():
+    """
+    اقتراحات البحث الفورية — تُستدعى وقت الكتابة.
+
+    ⚠️ خفيفة عمدًا: 8 نتائج فقط، وما نجيبوش الوصف ولا التنويعات.
+    الهدف السرعة، ماشي صفحة نتائج كاملة.
+    """
+    query_text = (request.args.get("q") or "").strip()
+
+    # أقل من حرفين = نتائج بزاف وبلا فايدة
+    if len(query_text) < 2:
+        return jsonify({"results": []})
+
+    pattern = f"%{query_text}%"
+    products = (
+        Product.query
+        .options(joinedload(Product.category))
+        .filter(
+            Product.is_active.is_(True),
+            db.or_(
+                Product.name.ilike(pattern),
+                Product.description.ilike(pattern),
+            ),
+        )
+        .order_by(Product.stock_quantity.desc(), Product.created_at.desc())
+        .limit(8)
+        .all()
+    )
+
+    results = []
+    for p in products:
+        results.append({
+            "name": p.name,
+            "url": url_for("shop.product_detail", slug=p.slug),
+            "image": (
+                url_for("static", filename="img/products/" + p.image_filename)
+                if p.image_filename else None
+            ),
+            "price": p.price_display,
+            "category": p.category.name if p.category else "",
+            "in_stock": p.stock_quantity > 0,
+        })
+
+    return jsonify({"results": results, "query": query_text})
+
+
 @shop_bp.route("/search")
 def search():
     """بحث فالمنتجات بالاسم والوصف."""
