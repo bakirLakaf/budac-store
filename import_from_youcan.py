@@ -263,8 +263,21 @@ def fetch_admin_api_products():
     ⚠️ التوكن سري — ما يتكتبش فالكود ولا يترفع لـGit.
     يرجع dict فارغ إذا ماكانش توكن أو فشل الطلب.
     """
+    # ⚠️ التوكن يجي من مكانين: متغير البيئة، ولا قاعدة البيانات
+    # (كي يربط الأدمن من لوحة التحكم). نجرّبو الاثنين.
     token = os.environ.get("YOUCAN_ACCESS_TOKEN", "").strip()
+
     if not token:
+        try:
+            from services.youcan import get_access_token
+            token = get_access_token()
+        except Exception:
+            token = ""
+
+    if not token:
+        print("\n💡 ماكانش توكن YouCan — نستعملو المسار العمومي.")
+        print("   للحصول على الموديلات بأسعارها وصورها:")
+        print("   لوحة التحكم ← ربط YouCan")
         return {}
 
     print("\n🔑 لقينا توكن Admin API — نجربو نجيبو بيانات أغنى...")
@@ -532,12 +545,53 @@ def _extract_full_variants(variants_field):
     return cleaned
 
 
-def run(limit=None, skip_images=False):
+def wipe_products():
+    """
+    يمسح كل المنتجات والصور والموديلات قبل الاستيراد.
+
+    ⚠️ **ما يمسّش الطلبيات.** أسطر الطلبية (OrderItem) تخزّن اسم المنتج
+    وسعرو وقت البيع كنص، فالطلبيات القديمة تبقى تبان صحيحة حتى بعد
+    مسح المنتج. هذا مقصود — السجل التجاري ما يتغيّرش.
+
+    نمسحو كذلك أي روابط تشير للمنتجات (اقتراحات، عناصر عروض) باش
+    ما يبقاش مفتاح أجنبي معلّق.
+    """
+    from models import (
+        ProductImage, ProductVariant, VariantPriceTier,
+        UpsellRule, OfferItem, Review,
+    )
+
+    counts = {
+        "منتجات": Product.query.count(),
+        "صور": ProductImage.query.count(),
+        "موديلات": ProductVariant.query.count(),
+    }
+
+    print("\n🗑️  نفرّغو المنتجات القديمة...")
+    for label, n in counts.items():
+        print(f"   {label}: {n}")
+
+    # ⚠️ الترتيب مهم: نبداو بالأبناء وإلا المفاتيح الأجنبية تمنع الحذف
+    VariantPriceTier.query.delete(synchronize_session=False)
+    UpsellRule.query.delete(synchronize_session=False)
+    OfferItem.query.delete(synchronize_session=False)
+    Review.query.delete(synchronize_session=False)
+    ProductVariant.query.delete(synchronize_session=False)
+    ProductImage.query.delete(synchronize_session=False)
+    Product.query.delete(synchronize_session=False)
+
+    db.session.commit()
+    print("   ✅ تفرّغو — الطلبيات ما تمسّتش")
+
+
+def run(limit=None, skip_images=False, wipe=False):
 
     app = create_app()
     with app.app_context():
         db.create_all()
 
+        # ⚠️ نمسحو **قبل** ما نجيبو من YouCan؟ لا — نجيبو أولاً.
+        # لو فشل الاتصال بـYouCan بعد المسح، نبقاو بمتجر فارغ.
         raw_products = fetch_all_products()
         print(f"\n✅ لقيت {len(raw_products)} منتج فمتجر YouCan.")
 
@@ -547,7 +601,14 @@ def run(limit=None, skip_images=False):
         # 1) نجربو Admin API أولاً — يعطي أغنى بيانات (تنويعات بأسعارها)
         admin_products = fetch_admin_api_products()
 
-        # 2) التصنيفات ما تجيش مع المنتج فالمسار العمومي — نبنيو الخريطة
+        # 2) الإفراغ — بعد ما تأكدنا أن YouCan رد ببيانات
+        if wipe:
+            if not raw_products:
+                print("\n🛑 YouCan ما ردّش بمنتجات — ما نمسحوش. جرّب مرة أخرى.")
+                return
+            wipe_products()
+
+        # 3) التصنيفات ما تجيش مع المنتج فالمسار العمومي — نبنيو الخريطة
         categories_map = {}
         if not admin_products:
             categories_map = fetch_categories_map()
@@ -915,6 +976,20 @@ if __name__ == "__main__":
         "--skip-images", action="store_true",
         help="بلا تحميل الصور — أسرع وأخف بكثير، تزيدهم بعدين",
     )
+    parser.add_argument(
+        "--wipe", action="store_true",
+        help="امسح كل المنتجات قبل الاستيراد (الطلبيات تبقى محفوظة)",
+    )
     args = parser.parse_args()
 
-    run(limit=args.limit, skip_images=args.skip_images)
+    if args.wipe:
+        print("=" * 52)
+        print("  ⚠️  --wipe غادي يمسح **كل** المنتجات والصور والموديلات")
+        print("      الطلبيات تبقى محفوظة.")
+        print("=" * 52)
+        answer = input("  اكتب  نعم  باش تكمّل: ").strip()
+        if answer not in ("نعم", "yes", "y"):
+            print("  ❌ توقّفنا — ما تمسح والو.")
+            raise SystemExit(0)
+
+    run(limit=args.limit, skip_images=args.skip_images, wipe=args.wipe)
