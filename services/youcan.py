@@ -183,20 +183,11 @@ def exchange_code(code, redirect_uri):
     raise YouCanError("ما قدرناش ناخذو التوكن — " + " | ".join(errors[:4]))
 
 
-def test_token():
-    """
-    يجرّب التوكن على مسار حقيقي.
-
-    ⚠️ توكن محفوظ ماشي معناه توكن صالح: ممكن يخلص ولا الصلاحيات
-    تتبدّل. أحسن نتأكدو دابا من ما نكتشفو وقت الاستيراد.
-    """
-    token = get_access_token()
-    if not token:
-        raise YouCanError("ماكانش توكن محفوظ")
-
+def _api_get(path, token):
+    """طلب GET لـAdmin API مع ترجمة الأخطاء لرسائل مفهومة."""
     try:
         response = requests.get(
-            "https://api.youcan.shop/products?page=1",
+            f"https://api.youcan.shop/{path}",
             headers={
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/json",
@@ -217,15 +208,79 @@ def test_token():
         raise YouCanError(f"YouCan رد بـ{response.status_code}: {response.text[:200]}")
 
     try:
-        data = response.json()
+        return response.json()
     except Exception:
         raise YouCanError("رد YouCan ماشي JSON")
 
-    items = data.get("data") or data.get("items") or []
-    meta = data.get("meta") or {}
-    total = meta.get("total") if isinstance(meta, dict) else None
+
+def count_all_products(token=None, max_pages=30):
+    """
+    يعدّ المنتجات **الفريدة** عبر كل الصفحات.
+
+    ⚠️ ليش ما نثقوش فـmeta.total؟
+    درسنا من ZR: الـAPI ممكن يعطي رقم غلط ولا يتجاهل الترقيم ويرجّع
+    نفس الصفحة. الطريقة الوحيدة المضمونة: نمشيو صفحة بصفحة ونعدّو
+    المعرّفات الفريدة، ونوقفو كي ما تجيش حاجة جديدة.
+
+    يرجع dict فيه العدد والتفاصيل — مفيد للتشخيص.
+    """
+    token = token or get_access_token()
+    if not token:
+        raise YouCanError("ماكانش توكن محفوظ")
+
+    seen = set()
+    pages = 0
+    reported_total = None
+    repeated = False
+
+    for page in range(1, max_pages + 1):
+        data = _api_get(f"products?page={page}", token)
+        pages += 1
+
+        items = data.get("data") or data.get("items") or []
+
+        meta = data.get("meta")
+        if reported_total is None and isinstance(meta, dict):
+            reported_total = meta.get("total")
+
+        if not items:
+            break
+
+        fresh = [
+            it for it in items
+            if isinstance(it, dict) and it.get("id") and it["id"] not in seen
+        ]
+        for it in fresh:
+            seen.add(it["id"])
+
+        # ⚠️ صفر جداد = الـAPI يتجاهل `page` ويرجّع نفس الصفحة
+        if not fresh:
+            repeated = True
+            break
+
+        if len(items) < 5:
+            break   # صفحة شبه فارغة = الأخيرة
 
     return {
-        "count": total if total is not None else len(items),
-        "on_page": len(items),
+        "count": len(seen),
+        "pages": pages,
+        "reported_total": reported_total,
+        "repeated": repeated,
+    }
+
+
+def test_token():
+    """
+    يجرّب التوكن ويعدّ المنتجات الحقيقية.
+
+    ⚠️ توكن محفوظ ماشي معناه توكن صالح: ممكن يخلص ولا الصلاحيات
+    تتبدّل. أحسن نتأكدو دابا من ما نكتشفو وقت الاستيراد.
+    """
+    result = count_all_products()
+
+    return {
+        "count": result["count"],
+        "pages": result["pages"],
+        "reported_total": result["reported_total"],
+        "repeated": result["repeated"],
     }

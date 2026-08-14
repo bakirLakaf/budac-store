@@ -1789,10 +1789,29 @@ def youcan_test():
 
     try:
         result = yc.test_token()
+
         flash(
-            f"✅ الاتصال نجح — {result['count']} منتج فمتجر YouCan",
+            f"✅ الاتصال نجح — لقينا {result['count']} منتج "
+            f"(عبر {result['pages']} صفحة)",
             "success",
         )
+
+        # ⚠️ إذا الـAPI يتجاهل الترقيم، نقولوها صراحة بدل ما نعرضو
+        # رقم ناقص ونخليو الأدمن يظن أن متجرو فيه 10 منتجات.
+        if result["repeated"]:
+            flash(
+                "⚠️ YouCan رجّع نفس الصفحة — الترقيم ما يخدمش. "
+                "العدد اللي فوق ماشي كامل.",
+                "warning",
+            )
+
+        total = result["reported_total"]
+        if total and total != result["count"]:
+            flash(
+                f"⚠️ YouCan يقول العدد {total} بينما جبنا {result['count']}. "
+                "شوف سجلات الاستيراد.",
+                "warning",
+            )
     except yc.YouCanError as e:
         flash(f"🔴 {e}", "error")
 
