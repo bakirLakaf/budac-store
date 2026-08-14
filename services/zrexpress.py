@@ -323,6 +323,20 @@ def build_parcel_payload(order, territory_id=None):
       • deliveryType    : "home" ولا "pickup-point" (ماشي isStopDesk منطقي)
       • description     : إجباري
 
+    وفالجولة الثانية زاد:
+
+        "ProductName is required. [Index: 0]"
+        "StockType is required. [Index: 0]"
+        "StockType must be either 'local', 'warehouse', or 'none'."
+        "deliveryAddress cannot be null or empty."
+        "Products must be either all Warehouse, or a mix of Local and None."
+
+    يعني:
+      • داخل كل منتج: productName (ماشي name) + stockType
+      • العنوان اسمو deliveryAddress (ماشي address)
+      • كل المنتجات لازم نفس العائلة: إما كلهم warehouse،
+        ولا خليط من local وnone
+
     منفصلة عن create_parcel باش صفحة التشخيص تعرضها بلا ما تبعث.
     """
     is_office = order.delivery_type == "office"
@@ -340,6 +354,13 @@ def build_parcel_payload(order, territory_id=None):
         address = order.address_note or order.commune or order.wilaya_name
         commune = order.commune or ""
 
+    # ⚠️ ZR يرفض العنوان الفارغ صراحةً (deliveryAddress cannot be null or
+    # empty). إذا كل الحقول فارغة، نبنيو عنوان من الولاية باش الطرد يمشي
+    # ويتصل عامل التوصيل بالزبون — أحسن من رفض الطلبية.
+    address = (address or "").strip()
+    if not address:
+        address = order.wilaya_name or order.wilaya_code or "الجزائر"
+
     # ⚠️ نبعثو الهاتف أرقام فقط — ZR يرفض المسافات والرموز
     phone = "".join(c for c in (order.customer_phone or "") if c.isdigit())
     if phone.startswith("00213"):
@@ -355,30 +376,36 @@ def build_parcel_payload(order, territory_id=None):
             label = f"{label} ({item.variant_label})"
 
         ordered_products.append({
-            "name": label[:200],
+            "productName": label[:200],
             "quantity": item.quantity,
             "price": item.unit_price,
+            # ⚠️ "none" = السلعة عندنا، ماشي مخزّنة فمستودع ZR.
+            # ZR يشترط: إما كل المنتجات "warehouse"، ولا خليط من
+            # "local" و"none". نستعملو "none" لكلهم — يحقق الشرط.
+            "stockType": "none",
         })
 
     # حماية: ZR يرفض القائمة الفارغة صراحةً
     if not ordered_products:
         ordered_products.append({
-            "name": order.order_number,
+            "productName": order.order_number,
             "quantity": 1,
             "price": order.total,
+            "stockType": "none",
         })
 
     # ---------- الوصف ----------
     # ⚠️ إجباري عند ZR. نبنيوه من أسماء المنتجات — هو اللي يقراه
     # عامل التوصيل باش يعرف واش فالطرد.
-    description = "، ".join(p["name"] for p in ordered_products)[:250]
+    description = "، ".join(p["productName"] for p in ordered_products)[:250]
     if not description.strip():
         description = f"طلبية {order.order_number}"
 
     payload = {
         "customerName": (order.customer_name or "").strip(),
         "customerPhone": phone,
-        "address": address,
+        # ⚠️ الاسم الصحيح عند ZR هو deliveryAddress
+        "deliveryAddress": address,
         "commune": commune,
         "wilaya": order.wilaya_name or "",
         "amount": order.total,
