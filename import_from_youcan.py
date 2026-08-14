@@ -111,6 +111,7 @@ def download_image(url, base_name, target_dir=IMAGES_DIR):
 def fetch_all_products():
     """يجيب كل المنتجات من API متجر YouCan، صفحة بصفحة، حتى توصل صفحة فارغة."""
     all_products = []
+    seen_ids = set()      # نكشفو بيه الصفحات المكررة
     page = 1
     max_pages = 200  # سقف أمان باش ما يبقاش يدور للأبد إذا صار خطأ غير متوقع
 
@@ -130,8 +131,22 @@ def fetch_all_products():
             print(f"   (صفحة {page} فارغة — وصلنا آخر المنتجات)")
             break
 
-        all_products.extend(items)
-        print(f"   ({len(items)} منتج فهاد الصفحة، المجموع لحد دابا: {len(all_products)})")
+        # ⚠️ نحيّدو التكرار بالمعرّف. بعض واجهات YouCan تتجاهل `page`
+        # وترجّع نفس الصفحة الأولى — بلا هاد الفحص نجمعو نفس المنتجات
+        # مرات ومرات ونظنو المتجر فيه أكثر مما فيه.
+        before = len(seen_ids)
+        for item in items:
+            key = item.get("id") or item.get("slug")
+            if key and key not in seen_ids:
+                seen_ids.add(key)
+                all_products.append(item)
+
+        fresh = len(seen_ids) - before
+        print(f"   ({fresh} جديد من {len(items)} — المجموع: {len(all_products)})")
+
+        if fresh == 0:
+            print(f"   ⚠️  الصفحة {page} تكرار كامل — نوقفو.")
+            break
 
         page += 1
         time.sleep(0.3)
@@ -316,9 +331,17 @@ def fetch_admin_api_products():
         if not items:
             break
 
+        # ⚠️ نعدّو الجداد فقط. إذا صفحة ما جابت حتى منتج جديد، معناها
+        # الـAPI يتجاهل `page` ويرجّع نفس الصفحة — نوقفو بدل ما ندورو
+        # 50 مرة على نفس البيانات.
+        before = len(all_items)
         for item in items:
             if isinstance(item, dict) and item.get("slug"):
                 all_items[item["slug"]] = item
+
+        if len(all_items) == before:
+            print(f"   ⚠️  الصفحة {page} ما جابت حتى منتج جديد — نوقفو.")
+            break
 
         page += 1
         time.sleep(0.3)
@@ -980,16 +1003,28 @@ if __name__ == "__main__":
         "--wipe", action="store_true",
         help="امسح كل المنتجات قبل الاستيراد (الطلبيات تبقى محفوظة)",
     )
+    parser.add_argument(
+        "--yes", action="store_true",
+        help="بلا سؤال التأكيد — للترمينالات اللي ما تقبلش العربية",
+    )
     args = parser.parse_args()
 
-    if args.wipe:
+    if args.wipe and not args.yes:
         print("=" * 52)
         print("  ⚠️  --wipe غادي يمسح **كل** المنتجات والصور والموديلات")
         print("      الطلبيات تبقى محفوظة.")
         print("=" * 52)
-        answer = input("  اكتب  نعم  باش تكمّل: ").strip()
-        if answer not in ("نعم", "yes", "y"):
-            print("  ❌ توقّفنا — ما تمسح والو.")
+        # ⚠️ ترمينال Railway يخرّب ترميز العربية عند الإدخال، فالمقارنة
+        # مع "نعم" تفشل حتى لو كتبها المستخدم. نقبلو كلمات لاتينية كذلك،
+        # ونوفّرو --yes باش يتجاوز السؤال كليًا.
+        print("  اكتب  YES  (ولا نعم) باش تكمّل، ولا شغّل بـ --yes")
+        try:
+            answer = input("  > ").strip().lower()
+        except Exception:
+            answer = ""
+
+        if answer not in ("yes", "y", "oui", "نعم"):
+            print(f"  ❌ توقّفنا — ما تمسح والو. (قريت: {answer!r})")
             raise SystemExit(0)
 
     run(limit=args.limit, skip_images=args.skip_images, wipe=args.wipe)
