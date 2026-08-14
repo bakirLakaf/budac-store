@@ -104,9 +104,24 @@ def _request(method, path, **kwargs):
         detail = ""
         try:
             payload = response.json()
-
             field_errors = payload.get("errors")
-            if isinstance(field_errors, dict) and field_errors:
+
+            # ⚠️ ZR يرجّع errors كـ**قائمة** فيها {code, description}:
+            #   [{"code":"NotEmptyValidator","description":"..."}]
+            # وماشي كـdict كيما ASP.NET العادي. لازم ندعمو الشكلين.
+            if isinstance(field_errors, list) and field_errors:
+                parts = []
+                for err in field_errors:
+                    if isinstance(err, dict):
+                        text = (err.get("description") or err.get("message")
+                                or err.get("code") or "")
+                    else:
+                        text = str(err)
+                    if text:
+                        parts.append(text.strip())
+                detail = " • ".join(parts)
+
+            elif isinstance(field_errors, dict) and field_errors:
                 parts = []
                 for field, messages in field_errors.items():
                     if isinstance(messages, list):
@@ -292,13 +307,31 @@ def _check_parcel_data(order):
 
 def build_parcel_payload(order, territory_id=None):
     """
-    يبني الـpayload اللي يتبعث لـZR — منفصل باش صفحة التشخيص تعرضو
-    بلا ما تبعث حاجة.
+    يبني الـpayload اللي يتبعث لـZR.
+
+    ⚠️ البنية مبنية على **رسائل التحقق الحقيقية** اللي رجّعها ZR، ماشي
+    على تخمين. الرد كان:
+
+        "At least one product must be ordered."
+        "OrderedProducts cannot be null or empty."
+        "DeliveryType is required"
+        "DeliveryType must be either 'home' or 'pickup-point'."
+        "Description is required."
+
+    يعني:
+      • orderedProducts : قائمة منتجات (ماشي نص productName)
+      • deliveryType    : "home" ولا "pickup-point" (ماشي isStopDesk منطقي)
+      • description     : إجباري
+
+    منفصلة عن create_parcel باش صفحة التشخيص تعرضها بلا ما تبعث.
     """
     is_office = order.delivery_type == "office"
 
+    # ⚠️ القيم الحرفية اللي يقبلها ZR — أي قيمة أخرى ترفض بـ400
+    delivery_type = "pickup-point" if is_office else "home"
+
     # ⚠️ كل نوع توصيل يبعث معلومة مختلفة:
-    #   • منزل → البلدية + العنوان الدقيق
+    #   • منزل → العنوان الدقيق ولا البلدية
     #   • مكتب → اسم المكتب (البلدية ما عندهاش معنى هنا)
     if is_office:
         address = order.pickup_point_name or order.wilaya_name
@@ -314,6 +347,34 @@ def build_parcel_payload(order, territory_id=None):
     elif phone.startswith("213"):
         phone = "0" + phone[3:]
 
+    # ---------- قائمة المنتجات ----------
+    ordered_products = []
+    for item in order.items:
+        label = item.item_name or "منتج"
+        if getattr(item, "variant_label", None):
+            label = f"{label} ({item.variant_label})"
+
+        ordered_products.append({
+            "name": label[:200],
+            "quantity": item.quantity,
+            "price": item.unit_price,
+        })
+
+    # حماية: ZR يرفض القائمة الفارغة صراحةً
+    if not ordered_products:
+        ordered_products.append({
+            "name": order.order_number,
+            "quantity": 1,
+            "price": order.total,
+        })
+
+    # ---------- الوصف ----------
+    # ⚠️ إجباري عند ZR. نبنيوه من أسماء المنتجات — هو اللي يقراه
+    # عامل التوصيل باش يعرف واش فالطرد.
+    description = "، ".join(p["name"] for p in ordered_products)[:250]
+    if not description.strip():
+        description = f"طلبية {order.order_number}"
+
     payload = {
         "customerName": (order.customer_name or "").strip(),
         "customerPhone": phone,
@@ -321,11 +382,11 @@ def build_parcel_payload(order, territory_id=None):
         "commune": commune,
         "wilaya": order.wilaya_name or "",
         "amount": order.total,
-        "isStopDesk": is_office,
+        "deliveryType": delivery_type,
+        "description": description,
+        "orderedProducts": ordered_products,
         "reference": order.order_number,
         "note": order.customer_note or "",
-        "productsCount": order.item_count,
-        "productName": "، ".join(item.item_name for item in order.items[:3])[:200],
     }
 
     if is_office and order.pickup_point_id:
