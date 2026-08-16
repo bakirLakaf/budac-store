@@ -121,6 +121,7 @@
                             data-compare="{{ v.compare_at_price_display or '' }}"
                             data-stock="{{ v.stock_quantity }}"
                             data-tiers="{{ v.tiers_payload() | tojson | forceescape }}"
+                            data-packs="{{ v.packs_payload() | tojson | forceescape }}"
                             {% if v.image_filename %}data-image="{{ url_for('static', filename='img/products/' + v.image_filename) }}"{% endif %}>
                         {{ v.label }}
                     </button>
@@ -129,6 +130,14 @@
             </div>
 
             {# ---------- جدول أسعار الجملة للموديل المختار ---------- #}
+            {# ═══════ العروض الجاهزة ═══════
+               وحدات بيع لها اسم وسعر ثابت (رولو، ساشي...). الزبون
+               يختار وحدة منها بدل ما يحسب بالحبة. #}
+            <div class="packs-box" id="packsBox" hidden>
+                <p class="packs-title">🎁 عروض جاهزة</p>
+                <div class="packs-list" id="packsList"></div>
+            </div>
+
             <div class="tiers-box" id="tiersBox" hidden>
                 <p class="tiers-title">📦 كل ما تشري أكثر، ترخص الحبة</p>
                 <div class="tiers-list" id="tiersList"></div>
@@ -238,6 +247,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="kind" value="product">
                     <input type="hidden" name="item_id" value="{{ product.id }}">
+                    {# العرض الجاهز المختار — فارغ = شراء بالحبة #}
+                    <input type="hidden" name="pack_id" id="selectedPackId" value="">
                     <input type="hidden" name="variant_id" id="selectedVariantId"
                            value="{{ product.default_variant.id if product.default_variant else '' }}">
 
@@ -887,5 +898,99 @@
     </div>
 </section>
 {% endif %}
+
+
+<script>
+/**
+ * العروض الجاهزة — اختيار وحدة بيع بدل الشراء بالحبة.
+ *
+ * ⚠️ العرض هنا **للواجهة فقط**. السعر النهائي يتحسب فالسيرفر عند
+ * الإضافة للسلة — بلا هذا، أي واحد يبدّل السعر من أدوات المطوّر.
+ */
+(function () {
+    'use strict';
+
+    var box = document.getElementById('packsBox');
+    var list = document.getElementById('packsList');
+    var packInput = document.getElementById('selectedPackId');
+    var qtyInput = document.getElementById('qtyInput');
+
+    if (!box || !list || !packInput) return;
+
+    function money(n) {
+        return Number(n).toLocaleString('en-US') + ' دج';
+    }
+
+    /** يرسم عروض الموديل المختار */
+    function render(chip) {
+        var packs = [];
+        try {
+            packs = JSON.parse((chip && chip.getAttribute('data-packs')) || '[]');
+        } catch (e) { packs = []; }
+
+        // ⚠️ نصفّرو الاختيار كي يتبدّل الموديل — عرض موديل آخر
+        // ما ينفعش لهاد الموديل
+        packInput.value = '';
+
+        if (!packs.length) {
+            box.hidden = true;
+            list.innerHTML = '';
+            return;
+        }
+
+        list.innerHTML = packs.map(function (p) {
+            var perUnit = p.quantity > 1
+                ? '<span class="pack-unit">' + money(p.unit_price) + ' للوحدة</span>'
+                : '';
+            return '<button type="button" class="pack-opt" data-pack="' + p.id + '"' +
+                   ' data-qty="' + p.quantity + '">' +
+                       '<span class="pack-opt-name">' + escapeHtml(p.full_label) + '</span>' +
+                       '<span class="pack-opt-price">' + money(p.price) + '</span>' +
+                       perUnit +
+                   '</button>';
+        }).join('');
+
+        box.hidden = false;
+    }
+
+    function escapeHtml(text) {
+        var d = document.createElement('div');
+        d.textContent = text == null ? '' : text;
+        return d.innerHTML;
+    }
+
+    list.addEventListener('click', function (e) {
+        var btn = e.target.closest('.pack-opt');
+        if (!btn) return;
+
+        var alreadyOn = btn.classList.contains('is-on');
+
+        list.querySelectorAll('.pack-opt').forEach(function (b) {
+            b.classList.remove('is-on');
+        });
+
+        if (alreadyOn) {
+            // ضغطة ثانية = إلغاء الاختيار، يرجع للشراء بالحبة
+            packInput.value = '';
+            return;
+        }
+
+        btn.classList.add('is-on');
+        packInput.value = btn.dataset.pack;
+
+        // العرض وحدة بيع كاملة — الكمية ترجع 1
+        if (qtyInput) qtyInput.value = 1;
+    });
+
+    // نعاودو الرسم كي يتبدّل الموديل
+    document.addEventListener('click', function (e) {
+        var chip = e.target.closest('[data-packs]');
+        if (chip) setTimeout(function () { render(chip); }, 0);
+    });
+
+    render(document.querySelector('[data-packs].is-selected')
+           || document.querySelector('[data-packs]'));
+})();
+</script>
 
 {% endblock %}

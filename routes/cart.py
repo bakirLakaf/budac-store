@@ -56,12 +56,13 @@ def add():
     item_id = request.form.get("item_id", type=int)
     variant_id = request.form.get("variant_id", type=int)
     quantity = request.form.get("quantity", type=int) or 1
+    pack_id = request.form.get("pack_id", type=int)
 
     if not item_id:
         flash("طلب غير صالح", "error")
         return redirect(request.referrer or url_for("shop.home"))
 
-    ok, error = cart_service.add_to_cart(kind, item_id, variant_id, quantity)
+    ok, error = cart_service.add_to_cart(kind, item_id, variant_id, quantity, pack_id)
 
     if ok:
         flash("تمت الإضافة للسلة", "success")

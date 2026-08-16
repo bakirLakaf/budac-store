@@ -1124,3 +1124,77 @@ body {
 .vis-reset-btn:hover {
     background: #FDECEA; border-color: #F0D5D2; color: var(--a-danger);
 }
+
+/* ---------- العروض الجاهزة ---------- */
+.variant-packs { margin-top: 18px; padding-top: 16px; border-top: 1px dashed #EDE3D0; }
+
+.packs-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 5px;
+    table-layout: fixed;
+}
+.packs-table th {
+    padding: 0 4px 2px;
+    text-align: start;
+    font-size: 11.5px; font-weight: 700;
+    color: var(--a-text-soft);
+}
+.packs-table td { padding: 0 4px; vertical-align: middle; }
+
+.packs-table input {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1.5px solid #E4DBCA;
+    border-radius: 10px;
+    background: #fff;
+    font-family: inherit; font-size: 14.5px;
+}
+.packs-table input[type="number"] { font-variant-numeric: tabular-nums; }
+.packs-table input:focus {
+    outline: none;
+    border-color: var(--a-gold);
+    box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.16);
+}
+
+.packs-qty-col { width: 72px; }
+.packs-price-col { width: 118px; }
+.packs-x-col { width: 40px; }
+.packs-table th.packs-x-col { padding: 0; }
+
+.pack-remove {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    margin-inline: auto;
+    border: 1.5px solid transparent; border-radius: 9px;
+    background: transparent; color: #C08A85;
+    font-size: 17px; font-weight: 700; line-height: 1;
+    cursor: pointer; transition: all 0.13s ease;
+}
+.pack-remove:hover { background: #FDECEA; border-color: #F0D5D2; color: #B4453E; }
+
+@media (max-width: 640px) {
+    .packs-table thead { display: none; }
+    .packs-table, .packs-table tbody, .packs-table tr, .packs-table td {
+        display: block; width: 100%;
+    }
+    .packs-table tr {
+        position: relative;
+        margin-bottom: 12px; padding: 12px 44px 12px 12px;
+        background: #fff; border: 1px solid #E4DBCA; border-radius: 12px;
+    }
+    .packs-table td { padding: 4px 0; }
+    .packs-table td:nth-child(1)::before { content: "عدد"; }
+    .packs-table td:nth-child(2)::before { content: "اسم العرض"; }
+    .packs-table td:nth-child(3)::before { content: "السعر (دج)"; }
+    .packs-table td::before {
+        display: block; margin-bottom: 4px;
+        font-size: 11.5px; font-weight: 700; color: var(--a-text-soft);
+    }
+    .packs-x-col {
+        position: absolute; top: 10px; inset-inline-end: 8px;
+        width: auto; padding: 0 !important;
+    }
+    .packs-x-col::before { content: none !important; }
+    .packs-qty-col, .packs-price-col { width: 100%; }
+}

@@ -9,7 +9,7 @@
 
 from flask import session
 
-from models import db, Product, ProductVariant, Offer
+from models import db, Product, ProductVariant, Offer, VariantPack
 
 CART_KEY = "cart"
 # ⚠️ السقف كان 50 — وهذا كان يكسر عروض الجملة: زبون يطلب 300 حبة
@@ -68,28 +68,43 @@ def _save_raw_cart(cart):
     session.modified = True
 
 
-def _make_key(kind, item_id, variant_id=None):
-    """مفتاح فريد للسطر: 'product:12:3' أو 'offer:5'."""
+def _make_key(kind, item_id, variant_id=None, pack_id=None):
+    """
+    مفتاح فريد للسطر: 'offer:5' · 'product:12:3' · 'product:12:3:7'
+
+    ⚠️ العرض الجاهز جزء من المفتاح: «رولو» و«ساشي» من نفس الموديل
+    لازم يكونو سطرين منفصلين فالسلة، ماشي سطر واحد.
+    """
     if kind == "offer":
         return f"offer:{item_id}"
-    return f"product:{item_id}:{variant_id or 0}"
+
+    base = f"product:{item_id}:{variant_id or 0}"
+    return f"{base}:{pack_id}" if pack_id else base
 
 
 def _parse_key(key):
-    """يفكّ المفتاح لأجزائه. يرجع (kind, item_id, variant_id) أو None إذا غير صالح."""
+    """
+    يفكّ المفتاح لأجزائه.
+
+    يرجع (kind, item_id, variant_id, pack_id) أو None إذا غير صالح.
+    ⚠️ ندعمو الشكل القديم (بلا pack) باش السلات المحفوظة عند الزبائن
+    ما تضيعش بعد التحديث.
+    """
     parts = key.split(":")
     try:
         if parts[0] == "offer" and len(parts) == 2:
-            return "offer", int(parts[1]), None
-        if parts[0] == "product" and len(parts) == 3:
-            variant_id = int(parts[2])
-            return "product", int(parts[1]), (variant_id or None)
+            return "offer", int(parts[1]), None, None
+
+        if parts[0] == "product" and len(parts) in (3, 4):
+            variant_id = int(parts[2]) or None
+            pack_id = int(parts[3]) if len(parts) == 4 else None
+            return "product", int(parts[1]), variant_id, (pack_id or None)
     except (ValueError, IndexError):
         pass
     return None
 
 
-def add_to_cart(kind, item_id, variant_id=None, quantity=1):
+def add_to_cart(kind, item_id, variant_id=None, quantity=1, pack_id=None):
     """
     يزيد عنصر للسلة. يرجع (True, None) أو (False, "سبب الرفض").
     نتحققو من التوفر هنا باش الزبون يعرف فورًا ماشي فالـcheckout.
@@ -120,11 +135,22 @@ def add_to_cart(kind, item_id, variant_id=None, quantity=1):
                 return False, "التنويعة المختارة غير موجودة"
             if not variant.is_in_stock:
                 return False, f"التنويعة «{variant.label}» نفذت من المخزون"
+
+            # ⚠️ نتحققو أن العرض ينتمي لهاد الموديل — بلا هذا، أي واحد
+            # يبعث pack_id من موديل أرخص ويشري بسعرو
+            if pack_id:
+                pack = VariantPack.query.filter_by(
+                    id=pack_id, variant_id=variant.id
+                ).first()
+                if not pack:
+                    return False, "هاد العرض ماشي متاح لهاد الموديل"
+        elif pack_id:
+            return False, "اختر الموديل أولاً باش تختار العرض"
         elif not product.is_in_stock:
             return False, "هذا المنتج نفذ من المخزون"
 
     cart = _get_raw_cart()
-    key = _make_key(kind, item_id, variant_id)
+    key = _make_key(kind, item_id, variant_id, pack_id)
     new_qty = cart.get(key, 0) + quantity
     cart[key] = min(new_qty, MAX_QUANTITY_PER_ITEM)
     _save_raw_cart(cart)
@@ -179,7 +205,7 @@ def get_cart_lines():
             stale_keys.append(key)
             continue
 
-        kind, item_id, variant_id = parsed
+        kind, item_id, variant_id, pack_id = parsed
 
         if kind == "offer":
             offer = db.session.get(Offer, item_id)
@@ -209,9 +235,24 @@ def get_cart_lines():
                     stale_keys.append(key)
                     continue
 
-            # ⚠️ السعر يعتمد على الكمية (عروض الجملة). الحساب يصرا هنا
-            # فالسيرفر — المتصفح يعرض فقط، ما يقررش.
-            if variant:
+            # ⚠️ السعر يتحسب هنا فالسيرفر — المتصفح يعرض فقط، ما يقررش.
+            #
+            # الأولوية: العرض الجاهز > أسعار الكمية > السعر العادي.
+            # العرض وحدة بيع بذاتها («رولو»)، فسعرو ثابت وما يتأثرش
+            # بمجالات الكمية.
+            pack = None
+            if pack_id and variant:
+                pack = VariantPack.query.filter_by(
+                    id=pack_id, variant_id=variant.id
+                ).first()
+                if not pack:
+                    # العرض تمسح من لوحة التحكم — نشيلو السطر
+                    stale_keys.append(key)
+                    continue
+
+            if pack:
+                unit_price = pack.price
+            elif variant:
                 unit_price = variant.price_for_quantity(quantity)
             else:
                 unit_price = product.price
@@ -232,7 +273,10 @@ def get_cart_lines():
                 key=key, kind="product", name=product.name,
                 unit_price=unit_price, quantity=quantity,
                 image_filename=image, slug=product.slug,
-                variant_label=variant.label if variant else None,
+                variant_label=(
+                    f"{variant.label} — {pack.full_label}" if (variant and pack)
+                    else (variant.label if variant else None)
+                ),
                 product_id=product.id,
                 variant_id=variant.id if variant else None,
                 available_stock=stock,

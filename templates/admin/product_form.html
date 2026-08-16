@@ -303,6 +303,75 @@
             </form>
         </div>
 
+            {# ---------- العروض الجاهزة ---------- #}
+            <div class="variant-packs">
+                <label class="variant-section-title">
+                    عروض جاهزة <em>(اختياري)</em>
+                </label>
+                <p class="hint hint-sm">
+                    وحدات بيع لها اسم وسعر ثابت — مثال:
+                    <strong>1</strong> · «رولو (فيه 12 متر)» · <strong>700</strong> دج.
+                    الزبون يختار منها مباشرة بدل ما يحسب بالحبة.
+                </p>
+
+                <form method="post" action="{{ url_for('admin.variant_packs', variant_id=v.id) }}"
+                      class="packs-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <table class="packs-table">
+                        <thead>
+                            <tr>
+                                <th class="packs-qty-col">عدد</th>
+                                <th>اسم العرض</th>
+                                <th class="packs-price-col">السعر (دج)</th>
+                                <th class="packs-x-col"><span class="sr-only">مسح</span></th>
+                            </tr>
+                        </thead>
+                        <tbody class="packs-body">
+                            {% for pk in v.packs %}
+                            <tr>
+                                <td class="packs-qty-col">
+                                    <input type="number" name="pack_quantity"
+                                           value="{{ pk.quantity }}" min="1">
+                                </td>
+                                <td><input type="text" name="pack_label" value="{{ pk.label }}"></td>
+                                <td class="packs-price-col">
+                                    <input type="number" name="pack_price"
+                                           value="{{ pk.price }}" min="0">
+                                </td>
+                                <td class="packs-x-col">
+                                    <button type="button" class="pack-remove"
+                                            title="امسح هاد العرض" aria-label="امسح">×</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+
+                            <tr>
+                                <td class="packs-qty-col">
+                                    <input type="number" name="pack_quantity" value="1" min="1">
+                                </td>
+                                <td><input type="text" name="pack_label"
+                                           placeholder="رولو (فيه 12 متر)"></td>
+                                <td class="packs-price-col">
+                                    <input type="number" name="pack_price" min="0" placeholder="700">
+                                </td>
+                                <td class="packs-x-col">
+                                    <button type="button" class="pack-remove"
+                                            title="امسح هاد العرض" aria-label="امسح">×</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="tiers-actions">
+                        <button type="button" class="btn-admin btn-sm btn-ghost pack-add">
+                            + زيد عرض جاهز
+                        </button>
+                        <button type="submit" class="btn-admin btn-sm">احفظ العروض</button>
+                    </div>
+                </form>
+            </div>
+
         </div>{# /variant-body #}
     </div>
     {% endfor %}
@@ -402,6 +471,40 @@
             var row = makeRow();
             body.appendChild(row);
             row.querySelector('input').focus();   // الفوكس على «من» مباشرة
+            return;
+        }
+
+        // ---------- زيد عرض جاهز ----------
+        var packAdd = e.target.closest('.pack-add');
+        if (packAdd) {
+            var pBody = packAdd.closest('form').querySelector('.packs-body');
+            var pRow = document.createElement('tr');
+            pRow.innerHTML =
+                '<td class="packs-qty-col">' +
+                    '<input type="number" name="pack_quantity" value="1" min="1"></td>' +
+                '<td><input type="text" name="pack_label" placeholder="رولو (فيه 12 متر)"></td>' +
+                '<td class="packs-price-col">' +
+                    '<input type="number" name="pack_price" min="0" placeholder="700"></td>' +
+                '<td class="packs-x-col">' +
+                    '<button type="button" class="pack-remove" title="امسح هاد العرض" ' +
+                    'aria-label="امسح">×</button></td>';
+            pBody.appendChild(pRow);
+            pRow.querySelector('input[name="pack_label"]').focus();
+            return;
+        }
+
+        // ---------- امسح عرض جاهز ----------
+        var packRemove = e.target.closest('.pack-remove');
+        if (packRemove) {
+            var pTr = packRemove.closest('tr');
+            var pTbody = pTr.parentNode;
+            if (pTbody.querySelectorAll('tr').length > 1) {
+                pTr.remove();
+            } else {
+                pTr.querySelectorAll('input').forEach(function (i) {
+                    i.value = i.name === 'pack_quantity' ? '1' : '';
+                });
+            }
             return;
         }
 

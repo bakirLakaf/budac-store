@@ -23,6 +23,7 @@ from models import (
     db, Product, Category, ProductImage, ProductVariant,
     Offer, OfferItem, Carrier, ShippingRate, AdminUser, Coupon, Order,
     AbandonedCart, Review, UpsellRule, LandingPage, StoreSetting,
+    VariantPack,
 )
 from services.cart import CartLine
 from services.orders import restore_stock, reserve_stock, OrderError
@@ -1935,3 +1936,79 @@ def shipping_sync_zr():
         )
 
     return redirect(url_for("admin.shipping_list"))
+
+
+@admin_bp.route("/variants/<int:variant_id>/packs", methods=["POST"])
+@login_required
+def variant_packs(variant_id):
+    """
+    يحفظ العروض الجاهزة لموديل.
+
+    ⚠️ نمسحو القديم ونكتبو الجديد — أبسط من محاولة مطابقة كل سطر
+    بسطرو، والعروض قليلة فالعادة (2–6 لكل موديل).
+    """
+    variant = ProductVariant.query.get_or_404(variant_id)
+    product = variant.product
+
+    quantities = request.form.getlist("pack_quantity")
+    labels = request.form.getlist("pack_label")
+    prices = request.form.getlist("pack_price")
+
+    new_packs = []
+
+    for i in range(len(labels)):
+        label = (labels[i] or "").strip()
+        raw_qty = (quantities[i] if i < len(quantities) else "").strip()
+        raw_price = (prices[i] if i < len(prices) else "").strip()
+
+        # سطر فارغ كليًا = الأدمن خلّاه، نتجاوزوه بصمت
+        if not label and not raw_price:
+            continue
+
+        if not label:
+            flash("عرض بلا اسم — تجاوزناه", "warning")
+            continue
+
+        try:
+            price = int(raw_price)
+            quantity = int(raw_qty) if raw_qty else 1
+        except ValueError:
+            flash(f"«{label}»: السعر ولا العدد ماشي رقم — تجاوزناه", "warning")
+            continue
+
+        if price < 0 or quantity < 1:
+            flash(f"«{label}»: العدد لازم 1 فأكثر والسعر ماشي سالب", "warning")
+            continue
+
+        new_packs.append((quantity, label[:160], price))
+
+    # ⚠️ نمنعو تكرار الاسم — وإلا الزبون يشوف خيارين بنفس الاسم
+    seen = set()
+    unique = []
+    for quantity, label, price in new_packs:
+        key = label.lower()
+        if key in seen:
+            flash(f"«{label}» مكرر — خليّنا الأول فقط", "warning")
+            continue
+        seen.add(key)
+        unique.append((quantity, label, price))
+
+    VariantPack.query.filter_by(variant_id=variant.id).delete(synchronize_session=False)
+
+    for order, (quantity, label, price) in enumerate(unique):
+        db.session.add(VariantPack(
+            variant_id=variant.id,
+            quantity=quantity,
+            label=label,
+            price=price,
+            sort_order=order,
+        ))
+
+    db.session.commit()
+
+    if unique:
+        flash(f"تحفظو {len(unique)} عرض لـ«{variant.label}»", "success")
+    else:
+        flash(f"تمسحو العروض الجاهزة ديال «{variant.label}»", "success")
+
+    return redirect(url_for("admin.product_form", product_id=product.id))
