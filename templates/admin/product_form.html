@@ -368,7 +368,6 @@
 </div>
 {% endif %}
 
-{% endblock %}
 
 <script>
 /**
@@ -437,7 +436,21 @@
     'use strict';
 
     var gallery = document.getElementById('imgGallery');
-    if (!gallery) return;
+
+    // ⚠️ المعرض ما يتبنىش إذا المنتج بلا صور. بدل ما الزر يسكت
+    // ويحيّر الأدمن، نقولّو السبب.
+    if (!gallery) {
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.vimg-current');
+            if (!btn) return;
+            var state = btn.closest('.vimg').querySelector('.vimg-state');
+            if (state) {
+                state.textContent = 'ارفع صور للمنتج فوق أولاً';
+                state.className = 'vimg-state is-bad';
+            }
+        });
+        return;
+    }
 
     var label = document.getElementById('galLabel');
     var current = null;   // عنصر .vimg اللي فتح المعرض
@@ -545,3 +558,5 @@
     });
 })();
 </script>
+
+{% endblock %}

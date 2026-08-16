@@ -38,6 +38,13 @@ SCAN_PATTERNS = (
     "config.json", "credentials", "backup", "vendor/",
 )
 
+# ⚠️ ملفات تقنية لمحركات البحث — ماشي صفحات يزورها بنيادم.
+# ظهرو فالإحصائيات وأوهمو أنهم زوّار.
+NON_PAGE_PATHS = (
+    "/robots.txt", "/sitemap.xml", "/favicon.ico",
+    "/manifest.json", "/sw.js", "/ads.txt",
+)
+
 BOT_HINTS = (
     "bot", "crawler", "spider", "slurp", "curl", "wget",
     "python-requests", "headless", "monitor", "uptime",
@@ -103,6 +110,10 @@ def track_response(response):
         # ✅ الثالث: مسارات المسح المعروفة — حتى لو ردّينا 200 بالغلط
         lowered = path.lower()
         if any(pattern in lowered for pattern in SCAN_PATTERNS):
+            return response
+
+        # ملفات تقنية — روبوتات البحث تقراها، ماشي زوّار
+        if lowered in NON_PAGE_PATHS:
             return response
 
         # الأدمن ما يتعدّش — يزور موقعو بزاف ويخرّب الرقم
@@ -316,6 +327,10 @@ def purge_scan_noise():
     conditions = [
         SiteVisit.first_page.ilike(f"%{pattern}%")
         for pattern in SCAN_PATTERNS
+    ]
+    # الملفات التقنية كذلك
+    conditions += [
+        SiteVisit.first_page == path for path in NON_PAGE_PATHS
     ]
 
     deleted = (

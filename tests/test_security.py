@@ -52,6 +52,40 @@ def build(csrf=True):
 
 def run():
     # ══════════ 1. الأسرار فالكود ══════════
+    # ═══════════════════════════════════════════════════
+    # 0. سلامة القوالب — محتوى برّا الكتل
+    # ═══════════════════════════════════════════════════
+    # ⚠️ درس حقيقي: سكربت المعرض تحط بعد {% endblock %} فقالب وارث،
+    # فJinja تجاهلو والزر ما كانش يخدم — بلا أي رسالة خطأ.
+    section("0. سلامة القوالب")
+    import re as _re
+
+    orphans = []
+    for root, dirs, files in os.walk(os.path.join(BASE, "templates")):
+        for f in files:
+            if not f.endswith(".html"):
+                continue
+
+            path = os.path.join(root, f)
+            text = open(path, encoding="utf-8").read()
+
+            # القوالب الوارثة فقط — القالب الأساسي عادي يكون فيه محتوى برّا
+            if "{% extends" not in text:
+                continue
+
+            # نشوفو واش فيه محتوى فعلي بعد آخر endblock
+            last = text.rfind("{% endblock %}")
+            if last == -1:
+                continue
+
+            tail = text[last + len("{% endblock %}"):]
+            tail = _re.sub(r"\{#.*?#\}", "", tail, flags=_re.S).strip()
+
+            if tail:
+                orphans.append(f"{os.path.relpath(path, BASE)}: {tail[:60]}")
+
+    check("ماكانش محتوى برّا كتل القوالب", not orphans, orphans)
+
     section("1. الأسرار والمفاتيح")
     leaks = []
     secret_pat = re.compile(

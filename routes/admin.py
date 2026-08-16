@@ -226,8 +226,12 @@ def dashboard():
     pending_reviews_count = Review.query.filter_by(is_approved=False).count()
 
     # إحصائيات الزوار — من services/analytics
-    from services.analytics import get_summary
+    from services.analytics import get_summary, purge_scan_noise
     try:
+        # ⚠️ ننظّفو زيارات روبوتات المسح فكل فتح للوحة، ماشي فالإقلاع
+        # وحدو. السبب: سجلات قديمة تسجّلت قبل ما نصلحو الفلتر، والأدمن
+        # ما يستاهلش يعيد النشر باش يشوف أرقام صحيحة.
+        purge_scan_noise()
         visitors = get_summary()
     except Exception:
         visitors = None   # ⚠️ الجدول ممكن ما يكونش موجود بعد أول نشر

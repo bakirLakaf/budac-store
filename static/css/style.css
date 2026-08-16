@@ -2992,3 +2992,112 @@ img, video, iframe, table { max-width: 100%; }
     .search-suggest-img { flex-basis: 40px; width: 40px; height: 40px; }
     .search-suggest-name { font-size: 13.5px; }
 }
+
+/* ═══════════════ تقييمات الزبائن ═══════════════ */
+
+.testi {
+    padding: 46px 0 54px;
+    background: linear-gradient(180deg, transparent 0%, #F6EFE3 100%);
+}
+
+.testi-heading { text-align: center; margin-bottom: 26px; }
+
+/* ⚠️ scroll-snap يعطي سحبًا طبيعيًا بالإصبع بلا JS إضافي */
+.testi-viewport {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    padding-bottom: 6px;
+    /* نخبّيو شريط التمرير — السحب والنقاط كافيين */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.testi-viewport::-webkit-scrollbar { display: none; }
+
+.testi-track { display: flex; gap: 16px; }
+
+.testi-card {
+    flex: 0 0 auto;
+    width: min(340px, 82vw);
+    scroll-snap-align: start;
+    display: flex; flex-direction: column;
+    padding: 22px 22px 18px;
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    box-shadow: 0 4px 18px -12px rgba(46, 26, 71, 0.28);
+}
+
+.testi-stars {
+    font-size: 16px; letter-spacing: 2px;
+    margin-bottom: 12px;
+}
+.testi-stars .on { color: var(--color-gold); }
+.testi-stars .off { color: #E0D8C8; }
+
+.testi-text {
+    flex: 1;
+    margin: 0 0 18px;
+    font-size: 15px; line-height: 1.75;
+    color: var(--color-ink);
+    /* أربعة أسطر كحد أقصى — البطاقات تبقى بنفس الطول */
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.testi-foot {
+    display: flex; align-items: center; gap: 11px;
+    padding-top: 14px;
+    border-top: 1px solid #F0EAE0;
+}
+
+.testi-avatar {
+    flex: 0 0 38px;
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--color-primary);
+    color: var(--color-gold-soft);
+    border-radius: 50%;
+    font-size: 16px; font-weight: 800;
+}
+
+.testi-who { min-width: 0; font-size: 13.5px; }
+.testi-who strong {
+    display: block;
+    color: var(--color-primary); font-weight: 700;
+}
+.testi-who a {
+    display: block;
+    color: var(--color-ink-soft);
+    text-decoration: none;
+    font-size: 12.5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.testi-who a:hover { color: var(--color-gold); text-decoration: underline; }
+
+/* ---------- النقاط ---------- */
+.testi-dots {
+    display: flex; justify-content: center; gap: 7px;
+    margin-top: 20px;
+}
+.testi-dot {
+    width: 8px; height: 8px;
+    padding: 0; border: none; border-radius: 50%;
+    background: #D8CDBA;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.testi-dot.is-on {
+    width: 24px; border-radius: 999px;
+    background: var(--color-gold);
+}
+.testi-dot:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+    .testi { padding: 34px 0 40px; }
+    .testi-card { width: min(300px, 84vw); padding: 18px; }
+}

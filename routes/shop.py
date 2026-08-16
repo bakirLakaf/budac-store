@@ -58,8 +58,12 @@ def home():
     # العرض المميّز (قسم الصورة الكبيرة) — واحد فقط، فوق أو تحت
     spotlight = _find_spotlight_offer()
 
+    # تقييمات الزبائن — تبان فوق التذييل
+    testimonials = _find_testimonials() if not category_slug else []
+
     return render_template(
         "shop/home.html",
+        testimonials=testimonials,
         products=products,
         all_products=all_products,
         categories=categories,
@@ -68,6 +72,38 @@ def home():
         newest=newest,
         best_sellers=best_sellers,
         spotlight=spotlight,
+    )
+
+
+def _find_testimonials(limit=12):
+    """
+    تقييمات الزبائن للسلايدر فالصفحة الرئيسية.
+
+    ⚠️ قواعد الاختيار:
+      • **معتمدة فقط** — الأدمن يوافق قبل ما تبان. تقييم مسيء ولا
+        سبام ما يوصلش للصفحة الرئيسية.
+      • **فيها تعليق مكتوب** — نجمة بلا كلام ما تقنع حد.
+      • **4 نجوم وفوق** — هاد القسم للثقة. التقييمات المنخفضة تبقى
+        بانة فصفحة المنتج نفسو (ماشي إخفاء، غير ماشي مكانها هنا).
+      • **عشوائية** فكل تحميل — الزائر اللي يرجع يشوف تقييمات أخرى.
+
+    ترجع قائمة فارغة إذا ماكانش — والقالب ما يعرضش القسم أصلاً،
+    أحسن من سلايدر فارغ.
+    """
+    from models import Review
+
+    return (
+        Review.query
+        .options(joinedload(Review.product))
+        .filter(
+            Review.is_approved.is_(True),
+            Review.rating >= 4,
+            Review.comment.isnot(None),
+            func.length(func.trim(Review.comment)) >= 10,
+        )
+        .order_by(func.random())
+        .limit(limit)
+        .all()
     )
 
 

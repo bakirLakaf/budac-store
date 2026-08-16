@@ -406,3 +406,130 @@
     var initial = new URLSearchParams(window.location.search).get('category') || 'all';
     applyFilter(initial, false);
 })();
+
+
+/**
+ * سلايدر تقييمات الزبائن — يمشي وحدو.
+ *
+ * ⚠️ قرارات:
+ *   • بلا مكتبة خارجية — الصفحة الرئيسية لازم تحمّل بسرعة
+ *   • يوقف عند المرور بالفأرة ولا التركيز — الزائر يقرا براحتو
+ *   • يوقف كي التبويب مخفي — ما نضيّعوش بطارية الموبايل
+ *   • السحب بالإصبع يخدم طبيعي (scroll-snap ديال CSS)
+ *   • يحترم prefers-reduced-motion
+ */
+(function () {
+    'use strict';
+
+    var viewport = document.getElementById('testiViewport');
+    var track = document.getElementById('testiTrack');
+    var dotsBox = document.getElementById('testiDots');
+
+    if (!viewport || !track) return;
+
+    var cards = track.querySelectorAll('.testi-card');
+    if (cards.length < 2) return;   // بطاقة وحدة ما تحتاجش سلايدر
+
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var timer = null;
+    var paused = false;
+
+    /** كم بطاقة تبان فالشاشة دابا */
+    function perView() {
+        var cardWidth = cards[0].getBoundingClientRect().width;
+        if (!cardWidth) return 1;
+        return Math.max(1, Math.round(viewport.clientWidth / cardWidth));
+    }
+
+    function pageCount() {
+        return Math.max(1, Math.ceil(cards.length / perView()));
+    }
+
+    function currentPage() {
+        var pageWidth = viewport.clientWidth || 1;
+        // ⚠️ RTL: scrollLeft يجي سالب فمعظم المتصفحات
+        return Math.round(Math.abs(viewport.scrollLeft) / pageWidth);
+    }
+
+    function goTo(page) {
+        var total = pageCount();
+        var target = ((page % total) + total) % total;   // دوران
+        var offset = target * viewport.clientWidth;
+
+        viewport.scrollTo({
+            left: isRTL() ? -offset : offset,
+            behavior: reduced ? 'auto' : 'smooth',
+        });
+    }
+
+    function isRTL() {
+        return getComputedStyle(document.documentElement).direction === 'rtl';
+    }
+
+    // ---------- النقاط ----------
+
+    function buildDots() {
+        var total = pageCount();
+        dotsBox.innerHTML = '';
+
+        if (total < 2) return;
+
+        for (var i = 0; i < total; i++) {
+            var dot = document.createElement('button');
+            dot.type = 'button';
+            dot.className = 'testi-dot';
+            dot.setAttribute('aria-label', 'التقييم ' + (i + 1));
+            dot.dataset.page = i;
+            dotsBox.appendChild(dot);
+        }
+        markActive();
+    }
+
+    function markActive() {
+        var active = currentPage();
+        dotsBox.querySelectorAll('.testi-dot').forEach(function (d, i) {
+            d.classList.toggle('is-on', i === active);
+        });
+    }
+
+    // ---------- التشغيل التلقائي ----------
+
+    function start() {
+        if (reduced || timer) return;
+        timer = setInterval(function () {
+            if (!paused && !document.hidden) goTo(currentPage() + 1);
+        }, 5000);
+    }
+
+    function stop() {
+        clearInterval(timer);
+        timer = null;
+    }
+
+    // ---------- الأحداث ----------
+
+    ['mouseenter', 'focusin', 'touchstart'].forEach(function (ev) {
+        viewport.addEventListener(ev, function () { paused = true; }, { passive: true });
+    });
+    ['mouseleave', 'focusout', 'touchend'].forEach(function (ev) {
+        viewport.addEventListener(ev, function () { paused = false; }, { passive: true });
+    });
+
+    viewport.addEventListener('scroll', function () {
+        clearTimeout(viewport._t);
+        viewport._t = setTimeout(markActive, 90);
+    }, { passive: true });
+
+    dotsBox.addEventListener('click', function (e) {
+        var dot = e.target.closest('.testi-dot');
+        if (dot) goTo(parseInt(dot.dataset.page, 10));
+    });
+
+    window.addEventListener('resize', function () {
+        clearTimeout(window._testiR);
+        window._testiR = setTimeout(buildDots, 200);
+    });
+
+    buildDots();
+    start();
+})();
