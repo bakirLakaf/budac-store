@@ -96,6 +96,20 @@ def create_app():
         from services.analytics import track_request
         track_request()
 
+    # ⚠️ بصمة الملفات الثابتة — تحلّ مشكل تكرر معنا بزاف:
+    # ترفع نسخة جديدة، والمتصفح يبقى يعرض CSS/JS القديم من ذاكرتو،
+    # فتظن أن الرفع فشل. البصمة = وقت آخر تعديل للملف. كي يتبدّل
+    # الملف، الرابط يتبدّل، والمتصفح مجبور يحمّلو من جديد.
+    @app.url_defaults
+    def _static_cache_bust(endpoint, values):
+        if endpoint != "static" or "filename" not in values:
+            return
+        try:
+            path = os.path.join(app.static_folder, values["filename"])
+            values["v"] = int(os.stat(path).st_mtime)
+        except Exception:
+            pass   # الملف ماكانش — نخليو الرابط كيما هو
+
     @app.context_processor
     def inject_store_info():
         # عدّاد السلة متاح فكل صفحة (للأيقونة فالهيدر) بلا ما نمرروه فكل route
