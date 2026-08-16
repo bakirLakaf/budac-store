@@ -82,6 +82,22 @@ def run():
         else:
             print("👤 حساب الأدمن موجود")
 
+        # ⚠️ تنظيف سجلات الزوار: القديمة + اللي جات من روبوتات المسح.
+        # الفلتر القديم كان يعتمد على User-Agent وحدو، والسكانرات تزوّرو،
+        # فدخلو زيارات لـ/wp-admin وشبهها وخرّبو الأرقام.
+        try:
+            from services.analytics import prune_old, purge_scan_noise
+
+            removed = prune_old()
+            if removed:
+                print(f"🧹 مسحنا {removed} سطر زيارات قديمة (أكثر من 180 يوم)")
+
+            noise = purge_scan_noise()
+            if noise:
+                print(f"🤖 مسحنا {noise} زيارة من روبوتات المسح (wp-admin وشبهها)")
+        except Exception as e:
+            print(f"   ⚠️ تنظيف الزوار ما خدمش: {e}")
+
         print("✅ التجهيز خلص — نشغّلو الموقع\n")
 
 
