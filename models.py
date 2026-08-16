@@ -151,6 +151,25 @@ class ProductVariant(db.Model):
             for t in sorted(self.price_tiers, key=lambda t: t.min_quantity)
         ]
 
+    def packs_payload(self):
+        """
+        العروض الجاهزة بصيغة JSON — لصفحة المنتج.
+
+        ⚠️ نبعثو السعر الإجمالي والعدد. الحساب النهائي يتم فالسلة على
+        السيرفر، وهاذي غير للعرض والاختيار.
+        """
+        return [
+            {
+                "id": pk.id,
+                "quantity": pk.quantity,
+                "label": pk.label,
+                "full_label": pk.full_label,
+                "price": pk.price,
+                "unit_price": pk.unit_price,
+            }
+            for pk in sorted(self.packs, key=lambda pk: pk.sort_order)
+        ]
+
     @property
     def effective_price(self):
         return self.price if self.price is not None else self.product.price
@@ -1254,3 +1273,66 @@ class SiteVisit(db.Model):
 
     def __repr__(self):
         return f"<SiteVisit {self.day} views={self.views}>"
+
+
+class VariantPack(db.Model):
+    """
+    عرض جاهز (باقة) للموديل — طريقة تسعير ثانية جنب أسعار الكمية.
+
+    ⚠️ الفرق بين الطريقتين:
+
+      • **أسعار الكمية** (VariantPriceTier): الزبون يختار العدد، والسعر
+        ينزل تلقائيًا. مثال: من 100 لـ199 بـ420 دج للحبة.
+
+      • **العروض الجاهزة** (هاد الموديل): وحدات بيع لها اسم وسعر ثابت.
+        مثال: «رولو (فيه 12 متر)» بـ700 دج · «ساشي (فيه 200 حبة)» بـ350 دج.
+
+    الفرق الجوهري: العرض الجاهز **وحدة بيع بذاتها** — الزبون ما يشتريش
+    «12 متر»، يشتري «رولو». الاسم والسعر مرتبطين، والعدد يقول كم وحدة
+    يشمل هاد العرض.
+
+    الاثنان يقدرو يخدمو مع بعض على نفس الموديل: الزبون يختار واش يشري
+    بالحبة (بأسعار الكمية) ولا يشري عرضًا جاهزًا.
+    """
+    __tablename__ = "variant_packs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    variant_id = db.Column(db.Integer, db.ForeignKey("product_variants.id"), nullable=False)
+
+    quantity = db.Column(db.Integer, nullable=False, default=1)   # كم وحدة فالعرض
+    label = db.Column(db.String(160), nullable=False)             # «رولو (فيه 12 متر)»
+    price = db.Column(db.Integer, nullable=False)                 # السعر الإجمالي للعرض
+
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    variant = db.relationship(
+        "ProductVariant",
+        backref=db.backref("packs", cascade="all, delete-orphan",
+                           order_by="VariantPack.sort_order"),
+    )
+
+    @property
+    def price_display(self):
+        return f"{self.price:,} دج"
+
+    @property
+    def unit_price(self):
+        """
+        سعر الوحدة داخل العرض — للمقارنة فقط.
+
+        ⚠️ ماشي هو اللي يتحسب فالسلة: السلة تاخذ السعر الإجمالي كيما هو،
+        باش ما يصراش فرق قروش من التقريب.
+        """
+        if not self.quantity:
+            return self.price
+        return round(self.price / self.quantity)
+
+    @property
+    def full_label(self):
+        """«2 × رولو (فيه 12 متر)» ولا «رولو (فيه 12 متر)» إذا الكمية 1."""
+        if (self.quantity or 1) > 1:
+            return f"{self.quantity} × {self.label}"
+        return self.label
+
+    def __repr__(self):
+        return f"<VariantPack {self.label} {self.price}>"

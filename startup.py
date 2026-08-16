@@ -195,12 +195,53 @@ def _add_missing_columns(db):
     inspector = inspect(db.engine)
     added = 0
 
-    for table, column, ddl in wanted:
-        if table not in inspector.get_table_names():
+    # ⚠️ الأعمدة اليدوية فوق ما تكفيش. الدرس جانا من عمود communes.daira:
+    # تزيد عمود للموديل، تنسى تسجّلو هنا، والموقع يحبس فالإنتاج بلا
+    # ما تفهم ليش. دابا نقارنو **كل** الموديلات مع قاعدة البيانات
+    # ونزيدو أي عمود ناقص تلقائيًا.
+    auto = []
+    type_map = {
+        "INTEGER": "INTEGER", "BIGINT": "BIGINT", "SMALLINT": "INTEGER",
+        "BOOLEAN": "BOOLEAN", "TEXT": "TEXT", "DATE": "DATE",
+        "DATETIME": "TIMESTAMP", "TIMESTAMP": "TIMESTAMP",
+        "FLOAT": "DOUBLE PRECISION", "NUMERIC": "NUMERIC",
+    }
+
+    existing_tables = set(inspector.get_table_names())
+
+    for table in db.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue   # جدول جديد — create_all بناه كامل
+
+        db_columns = {c["name"] for c in inspector.get_columns(table.name)}
+
+        for column in table.columns:
+            if column.name in db_columns:
+                continue
+
+            # ⚠️ ما نزيدوش مفاتيح أولية ولا أعمدة NOT NULL بلا افتراضي:
+            # الأولى مستحيلة بـALTER، والثانية تفشل إذا الجدول فيه صفوف.
+            if column.primary_key:
+                continue
+
+            try:
+                compiled = column.type.compile(db.engine.dialect)
+            except Exception:
+                compiled = "TEXT"
+
+            base = compiled.split("(")[0].upper()
+            ddl = compiled if "(" in compiled else type_map.get(base, compiled)
+
+            # عمود إجباري بلا قيمة افتراضية → نزيدو كـnullable باش ما
+            # يفشلش، والتطبيق يعمّرو بعدين
+            auto.append((table.name, column.name, ddl))
+
+    for table, column, ddl in list(wanted) + auto:
+        if table not in existing_tables:
             continue
 
-        existing = {c["name"] for c in inspector.get_columns(table)}
-        if column in existing:
+        current = {c["name"] for c in inspector.get_columns(table)}
+        if column in current:
             continue
 
         try:
