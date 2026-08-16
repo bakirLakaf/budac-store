@@ -195,25 +195,14 @@
     {% for v in product.variants %}
     <div class="variant-card">
 
-        {# ---------- السطر الأول: الصورة والمعلومات ---------- #}
+        {# ---------- الرأس: الاسم والسعر والحذف ---------- #}
         <div class="variant-head">
-            <div class="variant-img-cell">
-                {% if v.image_filename %}
-                    <img src="{{ url_for('static', filename='img/products/' + (v.image_filename | thumb)) }}"
-                         alt="{{ v.label }}" class="variant-thumb">
-                {% else %}
-                    <span class="variant-thumb variant-thumb-empty" title="بلا صورة">؟</span>
-                {% endif %}
-            </div>
-
             <div class="variant-info">
-                <strong class="variant-name">
-                    <span class="variant-num">{{ loop.index }}</span>{{ v.label }}
-                </strong>
+                <strong class="variant-name">{{ v.label }}</strong>
                 <span class="variant-meta">
-                    السعر العادي: {{ v.price_display }}
-                    {% if v.sku %} · SKU: {{ v.sku }}{% endif %}
-                    {% if v.is_default %} · <span class="tag-default">افتراضي</span>{% endif %}
+                    {{ v.price_display }}
+                    {% if v.sku %}<span class="dot">·</span>{{ v.sku }}{% endif %}
+                    {% if v.is_default %}<span class="tag-default">افتراضي</span>{% endif %}
                 </span>
             </div>
 
@@ -221,46 +210,44 @@
                   onsubmit="return confirm('تمسح الموديل «{{ v.label }}» وكل أسعارو؟')"
                   class="variant-del-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn-admin btn-sm btn-danger btn-icon"
-                        title="حذف الموديل «{{ v.label }}»">
-                    🗑️ <span class="btn-icon-text">حذف</span>
-                </button>
+                <button type="submit" class="variant-del"
+                        title="حذف الموديل «{{ v.label }}»"
+                        aria-label="حذف الموديل {{ v.label }}">حذف</button>
             </form>
         </div>
 
-        {# ---------- اختيار الصورة من صور المنتج ---------- #}
-        <div class="variant-section">
-            <label class="variant-section-title">صورة الموديل</label>
+        {# ---------- الجسم: العيّنة | الأسعار ---------- #}
+        <div class="variant-body">
 
-            {% if product.images %}
-            {# ⚠️ ماشي فورم — الحفظ يمشي بـfetch بلا إعادة تحميل الصفحة #}
-            <div class="vimg" data-variant="{{ v.id }}"
-                 data-url="{{ url_for('admin.variant_image', variant_id=v.id) }}"
-                 data-label="{{ v.label }}">
+            {# العيّنة — صورة الموديل كيما عيّنة يشوفها الزبون #}
+            <div class="variant-swatch">
+                {% if product.images %}
+                <div class="vimg" data-variant="{{ v.id }}"
+                     data-url="{{ url_for('admin.variant_image', variant_id=v.id) }}"
+                     data-label="{{ v.label }}">
 
-                <button type="button" class="vimg-current"
-                        aria-label="بدّل صورة {{ v.label }}">
-                    {% if v.image_filename %}
-                    <img src="{{ url_for('static', filename='img/products/' + (v.image_filename | thumb)) }}"
-                         alt="{{ v.label }}">
-                    {% else %}
-                    <span class="vimg-empty">اختر صورة</span>
-                    {% endif %}
-                    <span class="vimg-edit">تبديل</span>
-                </button>
+                    <button type="button" class="vimg-current"
+                            aria-label="بدّل صورة {{ v.label }}">
+                        {% if v.image_filename %}
+                        <img src="{{ url_for('static', filename='img/products/' + (v.image_filename | thumb)) }}"
+                             alt="">
+                        {% else %}
+                        <span class="vimg-empty">اختر<br>صورة</span>
+                        {% endif %}
+                        <span class="vimg-edit">تبديل</span>
+                    </button>
 
-                <span class="vimg-state" role="status"></span>
+                    <span class="vimg-state" role="status"></span>
+                </div>
+                {% else %}
+                <p class="hint hint-sm">ارفع صور المنتج فوق أولاً.</p>
+                {% endif %}
             </div>
 
-            {% else %}
-            <p class="hint">ارفع صور المنتج أولاً (فوق)، وبعدها تقدر تختار لكل موديل صورتو.</p>
-            {% endif %}
-        </div>
-
         {# ---------- أسعار الجملة ---------- #}
-        <div class="variant-section">
-            <label class="variant-section-title">أسعار حسب الكمية (اختياري)</label>
-            <p class="hint">
+        <div class="variant-tiers">
+            <label class="variant-section-title">أسعار حسب الكمية <em>(اختياري)</em></label>
+            <p class="hint hint-sm">
                 مثال: من <strong>1</strong> إلى <strong>99</strong> بـ500 دج ·
                 من <strong>100</strong> إلى <strong>199</strong> بـ420 دج ·
                 من <strong>200</strong> وفوق بـ380 دج (خلّي «إلى» فارغ).
@@ -316,6 +303,7 @@
             </form>
         </div>
 
+        </div>{# /variant-body #}
     </div>
     {% endfor %}
 </div>

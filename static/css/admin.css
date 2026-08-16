@@ -1,3 +1,181 @@
+
+/* ═══════════════════════════════════════════════════════
+   بطاقة الموديل
+
+   الفكرة: الموديل = عيّنة عند بائع الديكور. الصورة تتعامل
+   كـ«عيّنة» مربّعة ثابتة القياس على الجنب، والأسعار جنبها
+   فعمود واسع. هكذا الأدمن يشوف كل موديل بسطرين، ماشي بشاشة
+   كاملة كيما قبل.
+
+   ⚠️ درس: بلا قياس صريح على الصورة، الـ<img> تاخذ عرض الحاوية
+   كامل — وهذا اللي كسّر التخطيط.
+   ═══════════════════════════════════════════════════════ */
+
+.variant-card {
+    position: relative;
+    margin-bottom: 14px;
+    background: #fff;
+    border: 1px solid #E7DFCF;
+    border-radius: 14px;
+    overflow: hidden;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.variant-card:hover {
+    border-color: #DCCFA8;
+    box-shadow: 0 4px 16px -10px rgba(46, 26, 71, 0.28);
+}
+
+/* الشريط الذهبي — يفصل موديل عن موديل بلمحة */
+.variant-card::before {
+    content: "";
+    position: absolute;
+    inset-block: 0; inset-inline-start: 0;
+    width: 4px;
+    background: var(--a-gold);
+}
+
+/* ---------- الرأس ---------- */
+.variant-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding: 12px 18px 12px 16px;
+    background: #FBF7EF;
+    border-bottom: 1px solid #F0E8D8;
+}
+
+.variant-info { min-width: 0; }
+
+.variant-name {
+    display: block;
+    font-size: 15px; font-weight: 700;
+    color: #2E1A47;
+    line-height: 1.4;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.variant-meta {
+    display: block; margin-top: 2px;
+    font-size: 12.5px; color: #6B6478;
+}
+.variant-meta .dot { margin: 0 6px; opacity: 0.5; }
+
+.tag-default {
+    margin-inline-start: 8px;
+    background: #EFE6C9; color: #6B5410;
+    padding: 1px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 700;
+}
+
+/* زر الحذف — هادي وما يشدّش العين حتى تحتاجو */
+.variant-del {
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: #A08D8A;
+    font-family: inherit; font-size: 12.5px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.13s ease;
+}
+.variant-del:hover {
+    background: #FDECEA; border-color: #F0D5D2; color: #B4453E;
+}
+.variant-del:focus-visible { outline: 2px solid #B4453E; outline-offset: 1px; }
+
+/* ---------- الجسم: عيّنة | أسعار ---------- */
+.variant-body {
+    display: grid;
+    grid-template-columns: 108px 1fr;
+    gap: 20px;
+    padding: 16px 18px 16px 16px;
+    align-items: start;
+}
+
+.variant-swatch { min-width: 0; }
+
+/* ⚠️ القياس هنا **إجباري** — بلاه الصورة تنفجر على عرض الصفحة */
+.vimg-current {
+    position: relative;
+    display: block;
+    width: 108px; height: 108px;
+    padding: 0;
+    border: 1px solid #E4DBCA;
+    border-radius: 12px;
+    background: #FBF6EE;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+}
+.vimg-current:hover { border-color: #C9A227; }
+.vimg-current:focus-visible { outline: 2px solid #2E1A47; outline-offset: 2px; }
+
+.vimg-current img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.vimg-empty {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%;
+    font-size: 12px; font-weight: 600;
+    color: #8B8397; text-align: center; line-height: 1.4;
+}
+
+/* شارة «تبديل» — تبان عند المرور فقط، ما تغطّيش الصورة دايمًا */
+.vimg-edit {
+    position: absolute; inset-inline: 0; bottom: 0;
+    padding: 4px 0;
+    background: rgba(46, 26, 71, 0.86);
+    color: #fff;
+    font-size: 11px; font-weight: 700;
+    text-align: center;
+    opacity: 0; transform: translateY(100%);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.vimg-current:hover .vimg-edit,
+.vimg-current:focus-visible .vimg-edit {
+    opacity: 1; transform: translateY(0);
+}
+/* اللمس ما عندوش hover — نخليوها بانة دايمًا */
+@media (hover: none) {
+    .vimg-edit { opacity: 1; transform: translateY(0); }
+}
+
+.vimg-state {
+    display: block; margin-top: 7px;
+    font-size: 12px; font-weight: 600;
+    min-height: 16px;   /* يحجز مكانو — النص ما يزحزحش التخطيط */
+}
+.vimg-state.is-busy { color: #6B6478; }
+.vimg-state.is-ok { color: #4E7C59; }
+.vimg-state.is-bad { color: #B4453E; }
+
+/* ---------- عمود الأسعار ---------- */
+.variant-tiers { min-width: 0; }
+
+.variant-section-title {
+    display: block; margin-bottom: 4px;
+    font-size: 12.5px; font-weight: 700;
+    color: #2E1A47;
+}
+.variant-section-title em {
+    font-style: normal; font-weight: 500; color: #8B8397;
+}
+
+.hint-sm { font-size: 12px; line-height: 1.6; margin: 0 0 10px; }
+
+/* ---------- الموبايل ---------- */
+@media (max-width: 640px) {
+    .variant-body {
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+    /* العيّنة تمشي لجنب العنوان باش ما تاخذش سطر كامل */
+    .variant-swatch { display: flex; align-items: flex-start; gap: 12px; }
+    .vimg-current { width: 88px; height: 88px; flex: 0 0 88px; }
+}
+
 /* ============ لوحة تحكم BUDAC ============ */
 
 :root {
@@ -582,96 +760,352 @@ body {
 }
 .inspect-box summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
 
-/* ---------- إدارة الموديلات ---------- */
-.variants-manager { display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; }
+/* ═══════════ جدول أسعار الكمية ═══════════ */
 
-.variant-card {
-    border: 1.5px solid var(--a-border);
-    border-radius: 12px;
-    padding: 14px;
-    background: #FDFCFA;
+.tiers-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 5px;
+    /* ⚠️ ثابت: بلاه الأعمدة تتحرّك حسب طول الأرقام */
+    table-layout: fixed;
 }
 
-.variant-head {
-    display: flex;
-    align-items: center;
+.tiers-table th {
+    padding: 0 4px 2px;
+    text-align: start;
+    font-size: 11.5px; font-weight: 700;
+    color: var(--a-text-soft);
+}
+
+.tiers-table td { padding: 0 4px; vertical-align: middle; }
+
+.tiers-table input {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1.5px solid #E4DBCA;
+    border-radius: 10px;
+    background: #fff;
+    font-family: inherit; font-size: 14.5px;
+    /* الأرقام ثابتة العرض — الجدول ما يرقصش كي تكتب */
+    font-variant-numeric: tabular-nums;
+}
+.tiers-table input:focus {
+    outline: none;
+    border-color: var(--a-gold);
+    box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.16);
+}
+
+/* عمود زر المسح — عرض ثابت باش الحقول ما تتقلّصش */
+.tiers-x-col { width: 40px; }
+.tiers-table th.tiers-x-col { padding: 0; }
+
+.tier-remove {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    margin-inline: auto;
+    border: 1.5px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: #C08A85;
+    font-size: 17px; font-weight: 700; line-height: 1;
+    cursor: pointer;
+    transition: all 0.13s ease;
+}
+.tier-remove:hover {
+    background: #FDECEA;
+    border-color: #F0D5D2;
+    color: #B4453E;
+}
+.tier-remove:focus-visible {
+    outline: 2px solid #B4453E;
+    outline-offset: 1px;
+}
+
+.tiers-actions {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 12px; flex-wrap: wrap;
+}
+
+/* الشاشات الصغيرة: الجدول يتحوّل لبطاقات */
+@media (max-width: 620px) {
+    .tiers-table thead { display: none; }
+    .tiers-table, .tiers-table tbody, .tiers-table tr, .tiers-table td {
+        display: block; width: 100%;
+    }
+    .tiers-table tr {
+        position: relative;
+        margin-bottom: 12px;
+        padding: 12px 44px 12px 12px;
+        background: #fff;
+        border: 1px solid #E4DBCA;
+        border-radius: 12px;
+    }
+    .tiers-table td { padding: 4px 0; }
+
+    /* ⚠️ فالموبايل الحقول بلا رؤوس — نزيدو تسمية لكل وحدة */
+    .tiers-table td:nth-child(1)::before { content: "من (حبة)"; }
+    .tiers-table td:nth-child(2)::before { content: "إلى (حبة)"; }
+    .tiers-table td:nth-child(3)::before { content: "سعر الحبة (دج)"; }
+    .tiers-table td::before {
+        display: block; margin-bottom: 4px;
+        font-size: 11.5px; font-weight: 700;
+        color: var(--a-text-soft);
+    }
+
+    .tiers-x-col {
+        position: absolute;
+        top: 10px; inset-inline-end: 8px;
+        width: auto; padding: 0 !important;
+    }
+    .tiers-x-col::before { content: none !important; }
+}
+
+/* أداة وصول: نص للقارئ الصوتي فقط */
+.sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ═══════════════ لوحة الزوار ═══════════════ */
+
+.vis-panel {
+    margin-bottom: 28px;
+    padding: 20px 22px;
+    background: linear-gradient(180deg, #FFFDF8 0%, #FBF6EE 100%);
+    border: 1px solid #E9DFC9;
+    border-radius: 18px;
+}
+
+.vis-head {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+.vis-head h2 { margin: 0; font-size: 18px; color: var(--a-primary); }
+.vis-note { font-size: 12.5px; color: var(--a-text-soft); }
+
+/* ---------- البطاقات ---------- */
+.vis-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 12px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--a-border);
+    margin-bottom: 22px;
 }
-.variant-head .variant-info { flex: 1; min-width: 0; }
-.variant-name { display: block; font-size: 15px; }
-.variant-meta { font-size: 12px; color: var(--a-text-soft); }
-.tag-default {
-    background: #EFE9F7; color: #4A2F6B;
-    padding: 1px 7px; border-radius: 999px; font-size: 11px;
-}
-.variant-del-form { margin: 0; }
 
-.variant-section { margin-top: 14px; }
-.variant-section-title {
+.vis-card {
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid #EDE3D0;
+    border-radius: 13px;
+}
+.vis-card.is-lead {
+    background: var(--a-primary);
+    border-color: var(--a-primary);
+}
+.vis-card.is-lead .vis-label { color: #EFE6C9; }
+.vis-card.is-lead .vis-value { color: #fff; }
+.vis-card.is-lead .vis-sub { color: rgba(232, 217, 168, 0.85); }
+
+.vis-label {
     display: block;
-    font-size: 13px;
+    font-size: 12.5px; font-weight: 600;
+    color: var(--a-text-soft);
+}
+.vis-value {
+    display: block; margin: 4px 0 2px;
+    font-size: 30px; font-weight: 800; line-height: 1;
+    color: var(--a-primary);
+    font-variant-numeric: tabular-nums;
+}
+.vis-sub { font-size: 12.5px; color: var(--a-text-soft); }
+
+.vis-delta {
+    display: inline-block; margin-inline-start: 6px;
     font-weight: 700;
-    margin-bottom: 6px;
+}
+.vis-delta.is-up { color: #7FD69B; }
+.vis-delta.is-down { color: #F0A9A3; }
+
+/* ---------- الرسم البياني ---------- */
+.vis-chart {
+    display: flex; align-items: flex-end; gap: 5px;
+    height: 140px;
+    padding: 10px 4px 0;
+    background: #fff;
+    border: 1px solid #EDE3D0;
+    border-radius: 13px;
+    margin-bottom: 18px;
+}
+
+.vis-bar-wrap {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-end;
+    height: 100%;
+    min-width: 0;
+}
+
+.vis-bar {
+    width: 100%;
+    max-width: 34px;
+    /* ⚠️ حد أدنى باش اليوم بلا زوّار يبقى يبان كخط رقيق */
+    min-height: 3px;
+    background: linear-gradient(180deg, var(--a-gold) 0%, #D9B03A 100%);
+    border-radius: 6px 6px 0 0;
+    position: relative;
+    transition: background 0.15s ease;
+}
+.vis-bar-wrap:hover .vis-bar { background: var(--a-primary); }
+
+.vis-bar-num {
+    position: absolute; top: -17px; inset-inline: 0;
+    text-align: center;
+    font-size: 11px; font-weight: 700;
+    color: var(--a-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.vis-bar-day {
+    margin-top: 6px;
+    font-size: 10.5px; color: var(--a-text-soft);
+    white-space: nowrap;
+}
+
+/* ---------- القوائم ---------- */
+.vis-lists {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+}
+.vis-lists h3 {
+    margin: 0 0 8px;
+    font-size: 13px; font-weight: 800;
     color: var(--a-primary);
 }
-
-/* اختيار صورة الموديل من صور المنتج */
-.img-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-.img-choice {
-    position: relative;
-    width: 68px;
-    height: 68px;
-    border: 2px solid var(--a-border);
-    border-radius: 10px;
-    overflow: hidden;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.vis-lists ul { list-style: none; margin: 0; padding: 0; }
+.vis-lists li {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 8px 12px; margin-bottom: 5px;
     background: #fff;
+    border: 1px solid #EDE3D0;
+    border-radius: 9px;
+    font-size: 13.5px;
 }
-.img-choice input { position: absolute; opacity: 0; pointer-events: none; }
-.img-choice img { width: 100%; height: 100%; object-fit: cover; }
-.img-choice:has(input:checked),
-.img-choice.is-picked { border-color: var(--a-primary); box-shadow: 0 0 0 2px rgba(46,26,71,0.15); }
-.img-choice-none { font-size: 11px; color: var(--a-text-soft); text-align: center; padding: 4px; }
-
-/* جدول أسعار الجملة */
-.tiers-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 13px; }
-.tiers-table th {
-    text-align: start; font-size: 12px; font-weight: 600;
-    color: var(--a-text-soft); padding: 4px 6px;
+.vis-lists li span {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tiers-table td { padding: 3px 6px; }
-.tiers-table input {
-    width: 100%; padding: 7px 9px;
-    border: 1px solid var(--a-border); border-radius: 7px;
-    font-family: inherit; font-size: 13px;
+.vis-lists li strong {
+    color: var(--a-primary);
+    font-variant-numeric: tabular-nums;
 }
 
-.add-variant-box {
-    border: 1.5px dashed var(--a-border);
+@media (max-width: 620px) {
+    .vis-chart { height: 116px; gap: 3px; }
+    .vis-bar-day { font-size: 9px; }
+    .vis-bar-num { display: none; }   /* ضيقة بزاف — التلميح يكفي */
+    .vis-value { font-size: 26px; }
+}
+
+/* ---------- حذف الطلبيات ---------- */
+.danger-zone {
+    margin-top: 26px;
+    padding-top: 20px;
+    border-top: 2px solid #F3C9C4;
+}
+.danger-zone .section-title { color: #B4453E; }
+
+.bulk-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: #FDECEA;
+    border: 1px solid #F3C9C4;
+    border-radius: 10px;
+    font-size: 14px;
+}
+.bulk-bar[hidden] { display: none; }
+
+.bulk-check, #bulkAll { width: 17px; height: 17px; cursor: pointer; }
+
+/* ---------- المعرض المنبثق ---------- */
+.gal { position: fixed; inset: 0; z-index: 900; }
+.gal[hidden] { display: none; }
+
+.gal-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(34,28,43,0.55);
+}
+
+.gal-box {
+    position: absolute;
+    inset-inline: 50%; top: 50%;
+    transform: translate(50%, -50%);
+    width: min(680px, 92vw);
+    max-height: 82vh;
+    display: flex; flex-direction: column;
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 24px 60px -20px rgba(0,0,0,0.45);
+    overflow: hidden;
+}
+
+.gal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--a-border);
+}
+.gal-head h3 { margin: 0; font-size: 17px; color: var(--a-primary); }
+
+.gal-x {
+    width: 32px; height: 32px;
+    border: none; border-radius: 50%;
+    background: var(--a-bg);
+    font-size: 20px; line-height: 1;
+    cursor: pointer; color: var(--a-text);
+}
+.gal-x:hover { background: #EFE8DC; }
+
+.gal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 10px;
+    padding: 18px 20px;
+    overflow-y: auto;
+}
+
+.gal-item {
+    position: relative;
+    aspect-ratio: 1;
+    padding: 0;
+    border: 2px solid var(--a-border);
     border-radius: 12px;
-    padding: 14px;
-    background: #FAF8F4;
+    background: var(--a-bg);
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color 0.12s ease, transform 0.12s ease;
 }
-.add-variant-box h3 { margin: 0 0 10px; font-size: 14px; }
-.variant-img-select {
-    padding: 8px 10px; border: 1px solid var(--a-border);
-    border-radius: 7px; font-family: inherit; font-size: 13px;
+.gal-item:hover { border-color: var(--a-primary); transform: translateY(-2px); }
+.gal-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.gal-item.is-current { border-color: var(--a-gold); border-width: 3px; }
+.gal-item.is-current::after {
+    content: "✓";
+    position: absolute; top: 5px; inset-inline-end: 5px;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--a-gold); color: var(--a-primary);
+    border-radius: 50%; font-weight: 800; font-size: 13px;
 }
 
-/* ---------- تفاصيل الطلبية: مكتب الاستلام ---------- */
-.info-row-highlight {
-    background: #FDF6E3;
-    border-inline-start: 3px solid var(--a-gold, #C9A227);
-    padding-inline-start: 10px;
-    border-radius: 6px;
+.gal-none {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12.5px; font-weight: 600;
+    color: var(--a-text-soft);
 }
-.info-row-muted { opacity: 0.65; font-size: 12px; }
-.info-row-muted code {
-    background: #F0ECE4; padding: 2px 6px;
-    border-radius: 4px; font-size: 11px;
+
+
+@media (max-width: 520px) {
+    .variant-head { flex-wrap: wrap; }
 }
