@@ -89,12 +89,14 @@ def create_app():
             return {"show_coupon_field": True}
 
     # متغيرات تكون متاحة فكل القوالب (templates) بلا ما نبعتوها فكل route
-    # ⚠️ تتبّع الزوار — قبل كل طلب. الدالة تبلع أخطاءها بنفسها
-    # باش ما تكسرش صفحة للزبون إذا صرا مشكل فقاعدة البيانات.
-    @app.before_request
-    def _track_visitors():
-        from services.analytics import track_request
-        track_request()
+    # ⚠️ تتبّع الزوار — **بعد** الطلب، ماشي قبلو.
+    # السبب: باش نعرفو واش الصفحة موجودة فعلاً (رد 200). روبوتات
+    # المسح تطلب /wp-login.php وتاخذ 404 — فما تتعدّش.
+    # الدالة تبلع أخطاءها بنفسها باش ما تكسرش صفحة للزبون.
+    @app.after_request
+    def _track_visitors(response):
+        from services.analytics import track_response
+        return track_response(response)
 
     # ⚠️ بصمة الملفات الثابتة — تحلّ مشكل تكرر معنا بزاف:
     # ترفع نسخة جديدة، والمتصفح يبقى يعرض CSS/JS القديم من ذاكرتو،

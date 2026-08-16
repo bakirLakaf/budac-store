@@ -309,6 +309,36 @@ class Product(db.Model):
             target.stock_quantity += quantity
 
     @property
+    def short_description(self):
+        """
+        وصف قصير لمحركات البحث ومشاركات فيسبوك.
+
+        ⚠️ جوجل يقصّ الوصف عند ~155 حرف. نبنيوه من وصف المنتج، وإذا
+        ماكانش، نركّبو وحد من الاسم والتصنيف — أحسن من وصف فارغ يخلّي
+        جوجل ياخذ أول نص عشوائي من الصفحة.
+        """
+        text = " ".join((self.description or "").split())
+
+        if text:
+            if len(text) > 155:
+                text = text[:152].rsplit(" ", 1)[0] + "..."
+            return text
+
+        parts = [self.name]
+        if self.category:
+            parts.append(self.category.name)
+        parts.append("توصيل لكل ولايات الجزائر · الدفع عند الاستلام")
+        return " — ".join(parts)
+
+    @property
+    def average_rating(self):
+        """معدّل التقييمات المعتمدة. None إذا ماكانش تقييم."""
+        approved = [r for r in self.reviews if r.is_approved]
+        if not approved:
+            return None
+        return round(sum(r.rating for r in approved) / len(approved), 1)
+
+    @property
     def price_display(self):
         """سعر منسق للعرض: 1200 → '1,200 دج'"""
         return f"{self.price:,} دج"
