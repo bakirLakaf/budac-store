@@ -2,6 +2,58 @@
 
 {% block title %}{{ product.name }} — {{ store_name }}{% endblock %}
 
+{# ⚠️ الوصف اللي يبان تحت العنوان فجوجل. بلاه، جوجل ياخذ أول نص
+   يلقاه فالصفحة — وغالبًا يكون قائمة تصنيفات بلا معنى. #}
+{% block meta_description %}{{ product.short_description }}{% endblock %}
+
+{% block og_type %}product{% endblock %}
+{% block og_title %}{{ product.name }} — {{ product.price_display }}{% endblock %}
+{% block og_description %}{{ product.short_description }}{% endblock %}
+{# ⚠️ الشرط لازم يكون **داخل** الكتلة. Jinja يسجّل الكتل وقت
+   التحليل، فـ{% if %} حواليها ما يمنعهاش — تتنفّذ دايمًا. #}
+{% block og_image %}
+{%- if product.image_filename -%}
+{{ url_for('static', filename='img/products/' + product.image_filename, _external=True) }}
+{%- else -%}
+{{ url_for('static', filename='img/brand/logo.png', _external=True) }}
+{%- endif -%}
+{% endblock %}
+
+{% block page_schema %}
+{# بيانات المنتج — تخلّي السعر والتوفّر يبانو فنتيجة البحث #}
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": {{ product.name | tojson }},
+    "description": {{ product.short_description | tojson }},
+    {% if product.image_filename %}
+    "image": "{{ url_for('static', filename='img/products/' + product.image_filename, _external=True) }}",
+    {% endif %}
+    "brand": { "@type": "Brand", "name": "{{ store_name }}" },
+    {% if product.category %}
+    "category": {{ product.category.name | tojson }},
+    {% endif %}
+    "offers": {
+        "@type": "Offer",
+        "url": "{{ request.base_url }}",
+        "priceCurrency": "DZD",
+        "price": "{{ product.price }}",
+        "availability": "https://schema.org/{{ 'InStock' if product.is_in_stock else 'OutOfStock' }}",
+        "seller": { "@type": "Organization", "name": "{{ store_name }}" }
+    }
+    {% if product.average_rating %},
+    "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "{{ product.average_rating }}",
+        "reviewCount": "{{ product.reviews | selectattr('is_approved') | list | length }}",
+        "bestRating": "5", "worstRating": "1"
+    }
+    {% endif %}
+}
+</script>
+{% endblock %}
+
 {% block content %}
 
 <section class="product-detail">

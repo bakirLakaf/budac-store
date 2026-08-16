@@ -34,6 +34,68 @@
     <meta property="og:url" content="{{ request.base_url }}">
     <meta property="og:image" content="{% block og_image %}{{ url_for('static', filename='img/brand/logo.png', _external=True) }}{% endblock %}">
     <meta property="og:locale" content="ar_DZ">
+
+    {# ═══════════════════════════════════════════════════
+       البيانات المنظّمة (Schema.org)
+
+       ⚠️ ليش مهمة؟ جوجل يقرا HTML كنص، فما يعرفش واش هاد الصفحة
+       متجر ولا مدونة. هاد الكتلة تقولّو صراحة: «هاد متجر اسمو BUDAC،
+       فالجزائر، هاد هاتفو». بلاها، البحث على «budac» ممكن يعطي
+       نتائج أخرى قبلك.
+       ═══════════════════════════════════════════════════ #}
+    {% block schema %}
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Store",
+        "name": "{{ store_name }}",
+        "alternateName": "بيوداك",
+        "description": "متجر جزائري لمستلزمات الديكور والإكسسوارات. توصيل لكل الولايات، الدفع عند الاستلام.",
+        "url": "{{ request.url_root }}",
+        "logo": "{{ url_for('static', filename='img/brand/logo.png', _external=True) }}",
+        "image": "{{ url_for('static', filename='img/brand/logo.png', _external=True) }}",
+        {% if settings.store_phone %}
+        "telephone": "{{ settings.store_phone }}",
+        {% endif %}
+        "priceRange": "دج",
+        "currenciesAccepted": "DZD",
+        "paymentAccepted": "الدفع عند الاستلام",
+        "address": {
+            "@type": "PostalAddress",
+            "addressCountry": "DZ",
+            "addressRegion": "الجزائر"
+        },
+        "areaServed": {
+            "@type": "Country",
+            "name": "الجزائر"
+        },
+        "sameAs": [
+            "https://www.facebook.com/budac04"
+        ]
+    }
+    </script>
+
+    {# مربّع البحث فنتائج جوجل — يخلّي الزائر يبحث مباشرة من النتيجة #}
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "{{ store_name }}",
+        "url": "{{ request.url_root }}",
+        "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+                "@type": "EntryPoint",
+                "urlTemplate": "{{ request.url_root }}search?q={search_term_string}"
+            },
+            "query-input": "required name=search_term_string"
+        }
+    }
+    </script>
+    {% endblock %}
+
+    {# كتلة إضافية للصفحات: منتج، عرض، تصنيف... #}
+    {% block page_schema %}{% endblock %}
     <meta name="twitter:card" content="summary_large_image">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">

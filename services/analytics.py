@@ -29,6 +29,15 @@ SKIP_PREFIXES = ("/admin", "/static", "/api", "/favicon")
 
 # ⚠️ كلمات تدل على بوت. القائمة ماشي كاملة — البوتات الجدّية تتخفّى،
 # لكن هاذي تشيل معظم الضجيج (محركات البحث، أدوات المراقبة).
+# ⚠️ مسارات معروفة عند سكانرات الثغرات. موقعنا Flask، فأي طلب
+# لهاد المسارات = محاولة اختراق، ماشي زائر.
+SCAN_PATTERNS = (
+    "wp-admin", "wp-login", "wp-content", "wp-includes", "wordpress",
+    "xmlrpc", ".php", ".asp", ".jsp", ".env", ".git", ".sql",
+    "phpmyadmin", "adminer", "shell", "eval-stdin", "cgi-bin",
+    "config.json", "credentials", "backup", "vendor/",
+)
+
 BOT_HINTS = (
     "bot", "crawler", "spider", "slurp", "curl", "wget",
     "python-requests", "headless", "monitor", "uptime",
@@ -60,26 +69,48 @@ def _visitor_key(today):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:40]
 
 
-def track_request():
+def track_response(response):
     """
-    يسجّل زيارة. يتنادى فـbefore_request.
+    يسجّل زيارة. يتنادى فـafter_request.
 
-    ⚠️ ما يرمي حتى خطأ — إذا فشل التسجيل، الصفحة تكمّل عادي.
+    ⚠️ ليش بعد الطلب وماشي قبلو؟
+    الدرس جانا من الواقع: عدّاد الزوار عرض 50 «زائر» فيوم، ومنهم 80
+    زيارة لـ/wp-admin/install.php و8 لـ/wp-login.php. موقعنا ماشي
+    WordPress — هاذو روبوتات تدور على ثغرات، وتزوّر User-Agent ديال
+    متصفح عادي فالفلتر القديم ما شافهمش.
+
+    الحل: نعدّو **فقط الصفحات اللي موجودة فعلاً**. السكانر ياخذ 404
+    فما يتعدّش. هاد الفلتر ما يقدرش يتزوّر — يعتمد على ردنا احنا،
+    ماشي على شي يقولو الزائر.
     """
     try:
+        # ✅ الشرط الأول: الصفحة موجودة فعلاً
+        if response.status_code != 200:
+            return response
+
+        # ✅ الثاني: صفحة HTML — ماشي صورة ولا JSON ولا خط
+        content_type = (response.content_type or "").lower()
+        if "text/html" not in content_type:
+            return response
+
         if request.method != "GET":
-            return
+            return response
 
         path = request.path or "/"
         if path.startswith(SKIP_PREFIXES):
-            return
+            return response
+
+        # ✅ الثالث: مسارات المسح المعروفة — حتى لو ردّينا 200 بالغلط
+        lowered = path.lower()
+        if any(pattern in lowered for pattern in SCAN_PATTERNS):
+            return response
 
         # الأدمن ما يتعدّش — يزور موقعو بزاف ويخرّب الرقم
         if session.get("admin_id") or session.get("admin_username"):
-            return
+            return response
 
         if _is_bot(request.headers.get("User-Agent")):
-            return
+            return response
 
         today = date.today()
         key = _visitor_key(today)
@@ -112,6 +143,8 @@ def track_request():
             db.session.rollback()
         except Exception:
             pass
+
+    return response
 
 
 # ═══════════════════════════════════════════
@@ -265,5 +298,37 @@ def prune_old(keep_days=180):
     deleted = SiteVisit.query.filter(SiteVisit.day < cutoff).delete(
         synchronize_session=False
     )
+    db.session.commit()
+    return deleted
+
+
+def purge_scan_noise():
+    """
+    يمسح سجلات الزيارات اللي جات من روبوتات المسح.
+
+    ⚠️ ليش نحتاجوها؟
+    الفلتر القديم كان يعتمد على User-Agent وحدو، والسكانرات تزوّرو.
+    فدخلو زيارات لـ/wp-admin/install.php و/wp-login.php وخرّبو الأرقام.
+    الفلتر الجديد يمنعهم، لكن اللي تسجّل من قبل خاصو يتنظّف.
+    """
+    from sqlalchemy import or_
+
+    conditions = [
+        SiteVisit.first_page.ilike(f"%{pattern}%")
+        for pattern in SCAN_PATTERNS
+    ]
+
+    deleted = (
+        SiteVisit.query
+        .filter(or_(*conditions))
+        .delete(synchronize_session=False)
+    )
+    db.session.commit()
+    return deleted
+
+
+def reset_all():
+    """يصفّر عدّاد الزوار كليًا — للبداية النظيفة قبل الإطلاق."""
+    deleted = SiteVisit.query.delete(synchronize_session=False)
     db.session.commit()
     return deleted

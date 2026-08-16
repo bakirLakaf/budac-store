@@ -1109,3 +1109,18 @@ body {
 @media (max-width: 520px) {
     .variant-head { flex-wrap: wrap; }
 }
+
+.vis-reset { margin-inline-start: auto; }
+.vis-reset-btn {
+    padding: 5px 12px;
+    border: 1px solid var(--a-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--a-text-soft);
+    font-family: inherit; font-size: 12px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.13s ease;
+}
+.vis-reset-btn:hover {
+    background: #FDECEA; border-color: #F0D5D2; color: var(--a-danger);
+}

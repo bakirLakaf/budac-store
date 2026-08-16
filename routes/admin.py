@@ -1868,6 +1868,27 @@ def youcan_disconnect():
     return redirect(url_for("admin.youcan_settings"))
 
 
+@admin_bp.route("/visitors/reset", methods=["POST"])
+@login_required
+def visitors_reset():
+    """يصفّر عدّاد الزوار — قبل الإطلاق ولا بعد تجارب."""
+    from services.analytics import reset_all, purge_scan_noise
+
+    mode = request.form.get("mode")
+
+    if mode == "all":
+        removed = reset_all()
+        flash(f"تصفّر العدّاد — مسحنا {removed} سطر", "success")
+    else:
+        removed = purge_scan_noise()
+        if removed:
+            flash(f"مسحنا {removed} زيارة من روبوتات المسح", "success")
+        else:
+            flash("ماكانش زيارات روبوتات — الأرقام نظيفة", "success")
+
+    return redirect(url_for("admin.dashboard"))
+
+
 @admin_bp.route("/shipping/sync-zr", methods=["POST"])
 @login_required
 def shipping_sync_zr():
