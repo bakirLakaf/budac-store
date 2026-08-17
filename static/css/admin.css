@@ -151,8 +151,12 @@
 .vimg-state.is-ok { color: #4E7C59; }
 .vimg-state.is-bad { color: #B4453E; }
 
-/* ---------- عمود الأسعار ---------- */
+/* ---------- عمود الأسعار والعروض ---------- */
+/* ⚠️ min-width:0 إجباري: عنصر داخل grid عرضو الأدنى = محتواه، فالجدول
+   يدفع الشبكة ويخرّب التخطيط. هاد السطر يخلّيه ينكمش عادي. */
+.variant-pricing { min-width: 0; }
 .variant-tiers { min-width: 0; }
+.variant-packs { min-width: 0; }
 
 .variant-section-title {
     display: block; margin-bottom: 4px;
@@ -1198,3 +1202,96 @@ body {
     .packs-x-col::before { content: none !important; }
     .packs-qty-col, .packs-price-col { width: 100%; }
 }
+
+/* ---------- عرض جاهز لعدة موديلات ---------- */
+.bulk-packs {
+    margin-bottom: 20px;
+    background: #FBF7EF;
+    border: 1px solid #E9DFC9;
+    border-radius: 14px;
+    overflow: hidden;
+}
+.bulk-packs > summary {
+    display: flex; align-items: center; gap: 9px;
+    padding: 13px 18px;
+    cursor: pointer;
+    font-size: 14.5px; font-weight: 700;
+    color: var(--a-primary);
+    list-style: none;
+}
+.bulk-packs > summary::-webkit-details-marker { display: none; }
+.bulk-packs > summary:hover { background: #F6EFE1; }
+.bulk-packs[open] > summary { border-bottom: 1px solid #EDE3D0; }
+
+.bulk-icon {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--a-gold); border-radius: 8px;
+    font-size: 14px;
+}
+
+.bulk-form { padding: 16px 18px 18px; }
+
+.bulk-row {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr) 130px;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+@media (max-width: 700px) {
+    .bulk-row { grid-template-columns: 1fr; }
+}
+
+.bulk-field > span {
+    display: block; margin-bottom: 5px;
+    font-size: 11.5px; font-weight: 700;
+    color: var(--a-text-soft);
+}
+.bulk-field input {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1.5px solid #E4DBCA; border-radius: 10px;
+    background: #fff;
+    font-family: inherit; font-size: 14.5px;
+}
+.bulk-field input:focus {
+    outline: none; border-color: var(--a-gold);
+    box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.16);
+}
+
+.bulk-mode { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; }
+.bulk-radio {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 13.5px; cursor: pointer;
+}
+.bulk-radio em { font-style: normal; color: var(--a-text-soft); }
+
+.bulk-picker {
+    margin-bottom: 12px; padding: 12px 14px;
+    background: #fff; border: 1px solid #EDE3D0; border-radius: 11px;
+}
+.bulk-picker[hidden] { display: none; }
+
+.bulk-picker-head { display: flex; gap: 12px; margin-bottom: 10px; }
+.bulk-link {
+    border: none; background: none; padding: 0;
+    color: var(--a-primary); font-family: inherit;
+    font-size: 12.5px; font-weight: 700;
+    cursor: pointer; text-decoration: underline;
+}
+
+.bulk-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.bulk-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 11px;
+    background: #FBF6EE; border: 1.5px solid #E4DBCA;
+    border-radius: 999px;
+    font-size: 13px; cursor: pointer;
+    transition: all 0.13s ease;
+}
+.bulk-chip:has(input:checked) {
+    background: #FFF8E6; border-color: var(--a-gold);
+    font-weight: 600;
+}
+
+.bulk-actions { display: flex; gap: 10px; flex-wrap: wrap; }

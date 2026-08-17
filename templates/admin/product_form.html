@@ -184,6 +184,83 @@
 <hr class="divider">
 
 <h2 class="section-title">الموديلات وأسعار الجملة</h2>
+
+{% if product.variants %}
+{# ═══════════ عرض جاهز لعدة موديلات ═══════════
+   منتج فيه 10 ألوان بنفس التغليف — «رولو (12 متر)» ينطبق عليهم كلهم.
+   بلا هذا، الأدمن يعمّر نفس العرض 10 مرات. #}
+<details class="bulk-packs">
+    <summary>
+        <span class="bulk-icon">⚡</span>
+        زيد عرض جاهز لعدة موديلات ضربة وحدة
+    </summary>
+
+    <form method="post" action="{{ url_for('admin.product_packs_bulk', product_id=product.id) }}"
+          class="bulk-form" id="bulkPacksForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="bulk-row">
+            <label class="bulk-field bulk-qty">
+                <span>عدد</span>
+                <input type="number" name="bulk_quantity" value="1" min="1">
+            </label>
+
+            <label class="bulk-field bulk-name">
+                <span>اسم العرض</span>
+                <input type="text" name="bulk_label" placeholder="رولو (فيه 12 متر)" required>
+            </label>
+
+            <label class="bulk-field bulk-price">
+                <span>السعر (دج)</span>
+                <input type="number" name="bulk_price" min="0" placeholder="700" required>
+            </label>
+        </div>
+
+        <div class="bulk-mode">
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="all" checked>
+                <span>كل الموديلات <em>({{ product.variants | length }})</em></span>
+            </label>
+
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="selected">
+                <span>موديلات مختارة</span>
+            </label>
+        </div>
+
+        <div class="bulk-picker" id="bulkPicker" hidden>
+            <div class="bulk-picker-head">
+                <button type="button" class="bulk-link" id="bulkAll">اختر الكل</button>
+                <button type="button" class="bulk-link" id="bulkNone">صفّي</button>
+            </div>
+
+            <div class="bulk-chips">
+                {% for v in product.variants %}
+                <label class="bulk-chip">
+                    <input type="checkbox" name="bulk_variants" value="{{ v.id }}">
+                    <span>{{ v.label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <p class="hint hint-sm">
+            ⚠️ إذا الموديل عندو عرض بنفس الاسم، <strong>يتحدّث</strong> بدل
+            ما يتكرّر — فتقدر تبدّل سعر عرض على كل الموديلات بضغطة وحدة.
+        </p>
+
+        <div class="bulk-actions">
+            <button type="submit" class="btn-admin btn-sm">طبّق على الموديلات</button>
+            <button type="submit" class="btn-admin btn-sm btn-ghost"
+                    formaction="{{ url_for('admin.product_packs_bulk_delete', product_id=product.id) }}"
+                    formnovalidate
+                    onclick="return confirm('تمسح هاد العرض من كل الموديلات؟')">
+                امسحو من الكل
+            </button>
+        </div>
+    </form>
+</details>
+{% endif %}
 <p class="hint">
     الموديل = نوع من المنتج (لون، شكل، مقاس). لكل موديل:
     <strong>صورة</strong> يشوفها الزبون كي يختارو، و<strong>أسعار حسب الكمية</strong>
@@ -243,6 +320,11 @@
                 <p class="hint hint-sm">ارفع صور المنتج فوق أولاً.</p>
                 {% endif %}
             </div>
+
+        {# ⚠️ الأسعار والعروض فحاوية وحدة: .variant-body شبكة من عمودين
+           (صورة | محتوى). بلا هاد الغلاف، كل قسم يولّي طفلًا مستقلاً
+           ويطيح فعمود الصورة الضيق (108px) وتتكدّس الحقول فوق بعضها. #}
+        <div class="variant-pricing">
 
         {# ---------- أسعار الجملة ---------- #}
         <div class="variant-tiers">
@@ -372,6 +454,7 @@
                 </form>
             </div>
 
+            </div>{# /variant-pricing #}
         </div>{# /variant-body #}
     </div>
     {% endfor %}
@@ -461,6 +544,29 @@
                 'aria-label="امسح السطر">×</button>' +
             '</td>';
         return tr;
+    }
+
+    // ---------- العرض الجماعي: إظهار قائمة الموديلات ----------
+    var bulkForm = document.getElementById('bulkPacksForm');
+    if (bulkForm) {
+        var picker = document.getElementById('bulkPicker');
+
+        bulkForm.addEventListener('change', function (e) {
+            if (e.target.name !== 'bulk_mode') return;
+            picker.hidden = e.target.value !== 'selected';
+        });
+
+        document.getElementById('bulkAll').addEventListener('click', function () {
+            picker.querySelectorAll('input[type=checkbox]').forEach(function (c) {
+                c.checked = true;
+            });
+        });
+
+        document.getElementById('bulkNone').addEventListener('click', function () {
+            picker.querySelectorAll('input[type=checkbox]').forEach(function (c) {
+                c.checked = false;
+            });
+        });
     }
 
     document.addEventListener('click', function (e) {

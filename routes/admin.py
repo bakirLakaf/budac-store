@@ -2012,3 +2012,118 @@ def variant_packs(variant_id):
         flash(f"تمسحو العروض الجاهزة ديال «{variant.label}»", "success")
 
     return redirect(url_for("admin.product_form", product_id=product.id))
+
+
+@admin_bp.route("/products/<int:product_id>/packs-bulk", methods=["POST"])
+@login_required
+def product_packs_bulk(product_id):
+    """
+    يضيف عرضًا جاهزًا لعدة موديلات ضربة وحدة.
+
+    ⚠️ ليش هاد المسار؟
+    منتج فيه 10 موديلات (ألوان) بنفس التغليف — «رولو (12 متر)» ينطبق
+    عليهم كلهم. بلا هذا، الأدمن يعمّر نفس العرض 10 مرات.
+
+    الوضعان:
+      • كل الموديلات
+      • موديلات مختارة (checkbox)
+
+    السلوك عند التعارض: إذا الموديل عندو عرض بنفس الاسم، **نحدّثو**
+    بدل ما نزيدو مكرر. هكذا الأدمن يقدر يبدّل سعر عرض على كل
+    الموديلات بضغطة وحدة.
+    """
+    product = Product.query.get_or_404(product_id)
+
+    label = (request.form.get("bulk_label") or "").strip()
+    mode = request.form.get("bulk_mode") or "all"
+
+    try:
+        price = int(request.form.get("bulk_price") or 0)
+        quantity = int(request.form.get("bulk_quantity") or 1)
+    except ValueError:
+        flash("السعر ولا العدد ماشي رقم", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    if not label:
+        flash("اكتب اسم العرض", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    if price < 0 or quantity < 1:
+        flash("العدد لازم 1 فأكثر والسعر ماشي سالب", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    # ---------- نحدّدو الموديلات ----------
+    if mode == "selected":
+        chosen = request.form.getlist("bulk_variants", type=int)
+        if not chosen:
+            flash("ما اخترت حتى موديل", "warning")
+            return redirect(url_for("admin.product_form", product_id=product.id))
+
+        variants = [v for v in product.variants if v.id in chosen]
+    else:
+        variants = list(product.variants)
+
+    if not variants:
+        flash("هاد المنتج ماكانش فيه موديلات", "warning")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    added, updated = 0, 0
+
+    for variant in variants:
+        existing = next(
+            (pk for pk in variant.packs if pk.label.strip().lower() == label.lower()),
+            None,
+        )
+
+        if existing:
+            existing.quantity = quantity
+            existing.price = price
+            updated += 1
+        else:
+            db.session.add(VariantPack(
+                variant_id=variant.id,
+                quantity=quantity,
+                label=label[:160],
+                price=price,
+                sort_order=len(variant.packs),
+            ))
+            added += 1
+
+    db.session.commit()
+
+    parts = []
+    if added:
+        parts.append(f"زدنا العرض لـ{added} موديل")
+    if updated:
+        parts.append(f"حدّثناه فـ{updated}")
+
+    flash(f"«{label}» — {' · '.join(parts)}", "success")
+    return redirect(url_for("admin.product_form", product_id=product.id))
+
+
+@admin_bp.route("/products/<int:product_id>/packs-bulk-delete", methods=["POST"])
+@login_required
+def product_packs_bulk_delete(product_id):
+    """يمسح عرضًا بالاسم من كل الموديلات — للتراجع السريع."""
+    product = Product.query.get_or_404(product_id)
+    label = (request.form.get("bulk_label") or "").strip()
+
+    if not label:
+        flash("اكتب اسم العرض اللي تحب تمسحو", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    removed = 0
+    for variant in product.variants:
+        for pack in list(variant.packs):
+            if pack.label.strip().lower() == label.lower():
+                db.session.delete(pack)
+                removed += 1
+
+    db.session.commit()
+
+    if removed:
+        flash(f"مسحنا «{label}» من {removed} موديل", "success")
+    else:
+        flash(f"ماكانش عرض بالاسم «{label}»", "warning")
+
+    return redirect(url_for("admin.product_form", product_id=product.id))
