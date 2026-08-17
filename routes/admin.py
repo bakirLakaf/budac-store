@@ -2127,3 +2127,158 @@ def product_packs_bulk_delete(product_id):
         flash(f"ماكانش عرض بالاسم «{label}»", "warning")
 
     return redirect(url_for("admin.product_form", product_id=product.id))
+
+
+def _bulk_target_variants(product, mode, field="bulk_variants"):
+    """
+    يحدّد الموديلات المستهدفة فالعمليات الجماعية.
+
+    يرجع (قائمة الموديلات، رسالة خطأ) — الرسالة None إذا كلش مليح.
+    """
+    if mode == "selected":
+        chosen = request.form.getlist(field, type=int)
+        if not chosen:
+            return [], "ما اخترت حتى موديل"
+        return [v for v in product.variants if v.id in chosen], None
+
+    return list(product.variants), None
+
+
+@admin_bp.route("/products/<int:product_id>/tiers-bulk", methods=["POST"])
+@login_required
+def product_tiers_bulk(product_id):
+    """
+    يضيف مجال سعر (من/إلى) لعدة موديلات ضربة وحدة.
+
+    ⚠️ نفس منطق العروض الجاهزة، لكن للتدرّج بالكمية. منتج فيه 10 ألوان
+    غالبًا عندهم نفس سلّم الأسعار — الأدمن ما يعاودش يكتبو 10 مرات.
+
+    السلوك عند التعارض: إذا الموديل عندو مجال بنفس «من»، **نحدّثوه**
+    (إلى + السعر) بدل ما نزيدو مجالًا متداخلاً — التداخل يخلّي السعر
+    غامضًا.
+    """
+    from models import VariantPriceTier
+
+    product = Product.query.get_or_404(product_id)
+    mode = request.form.get("bulk_mode") or "all"
+
+    raw_min = (request.form.get("tier_bulk_min") or "").strip()
+    raw_max = (request.form.get("tier_bulk_max") or "").strip()
+    raw_price = (request.form.get("tier_bulk_price") or "").strip()
+
+    try:
+        min_q = int(raw_min)
+        max_q = int(raw_max) if raw_max else None
+        price = int(raw_price)
+    except ValueError:
+        flash("عمّر «من» والسعر بأرقام صحيحة", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    if min_q < 1 or price < 0:
+        flash("«من» لازم 1 فأكثر والسعر ماشي سالب", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    if max_q is not None and max_q < min_q:
+        flash("«إلى» أصغر من «من» — صحّحها", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    variants, error = _bulk_target_variants(product, mode, "tier_bulk_variants")
+    if error:
+        flash(error, "warning")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    if not variants:
+        flash("هاد المنتج ماكانش فيه موديلات", "warning")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    added, updated, skipped = 0, 0, []
+
+    for variant in variants:
+        same_start = next(
+            (t for t in variant.price_tiers if t.min_quantity == min_q), None
+        )
+
+        if same_start:
+            same_start.max_quantity = max_q
+            same_start.unit_price = price
+            updated += 1
+            continue
+
+        # ⚠️ نتحققو من التداخل مع المجالات الموجودة: مجالان يغطّيو نفس
+        # الكمية = السعر يولّي غامض، والزبون يشوف رقمًا والحساب يعطي آخر.
+        overlap = False
+        for tier in variant.price_tiers:
+            other_max = tier.max_quantity
+            starts_before = tier.min_quantity <= min_q
+            ends_after = other_max is None or other_max >= min_q
+
+            if starts_before and ends_after:
+                overlap = True
+                break
+            if max_q is None or tier.min_quantity <= max_q:
+                if tier.min_quantity >= min_q:
+                    overlap = True
+                    break
+
+        if overlap:
+            skipped.append(variant.label)
+            continue
+
+        db.session.add(VariantPriceTier(
+            variant_id=variant.id,
+            min_quantity=min_q,
+            max_quantity=max_q,
+            unit_price=price,
+        ))
+        added += 1
+
+    db.session.commit()
+
+    parts = []
+    if added:
+        parts.append(f"زدناه لـ{added} موديل")
+    if updated:
+        parts.append(f"حدّثناه فـ{updated}")
+
+    range_text = f"من {min_q} " + (f"إلى {max_q}" if max_q else "وفوق")
+    flash(f"«{range_text} بـ{price} دج» — {' · '.join(parts) or 'ماكانش تبديل'}", "success")
+
+    if skipped:
+        flash(
+            f"⚠️ تجاوزنا {len(skipped)} موديل — عندهم مجال متداخل: "
+            f"{'، '.join(skipped[:6])}",
+            "warning",
+        )
+
+    return redirect(url_for("admin.product_form", product_id=product.id))
+
+
+@admin_bp.route("/products/<int:product_id>/tiers-bulk-delete", methods=["POST"])
+@login_required
+def product_tiers_bulk_delete(product_id):
+    """يمسح مجالًا يبدا من «من» المحدّد، من كل الموديلات."""
+    from models import VariantPriceTier
+
+    product = Product.query.get_or_404(product_id)
+
+    try:
+        min_q = int((request.form.get("tier_bulk_min") or "").strip())
+    except ValueError:
+        flash("اكتب «من» باش نعرفو أي مجال نمسحو", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    removed = 0
+    for variant in product.variants:
+        for tier in list(variant.price_tiers):
+            if tier.min_quantity == min_q:
+                db.session.delete(tier)
+                removed += 1
+
+    db.session.commit()
+
+    if removed:
+        flash(f"مسحنا المجال «من {min_q}» من {removed} موديل", "success")
+    else:
+        flash(f"ماكانش مجال يبدا من {min_q}", "warning")
+
+    return redirect(url_for("admin.product_form", product_id=product.id))

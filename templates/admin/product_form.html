@@ -129,7 +129,7 @@
             })();
             </script>
 
-            <button type="submit" class="btn-admin btn-block">حفظ المنتج</button>
+            <button type="submit" class="btn-admin btn-block" id="mainSaveBtn">حفظ المنتج</button>
         </div>
 
         <div class="form-col">
@@ -192,11 +192,86 @@
 <details class="bulk-packs">
     <summary>
         <span class="bulk-icon">⚡</span>
-        زيد عرض جاهز لعدة موديلات ضربة وحدة
+        طبّق سعر على عدة موديلات ضربة وحدة
     </summary>
 
+    {# تبويبان: مجال كمية (من/إلى) ولا عرض جاهز #}
+    <div class="bulk-tabs" role="tablist">
+        <button type="button" class="bulk-tab is-on" data-tab="tier" role="tab">
+            📊 مجال كمية (من / إلى)
+        </button>
+        <button type="button" class="bulk-tab" data-tab="pack" role="tab">
+            🎁 عرض جاهز
+        </button>
+    </div>
+
+    {# ═══ مجال كمية ═══ #}
+    <form method="post" action="{{ url_for('admin.product_tiers_bulk', product_id=product.id) }}"
+          class="bulk-form bulk-pane" data-pane="tier" id="bulkTiersForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="bulk-row bulk-row-tier">
+            <label class="bulk-field">
+                <span>من (حبة)</span>
+                <input type="number" name="tier_bulk_min" min="1" placeholder="100" required>
+            </label>
+
+            <label class="bulk-field">
+                <span>إلى (حبة)</span>
+                <input type="number" name="tier_bulk_max" min="1" placeholder="بلا حد">
+            </label>
+
+            <label class="bulk-field">
+                <span>سعر الحبة (دج)</span>
+                <input type="number" name="tier_bulk_price" min="0" placeholder="420" required>
+            </label>
+        </div>
+
+        <div class="bulk-mode">
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="all" checked>
+                <span>كل الموديلات <em>({{ product.variants | length }})</em></span>
+            </label>
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="selected">
+                <span>موديلات مختارة</span>
+            </label>
+        </div>
+
+        <div class="bulk-picker" hidden>
+            <div class="bulk-picker-head">
+                <button type="button" class="bulk-link" data-pick="all">اختر الكل</button>
+                <button type="button" class="bulk-link" data-pick="none">صفّي</button>
+            </div>
+            <div class="bulk-chips">
+                {% for v in product.variants %}
+                <label class="bulk-chip">
+                    <input type="checkbox" name="tier_bulk_variants" value="{{ v.id }}">
+                    <span>{{ v.label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <p class="hint hint-sm">
+            خلّي «إلى» فارغ = <strong>وفوق بلا حد</strong>.
+            <br>⚠️ إذا الموديل عندو مجال يبدا من نفس الرقم، <strong>يتحدّث</strong>.
+            والمجالات المتداخلة تتجاوز — التداخل يخلّي السعر غامضًا.
+        </p>
+
+        <div class="bulk-actions">
+            <button type="submit" class="btn-admin btn-sm">طبّق المجال</button>
+            <button type="submit" class="btn-admin btn-sm btn-ghost"
+                    formaction="{{ url_for('admin.product_tiers_bulk_delete', product_id=product.id) }}"
+                    formnovalidate
+                    onclick="return confirm('تمسح هاد المجال من كل الموديلات؟')">
+                امسحو من الكل
+            </button>
+        </div>
+    </form>
+
     <form method="post" action="{{ url_for('admin.product_packs_bulk', product_id=product.id) }}"
-          class="bulk-form" id="bulkPacksForm">
+          class="bulk-form bulk-pane" data-pane="pack" id="bulkPacksForm" hidden>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="bulk-row">
@@ -228,10 +303,10 @@
             </label>
         </div>
 
-        <div class="bulk-picker" id="bulkPicker" hidden>
+        <div class="bulk-picker" hidden>
             <div class="bulk-picker-head">
-                <button type="button" class="bulk-link" id="bulkAll">اختر الكل</button>
-                <button type="button" class="bulk-link" id="bulkNone">صفّي</button>
+                <button type="button" class="bulk-link" data-pick="all">اختر الكل</button>
+                <button type="button" class="bulk-link" data-pick="none">صفّي</button>
             </div>
 
             <div class="bulk-chips">
@@ -546,28 +621,42 @@
         return tr;
     }
 
-    // ---------- العرض الجماعي: إظهار قائمة الموديلات ----------
-    var bulkForm = document.getElementById('bulkPacksForm');
-    if (bulkForm) {
-        var picker = document.getElementById('bulkPicker');
+    // ---------- العرض الجماعي ----------
+    // ⚠️ نخدمو على كل الفورمات (مجال كمية + عرض جاهز) بنفس الكود
+    // بدل ما نعاودو نفس المنطق مرتين.
+    document.querySelectorAll('.bulk-pane').forEach(function (form) {
+        var picker = form.querySelector('.bulk-picker');
+        if (!picker) return;
 
-        bulkForm.addEventListener('change', function (e) {
+        form.addEventListener('change', function (e) {
             if (e.target.name !== 'bulk_mode') return;
             picker.hidden = e.target.value !== 'selected';
         });
 
-        document.getElementById('bulkAll').addEventListener('click', function () {
+        picker.addEventListener('click', function (e) {
+            var link = e.target.closest('[data-pick]');
+            if (!link) return;
+            var on = link.dataset.pick === 'all';
             picker.querySelectorAll('input[type=checkbox]').forEach(function (c) {
-                c.checked = true;
+                c.checked = on;
             });
         });
+    });
 
-        document.getElementById('bulkNone').addEventListener('click', function () {
-            picker.querySelectorAll('input[type=checkbox]').forEach(function (c) {
-                c.checked = false;
+    // تبديل التبويبات
+    var tabs = document.querySelectorAll('.bulk-tab');
+    tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            var name = tab.dataset.tab;
+
+            tabs.forEach(function (t) {
+                t.classList.toggle('is-on', t === tab);
+            });
+            document.querySelectorAll('.bulk-pane').forEach(function (pane) {
+                pane.hidden = pane.dataset.pane !== name;
             });
         });
-    }
+    });
 
     document.addEventListener('click', function (e) {
         // ---------- زيد عرض ----------
@@ -765,6 +854,56 @@
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && !gallery.hidden) close();
     });
+})();
+</script>
+
+
+{# ═══════ شريط حفظ ثابت ═══════
+   ⚠️ الصفحة طويلة بزاف (بيانات + صور + موديلات + أسعار + عروض).
+   الأدمن يعدّل حاجة فالأعلى، ينزل يشوف الموديلات، وينسى يحفظ.
+   الشريط يبان كي يخرج زر الحفظ من الشاشة. #}
+<div class="save-bar" id="saveBar" hidden>
+    <span class="save-bar-text">تعديلات ما تحفظوش</span>
+    <button type="button" class="btn-admin btn-sm" id="saveBarBtn">💾 احفظ المنتج</button>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    var bar = document.getElementById('saveBar');
+    var mainBtn = document.getElementById('mainSaveBtn');
+    if (!bar || !mainBtn) return;
+
+    var dirty = false;
+    var mainForm = mainBtn.closest('form');
+
+    // ⚠️ ما نعرضوش الشريط إلا إذا الأدمن بدّل شي فعلاً —
+    // شريط دايم يولّي ضجيجًا يتجاهلو.
+    mainForm.addEventListener('input', function () { dirty = true; update(); });
+    mainForm.addEventListener('change', function () { dirty = true; update(); });
+
+    var visible = true;
+    if ('IntersectionObserver' in window) {
+        new IntersectionObserver(function (e) {
+            visible = e[0].isIntersecting;
+            update();
+        }, { threshold: 0.5 }).observe(mainBtn);
+    }
+
+    function update() { bar.hidden = !(dirty && !visible); }
+
+    document.getElementById('saveBarBtn').addEventListener('click', function () {
+        mainForm.requestSubmit ? mainForm.requestSubmit() : mainForm.submit();
+    });
+
+    // تحذير قبل مغادرة الصفحة بتعديلات ما تحفظوش
+    window.addEventListener('beforeunload', function (e) {
+        if (!dirty) return;
+        e.preventDefault();
+        e.returnValue = '';
+    });
+
+    mainForm.addEventListener('submit', function () { dirty = false; });
 })();
 </script>
 

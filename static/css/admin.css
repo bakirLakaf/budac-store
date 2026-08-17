@@ -546,7 +546,31 @@ body {
 .status-delivered { background: #DFF3E7; color: var(--a-ok); }
 .status-cancelled { background: #FBE3E0; color: var(--a-danger); }
 
-.stat-highlight { border-color: var(--a-gold); background: #FFFDF5; }
+/* ⚠️ «طلبية جديدة» هي الرقم اللي يحتاج فعلاً — لازم تشدّ العين
+   من بين 6 مربعات متشابهة، ماشي تبان كيما الباقي. */
+.stat-highlight {
+    border-color: var(--a-gold);
+    border-width: 2px;
+    background: linear-gradient(160deg, #FFFDF5 0%, #FFF7E0 100%);
+    box-shadow: 0 4px 16px -8px rgba(201, 162, 39, 0.5);
+}
+.stat-highlight .stat-value { color: var(--a-primary); }
+.stat-highlight .stat-note {
+    display: inline-block; margin-top: 5px;
+    padding: 2px 9px; border-radius: 999px;
+    background: var(--a-gold); color: var(--a-primary);
+    font-size: 11px; font-weight: 800;
+}
+/* نبضة خفيفة مرتين فقط — تلفت النظر بلا ما تزعج */
+.stat-highlight { animation: statPing 1.6s ease 2; }
+@keyframes statPing {
+    0%, 100% { box-shadow: 0 4px 16px -8px rgba(201, 162, 39, 0.5); }
+    50% { box-shadow: 0 4px 16px -8px rgba(201, 162, 39, 0.5),
+                      0 0 0 6px rgba(201, 162, 39, 0.18); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .stat-highlight { animation: none; }
+}
 .muted-cell { color: var(--a-text-soft); font-size: 12px; }
 .row-muted { opacity: 0.55; }
 
@@ -1295,3 +1319,82 @@ body {
 }
 
 .bulk-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---------- تبويبات العرض الجماعي ---------- */
+.bulk-tabs {
+    display: flex; gap: 6px;
+    padding: 12px 18px 0;
+}
+.bulk-tab {
+    padding: 8px 14px;
+    border: 1.5px solid #E4DBCA;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    background: #F6EFE1;
+    color: var(--a-text-soft);
+    font-family: inherit; font-size: 13px; font-weight: 700;
+    cursor: pointer;
+    transition: all 0.13s ease;
+}
+.bulk-tab:hover { color: var(--a-primary); }
+.bulk-tab.is-on {
+    background: #fff;
+    color: var(--a-primary);
+    border-color: #E9DFC9;
+    /* يبان متصلاً بالمحتوى تحتو */
+    margin-bottom: -1px;
+    padding-bottom: 9px;
+}
+
+.bulk-pane { background: #fff; border-top: 1px solid #E9DFC9; }
+.bulk-pane[hidden] { display: none; }
+
+.bulk-row-tier { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 700px) {
+    .bulk-row-tier { grid-template-columns: 1fr; }
+    .bulk-tabs { flex-wrap: wrap; }
+}
+
+/* ---------- تجميع القائمة الجانبية ---------- */
+.nav-group {
+    display: block;
+    margin: 18px 0 6px;
+    padding-inline-start: 18px;
+    font-size: 10.5px; font-weight: 800;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: rgba(232, 217, 168, 0.55);
+}
+.nav-group:first-of-type { margin-top: 10px; }
+
+/* ---------- شريط الحفظ الثابت ---------- */
+.save-bar {
+    position: fixed;
+    inset-inline: 0; bottom: 0;
+    z-index: 700;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px; flex-wrap: wrap;
+    padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(8px);
+    border-top: 2px solid var(--a-gold);
+    box-shadow: 0 -6px 22px -14px rgba(46, 26, 71, 0.45);
+    animation: saveBarUp 0.2s ease;
+}
+.save-bar[hidden] { display: none; }
+
+@keyframes saveBarUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { .save-bar { animation: none; } }
+
+.save-bar-text {
+    font-size: 13.5px; font-weight: 700;
+    color: var(--a-warning);
+}
+
+/* القائمة الجانبية ما تغطّيهاش الشريط */
+@media (min-width: 861px) {
+    .save-bar { inset-inline-start: var(--a-sidebar, 240px); }
+}

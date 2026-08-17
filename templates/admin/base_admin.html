@@ -25,12 +25,16 @@
         <a href="{{ url_for('admin.products_list') }}" class="{{ 'is-active' if 'product' in request.endpoint or 'variant' in request.endpoint }}">
             المنتجات
         </a>
+        {# ⚠️ التجميع: 14 رابط فقائمة وحدة يخلّي العين تمشي فيهم كلهم
+           فكل مرة. العناوين تخلّيك تقفز مباشرة للمجموعة اللي تحتاجها. #}
+        <span class="nav-group">المتجر</span>
         <a href="{{ url_for('admin.categories_list') }}" class="{{ 'is-active' if 'categor' in request.endpoint }}">
             التصنيفات
         </a>
         <a href="{{ url_for('admin.offers_list') }}" class="{{ 'is-active' if 'offer' in request.endpoint }}">
             العروض الخاصة
         </a>
+        <span class="nav-group">التسويق</span>
         <a href="{{ url_for('admin.abandoned_list') }}" class="{{ 'is-active' if 'abandoned' in request.endpoint }}">
             السلات المتروكة
             {% if pending_abandoned %}<span class="nav-badge">{{ pending_abandoned }}</span>{% endif %}
@@ -48,6 +52,7 @@
         <a href="{{ url_for('admin.landing_list') }}" class="{{ 'is-active' if 'landing' in request.endpoint }}">
             صفحات الهبوط
         </a>
+        <span class="nav-group">الإعدادات</span>
         <a href="{{ url_for('admin.shipping_list') }}" class="{{ 'is-active' if 'shipping' in request.endpoint or 'carrier' in request.endpoint }}">
             أسعار التوصيل
         </a>

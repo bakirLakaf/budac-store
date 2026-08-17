@@ -19,6 +19,7 @@
 {%- endif -%}
 {% endblock %}
 
+
 {% block page_schema %}
 {# بيانات المنتج — تخلّي السعر والتوفّر يبانو فنتيجة البحث #}
 <script type="application/ld+json">
@@ -266,6 +267,14 @@
                     <button type="submit" name="go_to_cart" value="1" class="btn-ghost-link">أضف واذهب للسلة ←</button>
                 </form>
                 <p class="stock-note" id="stockNote">✓ متوفر — اطلبه الآن</p>
+
+                {# ⚠️ شريط الثقة هنا بالضبط، ماشي فالتذييل. الزبون يقرر
+                   وقت ما يشوف الزر — والتذييل ما يوصلوش أصلاً. #}
+                <ul class="buy-trust">
+                    <li><span aria-hidden="true">💵</span> تخلّص كي توصلك</li>
+                    <li><span aria-hidden="true">🚚</span> توصيل 58 ولاية</li>
+                    <li><span aria-hidden="true">⏱️</span> 24/48 ساعة</li>
+                </ul>
             {% else %}
                 <button class="btn-primary" disabled>نفذت الكمية</button>
             {% endif %}
@@ -992,5 +1001,81 @@
            || document.querySelector('[data-packs]'));
 })();
 </script>
+
+
+<script>
+/**
+ * شريط الطلب الثابت.
+ *
+ * ⚠️ قرارات:
+ *   • يختفي كي يبان زر الشراء الحقيقي — ما نعرضوش نفس الزر مرتين
+ *   • السعر يتحدّث مع الموديل والكمية والعرض المختار
+ *   • الضغط يرجّع الزبون لمنطقة الشراء بدل ما يضيف مباشرة —
+ *     باش يختار الموديل والكمية بوعي، ماشي بالغلط
+ */
+(function () {
+    'use strict';
+
+    var bar = document.getElementById('buyBar');
+    var form = document.querySelector('.add-to-cart-form');
+    if (!bar || !form) return;
+
+    var btn = document.getElementById('buyBarBtn');
+    var priceEl = document.getElementById('buyBarPrice');
+    var submitBtn = form.querySelector('button[type="submit"]');
+
+    // ---------- الظهور ----------
+    if ('IntersectionObserver' in window) {
+        new IntersectionObserver(function (entries) {
+            bar.hidden = entries[0].isIntersecting;
+        }, { threshold: 0.4 }).observe(form);
+    } else {
+        bar.hidden = false;   // متصفح قديم — نخليوه بان دايمًا
+    }
+
+    // ---------- الضغط ----------
+    btn.addEventListener('click', function () {
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // ⚠️ لمسة بصرية تدلّ الزبون وين يكمّل — بلاها يوصل ويحتار
+        submitBtn.classList.add('is-pulsing');
+        setTimeout(function () {
+            submitBtn.classList.remove('is-pulsing');
+        }, 1400);
+    });
+
+    // ---------- تحديث السعر ----------
+    function refresh() {
+        // العناصر اللي يحدّثها الكود الموجود فالصفحة
+        var live = document.getElementById('livePrice')
+                || document.querySelector('.price-current');
+        if (live) priceEl.textContent = live.textContent.trim();
+    }
+
+    form.addEventListener('change', function () { setTimeout(refresh, 60); });
+    form.addEventListener('input', function () { setTimeout(refresh, 60); });
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('[data-packs], .pack-opt, .qty-btn')) {
+            setTimeout(refresh, 80);
+        }
+    });
+
+    refresh();
+})();
+</script>
+
+{% if product.is_in_stock %}
+{# ═══════ شريط الطلب الثابت (موبايل) ═══════
+   ⚠️ الزبون ينزل يقرا الوصف والتقييمات، وباش يطلب لازم يرجع لفوق.
+   هاد الشريط يخليه يطلب من أي مكان. يختفي كي يكون زر الشراء بان
+   فالشاشة — ما نكرّروش نفس الزر مرتين. #}
+<div class="buy-bar" id="buyBar" hidden>
+    <div class="buy-bar-info">
+        <span class="buy-bar-price" id="buyBarPrice">{{ product.price_display }}</span>
+        <span class="buy-bar-name">{{ product.name }}</span>
+    </div>
+    <button type="button" class="buy-bar-btn" id="buyBarBtn">اطلب الآن</button>
+</div>
+{% endif %}
 
 {% endblock %}
