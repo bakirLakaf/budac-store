@@ -1398,3 +1398,62 @@ body {
 @media (min-width: 861px) {
     .save-bar { inset-inline-start: var(--a-sidebar, 240px); }
 }
+
+.bulk-row-price { grid-template-columns: 170px minmax(0, 1fr); }
+.bulk-field select {
+    width: 100%; padding: 9px 11px;
+    border: 1.5px solid #E4DBCA; border-radius: 10px;
+    background: #fff; font-family: inherit; font-size: 14.5px;
+}
+.bulk-chip em { font-style: normal; color: var(--a-text-soft); font-size: 12px; }
+@media (max-width: 700px) { .bulk-row-price { grid-template-columns: 1fr; } }
+
+/* ---------- معرض أكبر + معاينة ---------- */
+.gal-grid { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)) !important; }
+
+.gal-cell { position: relative; }
+.gal-cell .gal-item { width: 100%; }
+
+.gal-zoom {
+    position: absolute; top: 6px; inset-inline-start: 6px;
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; border-radius: 9px;
+    background: rgba(46, 26, 71, 0.82);
+    color: #fff; font-size: 14px;
+    cursor: pointer; opacity: 0;
+    transition: opacity 0.14s ease;
+}
+.gal-cell:hover .gal-zoom, .gal-zoom:focus-visible { opacity: 1; }
+@media (hover: none) { .gal-zoom { opacity: 1; } }
+
+/* ---------- المعاينة الكاملة ---------- */
+.zoomer {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    background: rgba(20, 16, 28, 0.92);
+    cursor: zoom-out;
+}
+.zoomer[hidden] { display: none; }
+.zoomer img {
+    max-width: 100%; max-height: 100%;
+    object-fit: contain;
+    border-radius: 10px;
+    box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.8);
+}
+.zoomer-x {
+    position: absolute; top: 16px; inset-inline-end: 16px;
+    width: 42px; height: 42px;
+    border: none; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff; font-size: 26px; line-height: 1;
+    cursor: pointer;
+}
+.zoomer-x:hover { background: rgba(255, 255, 255, 0.28); }
+
+.img-btn-move {
+    background: rgba(46, 26, 71, 0.8);
+    color: #fff; font-size: 17px; font-weight: 800;
+}
+.img-btn-move:hover { background: var(--a-primary); }

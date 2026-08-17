@@ -158,6 +158,14 @@
                                 formnovalidate>★</button>
                         {% endif %}
 
+                        <button type="submit" class="img-btn img-btn-move" title="حرّكها لليمين"
+                                formaction="{{ url_for('admin.product_image_move', product_id=product.id, image_id=img.id) }}"
+                                formnovalidate name="dir" value="up">›</button>
+
+                        <button type="submit" class="img-btn img-btn-move" title="حرّكها لليسار"
+                                formaction="{{ url_for('admin.product_image_move', product_id=product.id, image_id=img.id) }}"
+                                formnovalidate name="dir" value="down">‹</button>
+
                         <button type="submit" class="img-btn img-btn-del" title="حذف"
                                 formaction="{{ url_for('admin.product_image_delete', product_id=product.id, image_id=img.id) }}"
                                 formnovalidate
@@ -202,6 +210,9 @@
         </button>
         <button type="button" class="bulk-tab" data-tab="pack" role="tab">
             🎁 عرض جاهز
+        </button>
+        <button type="button" class="bulk-tab" data-tab="price" role="tab">
+            🏷️ سعر الموديل
         </button>
     </div>
 
@@ -332,6 +343,63 @@
                     onclick="return confirm('تمسح هاد العرض من كل الموديلات؟')">
                 امسحو من الكل
             </button>
+        </div>
+    </form>
+
+    {# ═══ سعر الموديل ═══ #}
+    <form method="post" action="{{ url_for('admin.product_variant_price_bulk', product_id=product.id) }}"
+          class="bulk-form bulk-pane" data-pane="price" hidden>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="bulk-row bulk-row-price">
+            <label class="bulk-field">
+                <span>الطريقة</span>
+                <select name="price_kind">
+                    <option value="fixed">سعر ثابت (دج)</option>
+                    <option value="percent">نسبة ± (%)</option>
+                </select>
+            </label>
+
+            <label class="bulk-field">
+                <span>القيمة</span>
+                <input type="number" name="price_value" placeholder="125" required>
+            </label>
+        </div>
+
+        <div class="bulk-mode">
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="all" checked>
+                <span>كل الموديلات <em>({{ product.variants | length }})</em></span>
+            </label>
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="selected">
+                <span>موديلات مختارة</span>
+            </label>
+        </div>
+
+        <div class="bulk-picker" hidden>
+            <div class="bulk-picker-head">
+                <button type="button" class="bulk-link" data-pick="all">اختر الكل</button>
+                <button type="button" class="bulk-link" data-pick="none">صفّي</button>
+            </div>
+            <div class="bulk-chips">
+                {% for v in product.variants %}
+                <label class="bulk-chip">
+                    <input type="checkbox" name="price_bulk_variants" value="{{ v.id }}">
+                    <span>{{ v.label }} <em>({{ v.effective_price }})</em></span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <p class="hint hint-sm">
+            <strong>سعر ثابت</strong>: كل الموديلات تولّي بهاد السعر.
+            <br><strong>نسبة</strong>: <code>10</code> = زيادة 10% · <code>-15</code> = تخفيض 15%،
+            وتُحسب من سعر <em>كل موديل</em> على حدا.
+        </p>
+
+        <div class="bulk-actions">
+            <button type="submit" class="btn-admin btn-sm">طبّق السعر</button>
         </div>
     </form>
 </details>
@@ -565,6 +633,12 @@
 
 {% if product and product.images %}
 {# ═══════ معرض اختيار صورة الموديل ═══════ #}
+{# معاينة صورة بالحجم الكامل #}
+<div class="zoomer" id="imgZoomer" hidden>
+    <button type="button" class="zoomer-x" data-zoom-close aria-label="سكّر">×</button>
+    <img id="zoomerImg" src="" alt="">
+</div>
+
 <div class="gal" id="imgGallery" hidden>
     <div class="gal-backdrop" data-close></div>
 
@@ -583,12 +657,21 @@
                من فوق، تختفي من هنا تلقائيًا ومن الموديلات اللي كانت
                تستعملها — نفس المصدر، بلا نسخ. #}
             {% for img in product.images %}
-            <button type="button" class="gal-item"
-                    data-file="{{ img.image_filename }}"
-                    data-thumb="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}">
-                <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
-                     alt="" loading="lazy">
-            </button>
+            <div class="gal-cell">
+                <button type="button" class="gal-item"
+                        data-file="{{ img.image_filename }}"
+                        data-thumb="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}">
+                    <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
+                         alt="" loading="lazy">
+                </button>
+
+                {# ⚠️ زر منفصل للمعاينة: الضغط على الصورة يختارها ويسكّر
+                   المعرض. بلا هاد الزر، الأدمن ما يقدرش يشوف التفاصيل
+                   قبل ما يقرر. #}
+                <button type="button" class="gal-zoom"
+                        data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}"
+                        title="شوفها كاملة" aria-label="معاينة">🔍</button>
+            </div>
             {% endfor %}
         </div>
     </div>
@@ -842,6 +925,20 @@
 
         if (e.target.closest('[data-close]')) {
             close();
+            return;
+        }
+
+        // ---------- معاينة كاملة ----------
+        var zoomBtn = e.target.closest('.gal-zoom');
+        if (zoomBtn) {
+            var z = document.getElementById('imgZoomer');
+            document.getElementById('zoomerImg').src = zoomBtn.dataset.full;
+            z.hidden = false;
+            return;   // ⚠️ ما نختاروش الصورة — المعاينة فقط
+        }
+        if (e.target.closest('[data-zoom-close]') ||
+            e.target.id === 'imgZoomer') {
+            document.getElementById('imgZoomer').hidden = true;
             return;
         }
 

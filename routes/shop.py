@@ -532,3 +532,45 @@ def api_calculate(slug):
         return jsonify({"ok": False, "error": "صار خطأ فالحساب — راجع المدخلات"}), 400
 
     return jsonify({"ok": True, "result": result, "type": product.calculator_type})
+
+
+@shop_bp.route("/shipping-prices")
+def shipping_prices():
+    """
+    صفحة عامة تعرض أسعار التوصيل لكل الولايات.
+
+    ⚠️ ليش صفحة مستقلة؟
+    «شحال التوصيل؟» هو أكثر سؤال يوصل على واتساب. صفحة واضحة تجيبو
+    مرة وحدة وتوفّر وقت الرد، وتزيد ثقة الزبون قبل ما يطلب.
+
+    نعرضو فقط الشركات **المفعّلة** من لوحة التحكم، والسعر الفارغ يعني
+    الخدمة غير متوفرة (ماشي مجاني).
+    """
+    from models import Carrier, ShippingRate
+
+    carriers = (
+        Carrier.query.filter_by(is_active=True)
+        .order_by(Carrier.name)
+        .all()
+    )
+
+    # نبنيو جدول: ولاية → {رمز الشركة: (منزل، مكتب)}
+    rows = {}
+    for carrier in carriers:
+        for rate in ShippingRate.query.filter_by(carrier_id=carrier.id).all():
+            entry = rows.setdefault(
+                rate.wilaya_code,
+                {"code": rate.wilaya_code, "name": rate.wilaya_name, "prices": {}},
+            )
+            entry["prices"][carrier.code] = {
+                "home": rate.home_price,
+                "office": rate.office_price,
+            }
+
+    wilayas = sorted(rows.values(), key=lambda r: r["code"])
+
+    return render_template(
+        "shop/shipping_prices.html",
+        carriers=carriers,
+        wilayas=wilayas,
+    )

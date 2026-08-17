@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}أسعار التوصيل — {{ store_name }}{% endblock %}
+{% block meta_description %}أسعار التوصيل لكل ولايات الجزائر مع {{ store_name }} — الدفع عند الاستلام، توصيل للمنزل أو لمكتب الشركة.{% endblock %}
+
+{% block content %}
+<section class="ship-page">
+    <div class="container container-narrow">
+        <h1 class="page-heading">أسعار التوصيل</h1>
+        <p class="ship-intro">
+            الأسعار بالدينار الجزائري لكل قطعة توصيل.
+            <strong>الدفع عند الاستلام</strong> — تخلّص السعر + التوصيل كي توصلك الطلبية.
+        </p>
+
+        {% if carriers and wilayas %}
+        {# ⚠️ بحث فوري: 58 ولاية × عدة شركات = جدول طويل. الزبون
+           يحتاج ولايتو وحدها، ماشي يقرا كلش. #}
+        <div class="ship-search">
+            <input type="search" id="shipSearch" placeholder="🔍 اكتب اسم ولايتك..."
+                   aria-label="ابحث عن ولايتك" autocomplete="off">
+            <span class="ship-count" id="shipCount">{{ wilayas | length }} ولاية</span>
+        </div>
+
+        <div class="ship-table-wrap">
+            <table class="ship-table">
+                <thead>
+                    <tr>
+                        <th class="ship-w">الولاية</th>
+                        {% for c in carriers %}
+                        <th colspan="2" class="ship-carrier">{{ c.name }}</th>
+                        {% endfor %}
+                    </tr>
+                    <tr class="ship-sub">
+                        <th></th>
+                        {% for c in carriers %}
+                        <th>🏠 للمنزل</th>
+                        <th>🏢 للمكتب</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody id="shipBody">
+                    {% for w in wilayas %}
+                    <tr data-name="{{ w.name }}" data-code="{{ w.code }}">
+                        <td class="ship-w">
+                            <span class="ship-code">{{ w.code }}</span>{{ w.name }}
+                        </td>
+                        {% for c in carriers %}
+                            {% set pr = w.prices.get(c.code) %}
+                            <td>
+                                {% if pr and pr.home %}
+                                <strong>{{ "{:,}".format(pr.home) }}</strong>
+                                {% else %}<span class="ship-no">—</span>{% endif %}
+                            </td>
+                            <td>
+                                {% if pr and pr.office %}
+                                <strong>{{ "{:,}".format(pr.office) }}</strong>
+                                {% else %}<span class="ship-no">—</span>{% endif %}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <p class="ship-empty" id="shipEmpty" hidden>ما لقيناش هاد الولاية.</p>
+
+        <ul class="ship-notes">
+            <li><strong>—</strong> معناها الخدمة غير متوفرة لهاد الولاية بهاد الشركة.</li>
+            <li>🏢 <strong>للمكتب</strong> أرخص — تروح تاخذ الطرد من مكتب الشركة.</li>
+            <li>الأسعار قابلة للتغيير حسب تسعير شركات التوصيل.</li>
+        </ul>
+        {% else %}
+        <p class="ship-intro">أسعار التوصيل مازال ما تعمّراتش. راسلنا على واتساب ونجيبوك السعر.</p>
+        {% endif %}
+    </div>
+</section>
+
+<script>
+/** بحث فوري فجدول الولايات — بلا طلب للسيرفر */
+(function () {
+    var input = document.getElementById('shipSearch');
+    if (!input) return;
+
+    var rows = Array.prototype.slice.call(
+        document.querySelectorAll('#shipBody tr')
+    );
+    var count = document.getElementById('shipCount');
+    var empty = document.getElementById('shipEmpty');
+
+    input.addEventListener('input', function () {
+        var q = input.value.trim();
+        var shown = 0;
+
+        rows.forEach(function (row) {
+            var hit = !q
+                || row.dataset.name.indexOf(q) !== -1
+                || row.dataset.code.indexOf(q) === 0;
+            row.hidden = !hit;
+            if (hit) shown++;
+        });
+
+        count.textContent = shown + ' ولاية';
+        empty.hidden = shown > 0;
+    });
+})();
+</script>
+{% endblock %}

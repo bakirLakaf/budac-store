@@ -263,6 +263,22 @@
                         </div>
                     </div>
 
+                    {# ═══ الإجمالي الحيّ ═══
+                       ⚠️ الزبون يبدّل الكمية ويشوف سعر الحبة، لكن ما يعرفش
+                       المجموع. هاد الصندوق يحسبو مباشرة — يقلّل التردد
+                       ويمنع مفاجأة السعر فالسلة. #}
+                    <div class="live-total" id="liveTotal">
+                        <div class="live-row">
+                            <span>سعر الحبة</span>
+                            <strong id="liveUnit">{{ product.price_display }}</strong>
+                        </div>
+                        <div class="live-row live-row-sum">
+                            <span>المجموع</span>
+                            <strong id="liveSum">{{ product.price_display }}</strong>
+                        </div>
+                        <p class="live-note" id="liveNote" hidden></p>
+                    </div>
+
                     <button type="submit" class="btn-primary btn-block">أضف للسلة</button>
                     <button type="submit" name="go_to_cart" value="1" class="btn-ghost-link">أضف واذهب للسلة ←</button>
                 </form>
@@ -1078,4 +1094,99 @@
 </div>
 {% endif %}
 
+
+<script>
+/**
+ * الإجمالي الحيّ — سعر الحبة × الكمية، مع احتساب التدرّج والعرض الجاهز.
+ *
+ * ⚠️ الحساب هنا **للعرض فقط**. السيرفر يعاود يحسبو عند الإضافة للسلة،
+ * فما يقدرش حد يبدّل السعر من المتصفح.
+ */
+(function () {
+    'use strict';
+
+    var box = document.getElementById('liveTotal');
+    var qty = document.getElementById('qtyInput');
+    if (!box || !qty) return;
+
+    var unitEl = document.getElementById('liveUnit');
+    var sumEl = document.getElementById('liveSum');
+    var noteEl = document.getElementById('liveNote');
+    var packInput = document.getElementById('selectedPackId');
+    var basePrice = {{ product.price }};
+
+    function money(n) {
+        return Number(n).toLocaleString('en-US') + ' دج';
+    }
+
+    /** الموديل المختار حاليًا */
+    function currentChip() {
+        return document.querySelector('[data-tiers].is-selected')
+            || document.querySelector('[data-tiers]');
+    }
+
+    function parseAttr(chip, name) {
+        try { return JSON.parse(chip.getAttribute(name) || '[]'); }
+        catch (e) { return []; }
+    }
+
+    function refresh() {
+        var n = Math.max(1, parseInt(qty.value, 10) || 1);
+        var chip = currentChip();
+
+        // ---------- عرض جاهز مختار ----------
+        var packId = packInput ? packInput.value : '';
+        if (packId && chip) {
+            var pack = parseAttr(chip, 'data-packs').filter(function (p) {
+                return String(p.id) === String(packId);
+            })[0];
+
+            if (pack) {
+                unitEl.textContent = money(pack.price);
+                sumEl.textContent = money(pack.price * n);
+                noteEl.textContent = '🎁 ' + pack.full_label;
+                noteEl.hidden = false;
+                return;
+            }
+        }
+
+        // ---------- سعر الحبة (مع التدرّج) ----------
+        var unit = basePrice;
+        if (chip && chip.dataset.price) unit = Number(chip.dataset.price) || unit;
+
+        var applied = null;
+        if (chip) {
+            parseAttr(chip, 'data-tiers').forEach(function (t) {
+                var okMin = n >= t.min;
+                var okMax = (t.max === null || t.max === undefined) || n <= t.max;
+                if (okMin && okMax) { unit = t.price; applied = t; }
+            });
+        }
+
+        unitEl.textContent = money(unit);
+        sumEl.textContent = money(unit * n);
+
+        if (applied) {
+            var saved = (basePrice - unit) * n;
+            noteEl.textContent = saved > 0
+                ? '📦 سعر الجملة (' + applied.range + ') — ربحت ' + money(saved)
+                : '📦 سعر الجملة (' + applied.range + ')';
+            noteEl.hidden = false;
+        } else {
+            noteEl.hidden = true;
+        }
+    }
+
+    qty.addEventListener('input', refresh);
+    qty.addEventListener('change', refresh);
+
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('.qty-btn, [data-tiers], .pack-opt')) {
+            setTimeout(refresh, 40);
+        }
+    });
+
+    refresh();
+})();
+</script>
 {% endblock %}

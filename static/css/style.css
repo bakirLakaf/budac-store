@@ -3248,3 +3248,141 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
     body:has(.buy-bar:not([hidden])) .wa-float { bottom: 86px; }
     body:has(.buy-bar:not([hidden])) .cart-float { bottom: 148px; }
 }
+
+/* ═══════════ الإجمالي الحيّ ═══════════ */
+.live-total {
+    margin: 14px 0;
+    padding: 14px 16px;
+    background: #FBF6EE;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+.live-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--color-ink-soft);
+}
+.live-row + .live-row { margin-top: 7px; }
+.live-row strong {
+    color: var(--color-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.live-row-sum {
+    padding-top: 9px;
+    margin-top: 9px !important;
+    border-top: 1.5px solid var(--color-border);
+}
+.live-row-sum span { font-weight: 700; color: var(--color-primary); }
+.live-row-sum strong {
+    font-size: 21px; font-weight: 800;
+    color: var(--color-primary);
+}
+
+.live-note {
+    margin: 9px 0 0;
+    font-size: 12.5px; font-weight: 600;
+    color: #4E7C59;
+}
+.live-note[hidden] { display: none; }
+
+/* ═══════════ صفحة أسعار التوصيل ═══════════ */
+.ship-page { padding: 34px 0 54px; }
+.page-heading {
+    margin: 0 0 10px;
+    font-size: clamp(24px, 5vw, 32px); font-weight: 800;
+    color: var(--color-primary);
+}
+.ship-intro { margin: 0 0 22px; font-size: 15.5px; line-height: 1.7; }
+
+.ship-search {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 16px; flex-wrap: wrap;
+}
+.ship-search input {
+    flex: 1; min-width: 200px;
+    padding: 12px 15px;
+    border: 1.5px solid var(--color-border); border-radius: 11px;
+    background: #fff; font-family: inherit; font-size: 16px;
+}
+.ship-search input:focus {
+    outline: none; border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(46, 26, 71, 0.1);
+}
+.ship-count { font-size: 13px; font-weight: 700; color: var(--color-ink-soft); }
+
+/* ⚠️ تمرير أفقي: 3 شركات × عمودين = 7 أعمدة، ما تدخلش فالهاتف */
+.ship-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: #fff;
+}
+
+.ship-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+.ship-table thead th {
+    padding: 10px 12px;
+    background: var(--color-primary); color: #fff;
+    font-size: 13px; font-weight: 700;
+    text-align: center; white-space: nowrap;
+}
+.ship-table .ship-sub th {
+    background: var(--color-primary-light);
+    font-size: 11.5px; font-weight: 600;
+    padding: 6px 10px;
+}
+.ship-carrier { border-inline-start: 1px solid rgba(255,255,255,0.2); }
+
+.ship-table tbody td {
+    padding: 10px 12px;
+    border-top: 1px solid #F0EAE0;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.ship-table tbody tr:nth-child(even) { background: #FDFAF5; }
+.ship-table tbody tr[hidden] { display: none; }
+
+/* عمود الولاية ثابت عند التمرير — الزبون ما يضيّعش السطر */
+.ship-w {
+    position: sticky; inset-inline-start: 0;
+    text-align: start !important;
+    background: #fff;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.ship-table tbody tr:nth-child(even) .ship-w { background: #FDFAF5; }
+.ship-table thead .ship-w { background: var(--color-primary); }
+
+.ship-code {
+    display: inline-block; margin-inline-end: 7px;
+    padding: 1px 6px; border-radius: 5px;
+    background: var(--color-bg); color: var(--color-ink-soft);
+    font-size: 11.5px; font-weight: 700;
+}
+
+.ship-no { color: #C9BFAE; }
+
+.ship-empty {
+    margin-top: 18px; padding: 20px;
+    text-align: center; color: var(--color-ink-soft);
+    background: #fff; border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+.ship-empty[hidden] { display: none; }
+
+.ship-notes {
+    margin: 20px 0 0; padding: 16px 20px;
+    list-style: none;
+    background: #F6EFE3; border-radius: var(--radius-md);
+}
+.ship-notes li {
+    font-size: 13.5px; line-height: 1.8;
+    color: var(--color-ink-soft);
+}
+
+@media (max-width: 640px) {
+    .ship-table { font-size: 13px; }
+    .ship-table tbody td, .ship-table thead th { padding: 8px 9px; }
+}

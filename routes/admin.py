@@ -2282,3 +2282,113 @@ def product_tiers_bulk_delete(product_id):
         flash(f"ماكانش مجال يبدا من {min_q}", "warning")
 
     return redirect(url_for("admin.product_form", product_id=product.id))
+
+
+@admin_bp.route("/products/<int:product_id>/variant-price-bulk", methods=["POST"])
+@login_required
+def product_variant_price_bulk(product_id):
+    """
+    يبدّل السعر العادي لعدة موديلات ضربة وحدة.
+
+    ⚠️ الفرق عن المسارات الأخرى: هنا نبدّلو **سعر الموديل نفسو**
+    (ProductVariant.price)، ماشي مجال كمية ولا عرض جاهز. مفيد كي
+    يتغيّر سعر المورّد على كل الألوان مرة وحدة.
+
+    وضعان للقيمة:
+      • مبلغ ثابت: كل الموديلات تولّي بهاد السعر
+      • نسبة: نزيدو/نقصو نسبة من سعر كل موديل (±)
+    """
+    product = Product.query.get_or_404(product_id)
+    mode = request.form.get("bulk_mode") or "all"
+    kind = request.form.get("price_kind") or "fixed"
+
+    raw = (request.form.get("price_value") or "").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        flash("القيمة لازم رقم صحيح", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    variants, error = _bulk_target_variants(product, mode, "price_bulk_variants")
+    if error:
+        flash(error, "warning")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    if not variants:
+        flash("هاد المنتج ماكانش فيه موديلات", "warning")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    changed, skipped = 0, []
+
+    for variant in variants:
+        old = variant.effective_price
+
+        if kind == "percent":
+            # ⚠️ نحسبو من السعر الحالي ديال كل موديل — الموديلات ممكن
+            # تكون بأسعار مختلفة، فالنسبة تنطبق على كل واحد بسعرو.
+            new_price = round(old * (100 + value) / 100)
+        else:
+            new_price = value
+
+        if new_price < 0:
+            skipped.append(variant.label)
+            continue
+
+        variant.price = new_price
+        changed += 1
+
+    db.session.commit()
+
+    if kind == "percent":
+        sign = "+" if value >= 0 else ""
+        flash(f"بدّلنا سعر {changed} موديل بنسبة {sign}{value}%", "success")
+    else:
+        flash(f"بدّلنا سعر {changed} موديل لـ{value:,} دج", "success")
+
+    if skipped:
+        flash(
+            f"⚠️ تجاوزنا {len(skipped)} موديل — السعر يولّي سالب: "
+            f"{'، '.join(skipped[:6])}",
+            "warning",
+        )
+
+    return redirect(url_for("admin.product_form", product_id=product.id))
+
+
+@admin_bp.route("/products/<int:product_id>/images/<int:image_id>/move", methods=["POST"])
+@login_required
+def product_image_move(product_id, image_id):
+    """
+    يحرّك صورة خطوة يمين ولا يسار فترتيب المعرض.
+
+    ⚠️ ليش أزرار وماشي سحب؟ السحب (drag & drop) صعيب فالموبايل ويحتاج
+    مكتبة. الأدمن يرتّب صور مرة وحدة عند إضافة المنتج، فأزرار بسيطة
+    تخدم الغرض بلا تعقيد.
+    """
+    product = Product.query.get_or_404(product_id)
+    image = ProductImage.query.filter_by(id=image_id, product_id=product.id).first_or_404()
+
+    direction = request.form.get("dir")
+
+    ordered = sorted(product.images, key=lambda i: (i.sort_order, i.id))
+
+    # ⚠️ نعاودو ترقيم sort_order: البيانات القديمة ممكن كلها أصفار،
+    # وبلا ترقيم نظيف التحريك ما يبانش.
+    for position, img in enumerate(ordered):
+        img.sort_order = position
+
+    index = next((i for i, img in enumerate(ordered) if img.id == image.id), None)
+    if index is None:
+        flash("الصورة ماكانتش", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    target = index - 1 if direction == "up" else index + 1
+
+    if 0 <= target < len(ordered):
+        other = ordered[target]
+        image.sort_order, other.sort_order = other.sort_order, image.sort_order
+        db.session.commit()
+    else:
+        db.session.commit()   # نحفظو الترقيم النظيف على أي حال
+
+    return redirect(url_for("admin.product_form", product_id=product.id))
