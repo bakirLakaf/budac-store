@@ -2392,3 +2392,51 @@ def product_image_move(product_id, image_id):
         db.session.commit()   # نحفظو الترقيم النظيف على أي حال
 
     return redirect(url_for("admin.product_form", product_id=product.id))
+
+
+@admin_bp.route("/variants/<int:variant_id>/price", methods=["POST"])
+@login_required
+def variant_price(variant_id):
+    """
+    يبدّل سعر موديل واحد — تعديل سريع من رأس البطاقة.
+
+    ⚠️ ليش مسار مستقل؟ الفورم الرئيسي ديال المنتج طويل ويحفظ كلش.
+    تبديل سعر موديل واحد ما يستاهلش حفظ الصفحة كاملة.
+
+    القيمة الفارغة = الموديل يرث سعر المنتج (ماشي صفر).
+    """
+    variant = ProductVariant.query.get_or_404(variant_id)
+    product = variant.product
+
+    raw = (request.form.get("price") or "").strip()
+    is_ajax = request.headers.get("X-Requested-With") == "fetch"
+
+    def reply(ok, message, category="success"):
+        if is_ajax:
+            return jsonify({
+                "ok": ok,
+                "message": message,
+                "price": variant.effective_price,
+                "display": variant.price_display,
+                "inherited": variant.price is None,
+            }), (200 if ok else 400)
+        flash(message, category)
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    # فارغ = يرث سعر المنتج
+    if not raw:
+        variant.price = None
+        db.session.commit()
+        return reply(True, f"«{variant.label}» ولّى يرث سعر المنتج")
+
+    try:
+        price = int(raw)
+    except ValueError:
+        return reply(False, "السعر لازم رقم صحيح", "error")
+
+    if price < 0:
+        return reply(False, "السعر ماشي سالب", "error")
+
+    variant.price = price
+    db.session.commit()
+    return reply(True, f"«{variant.label}» ولّى بـ{price:,} دج")

@@ -43,13 +43,32 @@
         "availability": "https://schema.org/{{ 'InStock' if product.is_in_stock else 'OutOfStock' }}",
         "seller": { "@type": "Organization", "name": "{{ store_name }}" }
     }
-    {% if product.average_rating %},
+    {% set approved = product.reviews | selectattr('is_approved') | list %}
+    {% if approved %},
     "aggregateRating": {
         "@type": "AggregateRating",
         "ratingValue": "{{ product.average_rating }}",
-        "reviewCount": "{{ product.reviews | selectattr('is_approved') | list | length }}",
+        "reviewCount": "{{ approved | length }}",
         "bestRating": "5", "worstRating": "1"
-    }
+    },
+    {# ⚠️ جوجل يطلب «review» زيادة على «aggregateRating». بلاه، النتيجة
+       تبقى صالحة لكن بلا نجوم فصفحة البحث — وهي أقوى شي يزيد النقرات.
+       نبعثو آخر 5 تقييمات معتمدة. #}
+    "review": [
+        {% for r in approved[:5] %}
+        {
+            "@type": "Review",
+            "author": { "@type": "Person", "name": {{ r.author_name | tojson }} },
+            "datePublished": "{{ r.created_at.strftime('%Y-%m-%d') }}",
+            "reviewRating": {
+                "@type": "Rating",
+                "ratingValue": "{{ r.rating }}",
+                "bestRating": "5", "worstRating": "1"
+            }
+            {% if r.comment %}, "reviewBody": {{ r.comment | tojson }}{% endif %}
+        }{{ "," if not loop.last }}
+        {% endfor %}
+    ]
     {% endif %}
 }
 </script>

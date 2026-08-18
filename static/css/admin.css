@@ -1457,3 +1457,57 @@ body {
     color: #fff; font-size: 17px; font-weight: 800;
 }
 .img-btn-move:hover { background: var(--a-primary); }
+
+/* ---------- سعر الموديل القابل للتعديل ---------- */
+.vprice {
+    display: inline-flex; align-items: center; gap: 4px;
+    vertical-align: middle;
+}
+.vprice-input {
+    width: 82px;
+    padding: 5px 9px;
+    border: 1.5px solid transparent;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.75);
+    font-family: inherit; font-size: 14px; font-weight: 700;
+    color: var(--a-primary);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    transition: all 0.13s ease;
+}
+/* ⚠️ الحقل يبان كنص عادي حتى يمرّ عليه الأدمن — ما نزيدوش
+   ضجيجًا بصريًا فرأس كل بطاقة */
+.vprice:hover .vprice-input,
+.vprice-input:focus {
+    border-color: var(--a-gold);
+    background: #fff;
+}
+.vprice-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.16);
+}
+
+.vprice-unit { font-size: 12.5px; color: var(--a-text-soft); }
+
+.vprice-save {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; border-radius: 7px;
+    background: var(--a-primary); color: #fff;
+    font-size: 13px; cursor: pointer;
+    opacity: 0; transform: scale(0.85);
+    transition: all 0.13s ease;
+}
+.vprice:hover .vprice-save,
+.vprice:focus-within .vprice-save { opacity: 1; transform: scale(1); }
+@media (hover: none) { .vprice-save { opacity: 1; transform: scale(1); } }
+
+.vprice-state { font-size: 13px; font-weight: 700; min-width: 14px; }
+.vprice-state.is-busy { color: var(--a-text-soft); }
+.vprice-state.is-ok { color: #2E7D53; }
+.vprice-state.is-bad { color: var(--a-danger); cursor: help; }
+
+.vprice-hint {
+    margin-inline-start: 6px;
+    font-size: 11.5px; color: var(--a-text-soft);
+}
