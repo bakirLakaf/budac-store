@@ -379,12 +379,95 @@ def product_form(product_id=None):
                 product.image_filename = filename
 
         db.session.commit()
+
+        # ---------- قرارات الصور (ترتيب / رئيسية / حذف) ----------
+        # ⚠️ الأدمن يرتّب ويحذف فالمتصفح بلا إعادة تحميل، والقرارات
+        # توصل هنا كقوائم معرّفات وتتطبّق مرة وحدة عند الحفظ.
+        _apply_image_decisions(product)
+
+        db.session.commit()
         flash(f"تم حفظ المنتج «{product.name}»", "success")
         return redirect(url_for("admin.product_form", product_id=product.id))
 
     return render_template(
         "admin/product_form.html", product=product, categories=categories
     )
+
+
+def _apply_image_decisions(product):
+    """
+    يطبّق ترتيب الصور والصورة الرئيسية والحذف — كلهم مرة وحدة.
+
+    ⚠️ ليش هكذا وماشي مسار لكل عملية؟
+    قبل، كل تحريك صورة كان يعيد تحميل الصفحة ويرجّع الأدمن لفوق.
+    دابا يرتّب ويحذف براحتو فالمتصفح، ويضغط «حفظ» مرة وحدة.
+
+    نقرا المعرّفات من حقول مخفية. أي معرّف ماشي من صور هاد المنتج
+    يتجاهل — حماية من تعديل الحقول من أدوات المطوّر.
+    """
+    own_ids = {img.id for img in product.images}
+
+    def parse(field):
+        raw = (request.form.get(field) or "").strip()
+        if not raw:
+            return []
+        out = []
+        for part in raw.split(","):
+            part = part.strip()
+            if part.isdigit() and int(part) in own_ids:
+                out.append(int(part))
+        return out
+
+    # ---------- 1) الحذف ----------
+    deleted = set(parse("image_deleted"))
+    for image in list(product.images):
+        if image.id not in deleted:
+            continue
+
+        # نفكّو الموديلات اللي تستعمل هاد الصورة
+        ProductVariant.query.filter_by(
+            product_id=product.id, image_filename=image.image_filename
+        ).update({"image_filename": None}, synchronize_session=False)
+
+        # ⚠️ ما نمسحوش الملف من القرص إذا صورة أخرى تستعملو
+        still_used = ProductImage.query.filter(
+            ProductImage.image_filename == image.image_filename,
+            ProductImage.id != image.id,
+        ).first()
+
+        if not still_used:
+            try:
+                delete_image(image.image_filename)
+            except Exception:
+                pass   # الملف ماكانش — ما يمنعش حذف السطر
+
+        db.session.delete(image)
+
+    db.session.flush()
+
+    # ---------- 2) الترتيب ----------
+    order = [i for i in parse("image_order") if i not in deleted]
+    if order:
+        position = {image_id: idx for idx, image_id in enumerate(order)}
+        for image in product.images:
+            image.sort_order = position.get(image.id, len(order))
+
+    # ---------- 3) الصورة الرئيسية ----------
+    raw_main = (request.form.get("image_main") or "").strip()
+    if raw_main.isdigit() and int(raw_main) in own_ids and int(raw_main) not in deleted:
+        main = next((i for i in product.images if i.id == int(raw_main)), None)
+        if main:
+            product.image_filename = main.image_filename
+
+    # ⚠️ لو الصورة الرئيسية تمسحت، ناخذو أول وحدة باقية — وإلا المنتج
+    # يبقى يشير لملف محذوف ويبان مكسورًا فالمتجر.
+    remaining = [i for i in product.images if i.id not in deleted]
+    if remaining and product.image_filename not in {i.image_filename for i in remaining}:
+        product.image_filename = sorted(
+            remaining, key=lambda i: (i.sort_order, i.id)
+        )[0].image_filename
+    elif not remaining:
+        product.image_filename = None
 
 
 @admin_bp.route("/products/<int:product_id>/delete", methods=["POST"])

@@ -136,46 +136,60 @@
             <h2 class="section-title">الصور</h2>
 
             {% if product and product.images %}
-            <div class="image-manager">
+            {# ═══════════ إدارة الصور ═══════════
+               ⚠️ كل شي **محلي** حتى تضغط «حفظ المنتج»:
+                 • الترتيب، الصورة الرئيسية، والحذف كلهم يتطبّقو فالمتصفح
+                 • ما نعاودوش نحمّلو الصفحة فكل حركة
+                 • تقدر تتراجع قبل الحفظ
+               الحقول المخفية تحت تحمل القرارات للسيرفر. #}
+            <div class="image-manager" id="imageManager">
                 {% for img in product.images %}
                 {% set is_main = img.image_filename == product.image_filename %}
-                <div class="image-item {{ 'is-main' if is_main }}">
-                    <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}" alt="">
+                <div class="image-item {{ 'is-main' if is_main }}"
+                     data-id="{{ img.id }}"
+                     data-file="{{ img.image_filename }}">
 
-                    {% if is_main %}
-                        <span class="image-main-tag">★ رئيسية</span>
-                    {% endif %}
+                    <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
+                         alt="" data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}">
 
-                    {# ⚠️ ماكانش فورم هنا: هاد الكتلة داخل الفورم الرئيسي،
-                       والفورم داخل فورم HTML غير صالح — المتصفح يحيّد
-                       الداخلي والأزرار تبعث الفورم الخارجي بدل عملها.
-                       نستعملو formaction: زر يبعث لمسار خاص بيه. #}
+                    <span class="image-main-tag">★ رئيسية</span>
+                    <span class="image-del-tag">سيُحذف</span>
+
                     <div class="image-item-actions">
-                        {% if not is_main %}
-                        <button type="submit" class="img-btn img-btn-main"
-                                title="اجعلها الصورة الرئيسية"
-                                formaction="{{ url_for('admin.product_image_make_main', product_id=product.id, image_id=img.id) }}"
-                                formnovalidate>★</button>
-                        {% endif %}
+                        {# ⚠️ فـRTL: «‹» تمشي لليمين بصريًا و«›» لليسار.
+                           كانو معكوسين — اتصلّحو. #}
+                        <button type="button" class="img-btn img-btn-move" data-move="start"
+                                title="حرّكها لليمين" aria-label="حرّكها لليمين">‹</button>
 
-                        <button type="submit" class="img-btn img-btn-move" title="حرّكها لليمين"
-                                formaction="{{ url_for('admin.product_image_move', product_id=product.id, image_id=img.id) }}"
-                                formnovalidate name="dir" value="up">›</button>
+                        <button type="button" class="img-btn img-btn-zoom" data-zoom
+                                title="شوفها كاملة" aria-label="تكبير">🔍</button>
 
-                        <button type="submit" class="img-btn img-btn-move" title="حرّكها لليسار"
-                                formaction="{{ url_for('admin.product_image_move', product_id=product.id, image_id=img.id) }}"
-                                formnovalidate name="dir" value="down">‹</button>
+                        <button type="button" class="img-btn img-btn-main" data-main
+                                title="اجعلها الصورة الرئيسية" aria-label="رئيسية">★</button>
 
-                        <button type="submit" class="img-btn img-btn-del" title="حذف"
-                                formaction="{{ url_for('admin.product_image_delete', product_id=product.id, image_id=img.id) }}"
-                                formnovalidate
-                                onclick="return confirm('تمسح هاد الصورة؟ غادي تتحيّد من الموديلات اللي تستعملها.')">×</button>
+                        <button type="button" class="img-btn img-btn-del" data-del
+                                title="حذف" aria-label="حذف">×</button>
+
+                        <button type="button" class="img-btn img-btn-move" data-move="end"
+                                title="حرّكها لليسار" aria-label="حرّكها لليسار">›</button>
                     </div>
                 </div>
                 {% endfor %}
             </div>
+
+            {# القرارات تمشي للسيرفر مع «حفظ المنتج» #}
+            <input type="hidden" name="image_order" id="imageOrder">
+            <input type="hidden" name="image_main" id="imageMain">
+            <input type="hidden" name="image_deleted" id="imageDeleted">
+
+            <p class="hint" id="imageDirtyNote" hidden>
+                ⚠️ فيه تعديلات على الصور — اضغط <strong>حفظ المنتج</strong> باش تتطبّق.
+                <button type="button" class="bulk-link" id="imageUndo">تراجع</button>
+            </p>
+
             <p class="hint">
-                مرّر الماوس على الصورة: <strong>★</strong> يخليها الرئيسية، <strong>×</strong> يحذفها.
+                مرّر الماوس على الصورة: <strong>‹ ›</strong> للترتيب ·
+                <strong>🔍</strong> تكبير · <strong>★</strong> رئيسية · <strong>×</strong> حذف.
             </p>
             {% endif %}
 
@@ -720,6 +734,104 @@
         return tr;
     }
 
+    // ═══════════ إدارة الصور — كلش محلي ═══════════
+    var mgr = document.getElementById('imageManager');
+    if (mgr) {
+        var orderInput = document.getElementById('imageOrder');
+        var mainInput = document.getElementById('imageMain');
+        var delInput = document.getElementById('imageDeleted');
+        var note = document.getElementById('imageDirtyNote');
+        var snapshot = mgr.innerHTML;   // للتراجع
+
+        function items() {
+            return Array.prototype.slice.call(mgr.querySelectorAll('.image-item'));
+        }
+
+        /** يحدّث الحقول المخفية من الحالة الحالية */
+        function sync(dirty) {
+            var live = items().filter(function (el) {
+                return !el.classList.contains('is-deleted');
+            });
+
+            orderInput.value = live.map(function (el) { return el.dataset.id; }).join(',');
+
+            var main = live.filter(function (el) {
+                return el.classList.contains('is-main');
+            })[0];
+            mainInput.value = main ? main.dataset.id : '';
+
+            delInput.value = items()
+                .filter(function (el) { return el.classList.contains('is-deleted'); })
+                .map(function (el) { return el.dataset.id; })
+                .join(',');
+
+            if (dirty) note.hidden = false;
+        }
+
+        mgr.addEventListener('click', function (e) {
+            var item = e.target.closest('.image-item');
+            if (!item) return;
+
+            // ---------- تكبير ----------
+            if (e.target.closest('[data-zoom]')) {
+                var z = document.getElementById('imgZoomer');
+                document.getElementById('zoomerImg').src =
+                    item.querySelector('img').dataset.full;
+                z.hidden = false;
+                return;
+            }
+
+            // ---------- ترتيب ----------
+            var moveBtn = e.target.closest('[data-move]');
+            if (moveBtn) {
+                var toStart = moveBtn.dataset.move === 'start';
+                var sibling = toStart ? item.previousElementSibling
+                                      : item.nextElementSibling;
+                if (sibling) {
+                    if (toStart) mgr.insertBefore(item, sibling);
+                    else mgr.insertBefore(sibling, item);
+                    sync(true);
+                }
+                return;
+            }
+
+            // ---------- رئيسية ----------
+            if (e.target.closest('[data-main]')) {
+                // ⚠️ صورة محذوفة ما تولّيش رئيسية
+                if (item.classList.contains('is-deleted')) return;
+                items().forEach(function (el) { el.classList.remove('is-main'); });
+                item.classList.add('is-main');
+                sync(true);
+                return;
+            }
+
+            // ---------- حذف / تراجع عن الحذف ----------
+            if (e.target.closest('[data-del]')) {
+                item.classList.toggle('is-deleted');
+
+                // لو حذفنا الرئيسية، أول صورة باقية تولّي رئيسية
+                if (item.classList.contains('is-deleted') &&
+                    item.classList.contains('is-main')) {
+                    item.classList.remove('is-main');
+                    var next = items().filter(function (el) {
+                        return !el.classList.contains('is-deleted');
+                    })[0];
+                    if (next) next.classList.add('is-main');
+                }
+                sync(true);
+                return;
+            }
+        });
+
+        document.getElementById('imageUndo').addEventListener('click', function () {
+            mgr.innerHTML = snapshot;
+            orderInput.value = mainInput.value = delInput.value = '';
+            note.hidden = true;
+        });
+
+        sync(false);
+    }
+
     // ---------- تعديل سعر الموديل فمكانو ----------
     function saveVariantPrice(box) {
         var input = box.querySelector('.vprice-input');
@@ -770,6 +882,20 @@
     document.addEventListener('click', function (e) {
         var saveBtn = e.target.closest('.vprice-save');
         if (saveBtn) saveVariantPrice(saveBtn.closest('.vprice'));
+    });
+
+    // ⚠️ الحفظ عند مغادرة الحقل كذلك — الأدمن يكتب السعر وينتقل،
+    // وما يفتكرش يضغط ✓. نحفظو غير إذا تبدّلت القيمة فعلاً.
+    document.addEventListener('focusin', function (e) {
+        var input = e.target.closest('.vprice-input');
+        if (input) input.dataset.was = input.value.trim();
+    });
+
+    document.addEventListener('focusout', function (e) {
+        var input = e.target.closest('.vprice-input');
+        if (!input) return;
+        if (input.value.trim() === (input.dataset.was || '')) return;
+        saveVariantPrice(input.closest('.vprice'));
     });
 
     // Enter يحفظ كذلك — أسرع من الضغط على الزر

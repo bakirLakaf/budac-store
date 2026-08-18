@@ -1511,3 +1511,88 @@ body {
     margin-inline-start: 6px;
     font-size: 11.5px; color: var(--a-text-soft);
 }
+
+/* ═══════════ إدارة الصور — الشبكة ═══════════ */
+.image-manager {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.image-item {
+    position: relative;
+    aspect-ratio: 1;
+    border: 2px solid var(--a-border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--a-bg);
+    transition: border-color 0.14s ease, opacity 0.14s ease;
+}
+.image-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.image-item.is-main { border-color: var(--a-gold); }
+
+.image-item.is-deleted {
+    opacity: 0.4;
+    border-color: var(--a-danger);
+    border-style: dashed;
+}
+.image-item.is-deleted img { filter: grayscale(1); }
+
+/* الشارات */
+.image-main-tag, .image-del-tag {
+    position: absolute; inset-inline: 0; bottom: 0;
+    padding: 3px 0; text-align: center;
+    font-size: 11px; font-weight: 800;
+    display: none;
+}
+.image-main-tag { background: var(--a-gold); color: var(--a-primary); }
+.image-del-tag { background: var(--a-danger); color: #fff; }
+
+.image-item.is-main .image-main-tag { display: block; }
+.image-item.is-deleted .image-del-tag { display: block; }
+.image-item.is-deleted .image-main-tag { display: none; }
+
+/* ⚠️ الأزرار كانت 5 فصف واحد داخل مربع صغير — تتكدّس وتختفي
+   النجمة. دابا صفّان بمساحة كافية، وخلفية داكنة تخلّيهم يبانو
+   على أي صورة. */
+.image-item-actions {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    align-content: center; justify-items: center;
+    gap: 6px;
+    padding: 8px;
+    background: rgba(30, 24, 40, 0.72);
+    opacity: 0;
+    transition: opacity 0.14s ease;
+}
+.image-item:hover .image-item-actions,
+.image-item:focus-within .image-item-actions { opacity: 1; }
+@media (hover: none) { .image-item-actions { opacity: 1; } }
+
+.img-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; border-radius: 9px;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--a-primary);
+    font-size: 15px; font-weight: 800; line-height: 1;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+.img-btn:hover { background: #fff; transform: scale(1.08); }
+.img-btn:focus-visible { outline: 2px solid var(--a-gold); outline-offset: 2px; }
+
+.img-btn-main:hover { background: var(--a-gold); }
+.img-btn-del:hover { background: var(--a-danger); color: #fff; }
+.img-btn-zoom { font-size: 13px; }
+
+#imageDirtyNote {
+    padding: 10px 14px;
+    background: #FFF6E5;
+    border: 1px solid #E8D9A8;
+    border-radius: 10px;
+}
+#imageDirtyNote[hidden] { display: none; }
