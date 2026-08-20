@@ -74,6 +74,10 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="admin-logout">خروج ({{ session.admin_username }})</button>
         </form>
+        {# رقم الإصدار — تحقّق فوري أن النشر وصل #}
+        <p class="admin-version" title="نسخة الكود اللي تخدم دابا">
+            {{ app_version }}
+        </p>
     </div>
 </aside>
 

@@ -352,6 +352,10 @@ def product_form(product_id=None):
         db.session.flush()  # باش ناخذو product.id إذا كان جديد
 
         # رفع صور جديدة (متعددة)
+        #
+        # ⚠️ المسار الأساسي دابا هو `/images/upload` — صورة بصورة عبر
+        # المتصفح. هاد الكود يبقى كاحتياط: إذا JavaScript معطّل ولا
+        # قالب قديم مخبّأ فالمتصفح، الصور مازال تتقبل بدل ما تضيع.
         uploaded_files = request.files.getlist("images")
         max_order = (
             db.session.query(func.max(ProductImage.sort_order))

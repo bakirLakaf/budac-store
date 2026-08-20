@@ -416,12 +416,17 @@ def main():
     check("الطلب اللي يفوت الحد يرجّع 413 ماشي انقطاع",
           r.status_code == 413, str(r.status_code))
 
-    # 5 صور × 1.5 ميغا = 7.5 ميغا > الحد → لو بعثناهم مع بعض يفشلو،
-    # لكن وحدة بوحدة كل طلب ≈ 1.5 ميغا فقط
-    one = 1_500_000
-    check("صورة وحدة تبقى تحت الحد", one < limit)
-    check("5 صور مع بعض يفوتو الحد (علاش قسّمنا الرفع)",
-          one * 5 > limit)
+    # صور الهاتف تكون 3-5 ميغا. وحدة بوحدة كل طلب يبقى تحت الحد،
+    # لكن 5 مع بعض يفوتوه بكثير — علاش قسّمنا الرفع.
+    phone_photo = 4_500_000
+    check("صورة هاتف وحدة تبقى تحت الحد", phone_photo < limit,
+          f"{phone_photo} vs {limit}")
+    check("5 صور هاتف مع بعض يفوتو الحد", phone_photo * 5 > limit)
+
+    section("7.10.c رقم الإصدار يبان فاللوحة")
+    from VERSION import VERSION as _V_
+    dash = client.get("/admin/").get_data(as_text=True)
+    check(f"رقم الإصدار ({_V_}) يبان فاللوحة", _V_ in dash)
 
     section("7.11 واجهة الرفع")
     up_html = client.get(f"/admin/products/{pid}/edit").get_data(as_text=True)
