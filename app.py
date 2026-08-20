@@ -10,6 +10,9 @@ from models import db
 load_dotenv()  # يقرا ملف .env قبل أي شي
 
 
+from VERSION import VERSION as APP_VERSION
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -148,6 +151,10 @@ def create_app():
             "store_tagline": app.config["STORE_TAGLINE"],
             "cart_count": cart_count,
             "settings": _store_settings(),
+            # ⚠️ رقم الإصدار متاح فكل صفحة. يبان فأسفل لوحة التحكم باش
+            # نتأكدو بضربة عين أن الكود الجديد وصل فعلاً لـRailway —
+            # قبل، كان لازم نقلّبو فالسجلات وهذا يضيّع وقتًا.
+            "app_version": APP_VERSION,
         }
 
     # ---------- رؤوس الحماية ----------
