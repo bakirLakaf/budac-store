@@ -415,14 +415,64 @@ class Product(db.Model):
             return [self.image_filename]
         return []
 
+    # ══════════════════════════════════════════════════════════
+    # ترتيب الموديلات = ترتيب صورهم
+    #
+    # القاعدة: **الصور هي المرجع.** الموديل اللي صورتو أولى فالمعرض
+    # يبان أول فقائمة «اختر الموديل»، والموديل المربوط بالصورة
+    # الرئيسية (★) هو الافتراضي.
+    #
+    # علاش؟ باش الأدمن يرتّب حاجة وحدة برك (الصور) والباقي يتبع
+    # لوحدو، بدل ما يرتّب الصور والموديلات كل واحد بوحدو ويتناقضو.
+    #
+    # الموديلات بلا صورة يمشيو **فالآخر**، بترتيبهم الأصلي.
+    # الصور بلا موديل تبقى كيما هي فالمعرض — ما تأثّر على والو.
+    # ══════════════════════════════════════════════════════════
+
+    @property
+    def _image_rank(self):
+        """خريطة: اسم ملف الصورة → ترتيبها فالمعرض."""
+        return {img.image_filename: i for i, img in enumerate(self.images)}
+
+    @property
+    def ordered_variants(self):
+        """الموديلات مرتّبين حسب صورهم. استعملها بدل `variants` فالعرض."""
+        if not self.variants:
+            return []
+
+        rank = self._image_rank
+        far = len(rank) + 1000   # الموديلات بلا صورة تمشي للآخر
+
+        def key(v):
+            if v.image_filename and v.image_filename in rank:
+                return (rank[v.image_filename], v.id)
+            return (far, v.id)
+
+        return sorted(self.variants, key=key)
+
     @property
     def default_variant(self):
+        """
+        الموديل المختار من البداية.
+
+        الأولوية:
+          1) الموديل المربوط بالصورة الرئيسية (★)
+          2) الموديل المعلّم `is_default` فلوحة التحكم
+          3) أول موديل فالترتيب الجديد
+        """
         if not self.variants:
             return None
+
+        if self.image_filename:
+            for v in self.variants:
+                if v.image_filename == self.image_filename:
+                    return v
+
         for v in self.variants:
             if v.is_default:
                 return v
-        return self.variants[0]
+
+        return self.ordered_variants[0]
 
 
 # ==================== العروض الخاصة (Bundles / Special Offers) ====================
