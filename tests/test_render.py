@@ -14,6 +14,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("SECRET_KEY", "test-key-for-testing-only")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
+# ⚠️ مهم: الاختبار يرفع صور حقيقية عبر التطبيق. بلا هاد السطر، الصور
+# تنكتب فـ`static/img/products/` — مجلد صور المتجر الحقيقي — وتبقى
+# فيه بعد ما يخلص الاختبار وتدخل معاك للمستودع.
+# نوجّهوها لمجلد مؤقت يتمسح لوحدو فالآخر.
+import tempfile, atexit, shutil
+
+_TMP_UPLOADS = tempfile.mkdtemp(prefix="budac-test-uploads-")
+os.environ["UPLOAD_ROOT"] = _TMP_UPLOADS
+atexit.register(shutil.rmtree, _TMP_UPLOADS, True)
+
 from app import create_app
 from models import (db, Product, ProductVariant, Category, ProductImage,
                     VariantPriceTier, VariantPack, AdminUser, Carrier,
@@ -454,6 +464,19 @@ def main():
         if re.search(r'<(script|div|section|style)\b', tail):
             outside.append(p)
     check("ماكانش محتوى بعد آخر endblock", not outside, str(outside))
+
+    # ───────── 9) الاختبار ما لوّثش مجلد الصور ─────────
+    section("9. نظافة: الاختبار ما يكتبش فصور المتجر")
+    real_dir = os.path.join(os.path.dirname(__file__), "..",
+                            "static", "img", "products")
+    if os.path.isdir(real_dir):
+        names = os.listdir(real_dir)
+        # صور الاختبار اسم منتجها هو الـslug المستعمل فوق
+        leaked = [n for n in names if n.startswith(slug + "-")]
+        check("ماكانش صور اختبار فمجلد المتجر", not leaked,
+              f"{len(leaked)} ملف: {leaked[:3]}")
+        check("UPLOAD_ROOT موجّه لمجلد مؤقت",
+              app.config.get("UPLOAD_ROOT", "") == _TMP_UPLOADS)
 
     # ───────── النتيجة ─────────
     section("النتيجة")
