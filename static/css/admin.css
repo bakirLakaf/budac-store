@@ -183,6 +183,11 @@
 /* ============ لوحة تحكم BUDAC ============ */
 
 :root {
+    /* عرض الشريط الجانبي — معرّف هنا باش شريط الحفظ يزيح بنفس القيمة
+       بالضبط. كان مستعملاً بلا تعريف (var(--a-sidebar, 240px)) وعرض
+       الشريط الحقيقي 230px → إزاحة 10px غالطة. */
+    --a-sidebar: 230px;
+
     --a-primary: #2E1A47;
     --a-primary-light: #4A2F6B;
     --a-gold: #C9A227;
@@ -232,7 +237,7 @@ body {
 .admin-body { display: flex; min-height: 100vh; }
 
 .admin-sidebar {
-    width: 230px;
+    width: var(--a-sidebar);
     flex-shrink: 0;
     background: var(--a-primary);
     color: #E8E3F0;
@@ -1349,7 +1354,7 @@ body {
 
 /* القائمة الجانبية ما تغطّيهاش الشريط */
 @media (min-width: 861px) {
-    .save-bar { inset-inline-start: var(--a-sidebar, 240px); }
+    .save-bar { inset-inline-start: var(--a-sidebar); }
 }
 
 .bulk-row-price { grid-template-columns: 170px minmax(0, 1fr); }

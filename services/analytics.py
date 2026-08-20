@@ -20,7 +20,7 @@ import hashlib
 import os
 from datetime import date, timedelta
 
-from flask import request, session
+from flask import request, session, current_app
 
 from models import db, SiteVisit
 
@@ -149,11 +149,15 @@ def track_response(response):
         db.session.commit()
 
     except Exception:
-        # ⚠️ عدّاد الزوار ما يستاهلش يكسر صفحة — نتجاهلو بصمت
+        # ⚠️ عدّاد الزوار ما يستاهلش يكسر صفحة للزبون — نكملو عادي.
+        # لكن **ما نبلعوش الخطأ بصمت**: نسجّلوه فسجلات Railway،
+        # وإلا عدّاد معطّل يبقى معطّل شهور بلا ما نعرفو.
+        current_app.logger.exception("📊 فشل تسجيل الزيارة")
         try:
             db.session.rollback()
         except Exception:
-            pass
+            # التراجع نفسو فشل (الاتصال مقطوع) — ماكانش شي نديروه
+            current_app.logger.warning("📊 فشل التراجع عن الجلسة كذلك")
 
     return response
 

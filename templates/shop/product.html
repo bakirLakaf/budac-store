@@ -714,6 +714,36 @@
     var stockNoteEl = document.getElementById("stockNote");
     var selectedVariantInput = document.getElementById("selectedVariantId");
 
+    /**
+     * 🔴 إصلاح: تحديث السعر الكبير فوق كان **داخل** معالج الضغط فقط.
+     * النتيجة: كي تفتح الصفحة، فوق يبان سعر **المنتج** وتحت الإجمالي
+     * الحيّ يحسب بسعر **الموديل الافتراضي** — رقمين مختلفين لنفس السلعة.
+     * دابا الدالة مستقلة وتتنادى كذلك عند تحميل الصفحة.
+     */
+    function applyVariantPrice(chip) {
+        if (!chip) return;
+
+        var priceDisplay = chip.getAttribute("data-price-display");
+        if (priceValueEl && priceDisplay) {
+            priceValueEl.textContent = priceDisplay;
+        }
+
+        var compare = chip.getAttribute("data-compare");
+        if (priceCompareEl) {
+            if (compare) {
+                priceCompareEl.textContent = compare;
+                priceCompareEl.style.display = "";
+            } else {
+                priceCompareEl.style.display = "none";
+            }
+        }
+
+        // نحدّثو التنويعة المختارة فالفورم باش تنضاف الصحيحة للسلة
+        if (selectedVariantInput) {
+            selectedVariantInput.value = chip.getAttribute("data-variant-id") || "";
+        }
+    }
+
     variantChips.forEach(function (chip) {
         chip.addEventListener("click", function () {
             if (chip.classList.contains("is-out")) return;
@@ -721,25 +751,7 @@
             variantChips.forEach(function (c) { c.classList.remove("is-active"); });
             chip.classList.add("is-active");
 
-            var priceDisplay = chip.getAttribute("data-price-display");
-            if (priceValueEl && priceDisplay) {
-                priceValueEl.textContent = priceDisplay;
-            }
-
-            var compare = chip.getAttribute("data-compare");
-            if (priceCompareEl) {
-                if (compare) {
-                    priceCompareEl.textContent = compare;
-                    priceCompareEl.style.display = "";
-                } else {
-                    priceCompareEl.style.display = "none";
-                }
-            }
-
-            // نحدّثو التنويعة المختارة فالفورم باش تنضاف الصحيحة للسلة
-            if (selectedVariantInput) {
-                selectedVariantInput.value = chip.getAttribute("data-variant-id") || "";
-            }
+            applyVariantPrice(chip);
 
             // صورة الموديل تتثبّت (ماشي معاينة مؤقتة) — الزبون لازم يشوف
             // بالضبط واش راه يطلب.
@@ -856,8 +868,10 @@
         });
     }
 
-    // الحالة الأولى: الموديل الافتراضي
-    applyTiers(document.querySelector(".variant-chip.is-active"));
+    // الحالة الأولى: الموديل الافتراضي — نطبّقو سعرو وعروضو
+    var initialChip = document.querySelector(".variant-chip.is-active");
+    applyVariantPrice(initialChip);
+    applyTiers(initialChip);
 })();
 </script>
 
@@ -1086,15 +1100,30 @@
     });
 
     // ---------- تحديث السعر ----------
+    /**
+     * 🔴 إصلاح: كان يدوّر على `livePrice` و`.price-current` — **الاثنين
+     * ماكانوش موجودين فالصفحة**. النتيجة: الشريط يبقى بسعر المنتج
+     * الأصلي حتى إذا الزبون بدّل الموديل ولا الكمية ولا اختار عرضًا.
+     * العنصر الصحيح هو `liveSum` (المجموع الحيّ).
+     */
+    var liveSumEl = document.getElementById('liveSum');
+
     function refresh() {
-        // العناصر اللي يحدّثها الكود الموجود فالصفحة
-        var live = document.getElementById('livePrice')
-                || document.querySelector('.price-current');
-        if (live) priceEl.textContent = live.textContent.trim();
+        if (!priceEl || !liveSumEl) return;
+        var text = liveSumEl.textContent.trim();
+        if (text) priceEl.textContent = text;
     }
+
+    refresh();   // الحالة الأولى: سعر الموديل الافتراضي
 
     form.addEventListener('change', function () { setTimeout(refresh, 60); });
     form.addEventListener('input', function () { setTimeout(refresh, 60); });
+
+    // تبديل الموديل يعيد حساب الإجمالي — نتبعوه كذلك
+    document.querySelectorAll('.variant-chip').forEach(function (c) {
+        c.addEventListener('click', function () { setTimeout(refresh, 80); });
+    });
+
     document.addEventListener('click', function (e) {
         if (e.target.closest('[data-packs], .pack-opt, .qty-btn')) {
             setTimeout(refresh, 80);
