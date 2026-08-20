@@ -249,10 +249,13 @@ class Product(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     category = db.relationship("Category", back_populates="products")
+    # ⚠️ لازم `id` كمفتاح ثانٍ: المنتجات القديمة كل `sort_order` فيها
+    # صفر، فبلاه الترتيب يولّي عشوائيًا حسب مزاج قاعدة البيانات —
+    # ويتبدّل من طلب لطلب. باقي الكود يستعمل `(sort_order, id)` أصلاً.
     images = db.relationship(
         "ProductImage",
         back_populates="product",
-        order_by="ProductImage.sort_order",
+        order_by="ProductImage.sort_order, ProductImage.id",
         cascade="all, delete-orphan",
     )
     variants = db.relationship(
