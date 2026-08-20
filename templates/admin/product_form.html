@@ -711,6 +711,17 @@
 
 <script>
 /**
+ * 🔴 إصلاح: `getCsrf()` كانت معرّفة داخل كتلة سكربت أخرى ملفوفة
+ * فـIIFE، فكانت **غير مرئية** هنا. النتيجة: خطأ ReferenceError يوقف
+ * حفظ سعر الموديل قبل `fetch` — الحالة تبقى «...» بلا حفظ ولا رسالة.
+ * دابا معرّفة مرة وحدة فالنطاق العام وكل الكتل تستعملها.
+ */
+window.getCsrf = window.getCsrf || function () {
+    var input = document.querySelector('input[name="csrf_token"]');
+    return input ? input.value : '';
+};
+
+/**
  * أسعار حسب الكمية — إضافة/مسح صفوف بلا حدود.
  *
  * ⚠️ ليش JS وماشي صفوف ثابتة؟
@@ -1109,12 +1120,6 @@
                 state.textContent = '🔴 ' + err.message;
                 state.className = 'vimg-state is-bad';
             });
-    }
-
-    /** يجيب رمز CSRF من أي فورم فالصفحة */
-    function getCsrf() {
-        var input = document.querySelector('input[name="csrf_token"]');
-        return input ? input.value : '';
     }
 
     // ---------- الأحداث ----------
