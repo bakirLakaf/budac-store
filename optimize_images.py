@@ -18,7 +18,6 @@
 import argparse
 import os
 import shutil
-import sys
 
 from app import create_app
 from models import db, Product, ProductImage, ProductVariant, Category, Offer

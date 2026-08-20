@@ -24,7 +24,6 @@
 """
 
 import http.server
-import json
 import os
 import secrets
 import threading

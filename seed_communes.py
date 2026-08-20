@@ -62,7 +62,7 @@ def run():
     total = Commune.query.count()
     wilayas = db.session.query(Commune.wilaya_code).distinct().count()
 
-    print(f"\n✅ خلص!")
+    print("\n✅ خلص!")
     print(f"   بلديات جديدة : {added}")
     print(f"   محدّثة       : {updated}")
     print(f"   المجموع      : {total} بلدية فـ{wilayas} ولاية")
