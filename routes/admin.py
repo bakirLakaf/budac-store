@@ -2523,3 +2523,79 @@ def variant_price(variant_id):
     variant.price = price
     db.session.commit()
     return reply(True, f"«{variant.label}» ولّى بـ{price:,} دج")
+
+
+@admin_bp.route("/products/export")
+@login_required
+def products_export():
+    """يحمّل كل المنتجات كملف Excel."""
+    from services.excel_io import export_workbook
+    from flask import send_file
+    from datetime import datetime
+
+    stream = export_workbook()
+    name = f"budac-products-{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+
+    return send_file(
+        stream,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=name,
+    )
+
+
+@admin_bp.route("/products/import", methods=["POST"])
+@login_required
+def products_import():
+    """
+    يستورد المنتجات من ملف Excel.
+
+    ⚠️ ما نمسحوش حتى منتج: الملف يحدّث الموجود ويزيد الجديد فقط.
+    الحذف يبقى يدويًا من اللوحة — عملية خطيرة ما تستاهلش تصرا
+    بالغلط من ملف.
+    """
+    from services.excel_io import import_workbook
+
+    uploaded = request.files.get("excel_file")
+
+    if not uploaded or not uploaded.filename:
+        flash("اختر ملف Excel أولاً", "error")
+        return redirect(url_for("admin.products_list"))
+
+    if not uploaded.filename.lower().endswith((".xlsx", ".xlsm")):
+        flash("الملف لازم يكون .xlsx", "error")
+        return redirect(url_for("admin.products_list"))
+
+    try:
+        report = import_workbook(uploaded)
+    except ValueError as e:
+        flash(str(e), "error")
+        return redirect(url_for("admin.products_list"))
+    except Exception as e:
+        db.session.rollback()
+        flash(f"فشل الاستيراد: {e}", "error")
+        return redirect(url_for("admin.products_list"))
+
+    parts = []
+    if report["products_new"]:
+        parts.append(f"{report['products_new']} منتج جديد")
+    if report["products_updated"]:
+        parts.append(f"{report['products_updated']} محدّث")
+    if report["variants_new"]:
+        parts.append(f"{report['variants_new']} موديل جديد")
+    if report["variants_updated"]:
+        parts.append(f"{report['variants_updated']} موديل محدّث")
+    if report["tiers"]:
+        parts.append(f"{report['tiers']} سعر كمية")
+    if report["packs"]:
+        parts.append(f"{report['packs']} عرض جاهز")
+
+    flash("✅ " + (" · ".join(parts) if parts else "ماكانش تبديل"), "success")
+
+    for warning in report["warnings"][:12]:
+        flash(f"⚠️ {warning}", "warning")
+
+    if len(report["warnings"]) > 12:
+        flash(f"⚠️ و{len(report['warnings']) - 12} تحذير آخر", "warning")
+
+    return redirect(url_for("admin.products_list"))

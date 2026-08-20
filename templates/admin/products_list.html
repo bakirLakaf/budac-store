@@ -6,6 +6,44 @@
     <a href="{{ url_for('admin.product_form') }}" class="btn-admin">+ منتج جديد</a>
 </div>
 
+{# ═══════ Excel: تصدير واستيراد ═══════ #}
+<details class="xl-panel">
+    <summary>
+        <span class="xl-icon">📊</span>
+        تصدير واستيراد المنتجات عبر Excel
+    </summary>
+
+    <div class="xl-body">
+        <div class="xl-step">
+            <h3>1. صدّر الملف</h3>
+            <p class="hint hint-sm">
+                ملف فيه 4 صفحات: المنتجات · الموديلات · أسعار الكمية · العروض الجاهزة.
+                مربوطين بعمود <strong>«الرابط (slug)»</strong>.
+            </p>
+            <a href="{{ url_for('admin.products_export') }}" class="btn-admin btn-sm">
+                ⬇️ حمّل ملف Excel
+            </a>
+        </div>
+
+        <div class="xl-step">
+            <h3>2. عدّل وارفعو</h3>
+            <p class="hint hint-sm">
+                ⚠️ <strong>slug موجود</strong> = تحديث · <strong>slug جديد</strong> = منتج جديد.
+                <br>الخانة الفارغة <strong>ما تمسحش</strong> القيمة القديمة.
+                <br>الصور ما تتلمسش من الملف.
+            </p>
+
+            <form method="post" action="{{ url_for('admin.products_import') }}"
+                  enctype="multipart/form-data" class="xl-form"
+                  onsubmit="return confirm('تستورد المنتجات من هاد الملف؟')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="file" name="excel_file" accept=".xlsx,.xlsm" required>
+                <button type="submit" class="btn-admin btn-sm">⬆️ استورد</button>
+            </form>
+        </div>
+    </div>
+</details>
+
 <form method="get" class="filter-bar">
     <input type="search" name="q" value="{{ search }}" placeholder="بحث بالاسم...">
     <select name="category">
