@@ -328,34 +328,6 @@ def _rate_price(item, *keys):
         return value if value > 0 else None
     return None
 
-
-def get_covered_wilayas():
-    """
-    الولايات اللي ZR يوصل ليها فعلاً، من جدول الأسعار.
-
-    يرجّع dict: رمز الولاية → {"home": bool, "office": bool}
-
-    ⚠️ سعر 0 معناه الخدمة غير متوفرة (مثلاً In Guezzam: مكتب 0 دج =
-    ماكانش توصيل لمكتب تماك)، ماشي «توصيل مجاني».
-    """
-    coverage = {}
-
-    for item in get_delivery_rates():
-        code = _rate_wilaya_code(item)
-        if not code:
-            continue
-
-        home = _rate_price(item, "homePrice", "home", "domicile", "deliveryPrice")
-        office = _rate_price(item, "officePrice", "office", "stopDesk",
-                             "stopdeskPrice", "desk")
-
-        entry = coverage.setdefault(code, {"home": False, "office": False})
-        entry["home"] = entry["home"] or home is not None
-        entry["office"] = entry["office"] or office is not None
-
-    return coverage
-
-
 def _check_parcel_data(order):
     """
     يفحص بيانات الطلبية قبل ما نبعثوها لـZR.
@@ -546,13 +518,6 @@ def get_parcel_status(tracking_number):
         "raw": data,
     }
 
-
-def get_parcel_history(parcel_id):
-    """تاريخ حالات الطرد — مفيد لعرض خط زمني مفصّل."""
-    data = _request("GET", f"/parcels/{parcel_id}/state-history")
-    return data.get("data") or data if isinstance(data, list) else []
-
-
 def test_connection():
     """
     يجرّب الاتصال ويرجع (نجح؟، رسالة).
@@ -627,17 +592,6 @@ def _extract_territory_fields(item):
             or item.get("stateCode") or item.get("number"))
 
     return tid, name, code
-
-
-def find_territory_id(carrier_code, commune_external_id):
-    """
-    معرّف المنطقة اللي يتبعث لـZR = معرّف البلدية.
-
-    ⚠️ الطلبية تخزّن المعرّف وقت الطلب، فحتى لو تبدّلت بيانات ZR بعدين،
-    الإرسال يبقى يخدم بنفس المعرّف اللي اختارو الزبون.
-    """
-    return commune_external_id or None
-
 
 # نخزّنو فهرس المناطق فالذاكرة — 4000 منطقة، ما نجيبوهمش فكل طلبية
 _territory_index = None

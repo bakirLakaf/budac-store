@@ -13,7 +13,7 @@ from functools import wraps
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
-    session, flash, abort, jsonify,
+    session, flash, abort, jsonify, current_app,
 )
 from sqlalchemy import func
 
@@ -439,7 +439,11 @@ def _apply_image_decisions(product):
             try:
                 delete_image(image.image_filename)
             except Exception:
-                pass   # الملف ماكانش — ما يمنعش حذف السطر
+                # الملف ماكانش فالقرص — ما يمنعش حذف السطر، لكن
+                # ⚠️ ما نبلعوهش بصمت: إذا تكرر، معناها ثمة خلل فالتخزين.
+                current_app.logger.warning(
+                    "🖼️ ما قدرناش نمسحو الملف: %s", image.image_filename
+                )
 
         db.session.delete(image)
 
@@ -468,6 +472,57 @@ def _apply_image_decisions(product):
         )[0].image_filename
     elif not remaining:
         product.image_filename = None
+
+
+@admin_bp.route("/products/<int:product_id>/images/upload", methods=["POST"])
+@login_required
+def product_image_upload(product_id):
+    """
+    يرفع **صورة وحدة** ويرجّع JSON.
+
+    🔴 علاش مسار مستقل؟
+    قبل، كل الصور كانت تتبعث مع فورم المنتج كامل فطلب واحد. الحد
+    `MAX_CONTENT_LENGTH` هو 6 ميغا للطلب **كامل**، والحد لكل صورة 5
+    ميغا. يعني 3 صور × 3 ميغا = 9 ميغا → السيرفر يقطع الاتصال فوسط
+    الرفع (`ERR_HTTP2_PROTOCOL_ERROR`) ويضيع معاه كل التعديلات.
+
+    دابا كل صورة طلب مستقل صغير. المتصفح يرفعهم واحدة بوحدة ويوري
+    شريط تقدّم، وزر الحفظ يبقى مقفولاً حتى يكملو.
+    """
+    product = Product.query.get_or_404(product_id)
+
+    file = request.files.get("image")
+    if not file or not file.filename:
+        return jsonify({"ok": False, "message": "ما وصلاتش حتى صورة"}), 400
+
+    try:
+        filename = save_image(file, "products", base_name=product.slug)
+    except UploadError as e:
+        return jsonify({"ok": False, "message": str(e)}), 400
+
+    # تمشي فالآخر — الأدمن يرتّبها بعد إذا بغى
+    last = max((i.sort_order for i in product.images), default=-1)
+    image = ProductImage(
+        product_id=product.id,
+        image_filename=filename,
+        sort_order=last + 1,
+    )
+    db.session.add(image)
+
+    # أول صورة فالمنتج تولّي الرئيسية تلقائيًا
+    if not product.image_filename:
+        product.image_filename = filename
+
+    db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "id": image.id,
+        "filename": filename,
+        "url": url_for("static", filename=f"img/products/{filename}"),
+        "is_main": product.image_filename == filename,
+        "message": "تمت إضافة الصورة",
+    })
 
 
 @admin_bp.route("/products/<int:product_id>/delete", methods=["POST"])
@@ -1906,7 +1961,7 @@ def youcan_callback():
         return redirect(url_for("admin.youcan_settings"))
 
     try:
-        result = yc.exchange_code(code, _youcan_redirect_uri())
+        yc.exchange_code(code, _youcan_redirect_uri())
     except yc.YouCanError as e:
         flash(str(e), "error")
         return redirect(url_for("admin.youcan_settings"))
@@ -2345,8 +2400,6 @@ def product_tiers_bulk(product_id):
 @login_required
 def product_tiers_bulk_delete(product_id):
     """يمسح مجالًا يبدا من «من» المحدّد، من كل الموديلات."""
-    from models import VariantPriceTier
-
     product = Product.query.get_or_404(product_id)
 
     try:

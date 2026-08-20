@@ -139,7 +139,6 @@ def api_communes():
 
     carrier_code = (request.args.get("carrier") or "").strip()
     wilaya_code = (request.args.get("wilaya") or "").strip()
-    delivery_type = request.args.get("type", "home")
 
     if not wilaya_code:
         return jsonify({"communes": [], "message": "اختر الولاية أولاً"})

@@ -344,6 +344,95 @@ def main():
     check("حقل الاسم موجود فاللوحة", "vlabel-input" in admin_html2)
     check("زر حفظ الاسم موجود", "vlabel-save" in admin_html2)
 
+    # ───────── 7.10) رفع صور حقيقية ─────────
+    section("7.10 رفع الصور (ملفات حقيقية)")
+    import io
+    from PIL import Image as _Img
+
+    def fake_image(px=900, name="t.jpg"):
+        """يولّد JPEG حقيقي فالذاكرة."""
+        buf = io.BytesIO()
+        _Img.new("RGB", (px, px), (200, 120, 60)).save(buf, "JPEG", quality=92)
+        buf.seek(0)
+        return (buf, name)
+
+    with app.app_context():
+        before_n = len(_P.query.filter_by(slug=slug).first().images)
+
+    up = f"/admin/products/{pid}/images/upload"
+
+    r = client.post(up, data={"image": fake_image(800, "one.jpg")},
+                    content_type="multipart/form-data",
+                    headers={"X-Requested-With": "fetch"})
+    check(f"رفع صورة وحدة ({r.status_code})", r.status_code == 200, r.get_data(as_text=True)[:120])
+    if r.status_code == 200:
+        j = r.get_json()
+        check("الرد فيه رابط الصورة", bool(j.get("url")))
+        check("الرد فيه id", isinstance(j.get("id"), int))
+
+    # ⚠️ الحالة اللي كانت تكسر: عدة صور — دابا كل وحدة طلب مستقل
+    ok_n = 0
+    for i in range(4):
+        rr = client.post(up, data={"image": fake_image(1400, f"m{i}.jpg")},
+                         content_type="multipart/form-data",
+                         headers={"X-Requested-With": "fetch"})
+        if rr.status_code == 200:
+            ok_n += 1
+    check("4 صور كبار وحدة بوحدة", ok_n == 4, f"نجحو {ok_n}")
+
+    with app.app_context():
+        prod3 = _P.query.filter_by(slug=slug).first()
+        check("كل الصور اتزادو فقاعدة البيانات",
+              len(prod3.images) == before_n + 5,
+              f"{len(prod3.images)} بدل {before_n + 5}")
+        orders = [i.sort_order for i in prod3.images]
+        check("sort_order ما فيهش تكرار", len(set(orders)) == len(orders), str(orders))
+        check("الصورة الرئيسية ما تبدّلتش", prod3.image_filename == "b.webp")
+
+    # ملف ماشي صورة → لازم يترفض برسالة، ماشي 500
+    r = client.post(up, data={"image": (io.BytesIO(b"not an image"), "x.txt")},
+                    content_type="multipart/form-data",
+                    headers={"X-Requested-With": "fetch"})
+    check("الملف الغالط مرفوض بـ400", r.status_code == 400, str(r.status_code))
+    check("الرفض فيه رسالة عربية",
+          bool(r.get_json() and r.get_json().get("message")))
+
+    # بلا ملف
+    r = client.post(up, data={}, content_type="multipart/form-data",
+                    headers={"X-Requested-With": "fetch"})
+    check("بلا ملف → 400", r.status_code == 400)
+
+    # ⚠️ هذا هو الاختبار اللي كان ناقص وخلّى العطل يوصل للإنتاج:
+    # نتأكدو أن طلب أكبر من الحد يترفض بـ413 ماشي بانقطاع، وأن كل
+    # صورة وحدها تبقى تحت الحد.
+    section("7.10.b حد حجم الطلب")
+    limit = app.config["MAX_CONTENT_LENGTH"]
+    check("MAX_CONTENT_LENGTH معرّف", bool(limit))
+
+    big = io.BytesIO(os.urandom(limit + 200_000))   # أكبر من الحد
+    r = client.post(f"/admin/products/{pid}/edit",
+                    data={"name": "x", "images": (big, "big.jpg")},
+                    content_type="multipart/form-data")
+    check("الطلب اللي يفوت الحد يرجّع 413 ماشي انقطاع",
+          r.status_code == 413, str(r.status_code))
+
+    # 5 صور × 1.5 ميغا = 7.5 ميغا > الحد → لو بعثناهم مع بعض يفشلو،
+    # لكن وحدة بوحدة كل طلب ≈ 1.5 ميغا فقط
+    one = 1_500_000
+    check("صورة وحدة تبقى تحت الحد", one < limit)
+    check("5 صور مع بعض يفوتو الحد (علاش قسّمنا الرفع)",
+          one * 5 > limit)
+
+    section("7.11 واجهة الرفع")
+    up_html = client.get(f"/admin/products/{pid}/edit").get_data(as_text=True)
+    check("شريط التقدّم موجود", 'id="uploadProgress"' in up_html)
+    check("منتقي الملفات موجود", 'id="imagePicker"' in up_html)
+    check("الفورم عندو id", 'id="productForm"' in up_html)
+    check("يستعمل XMLHttpRequest (تقدّم حقيقي)",
+          "new XMLHttpRequest()" in up_html)
+    check("يقفل الحفظ أثناء الرفع", "b.disabled = on" in up_html)
+    check("ينبّه قبل مغادرة الصفحة", "beforeunload" in up_html)
+
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")
     import glob

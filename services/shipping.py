@@ -57,24 +57,6 @@ def get_active_carriers():
     """كل شركات التوصيل المفعّلة، مرتبة بالاسم."""
     return Carrier.query.filter_by(is_active=True).order_by(Carrier.name).all()
 
-
-def get_wilayas_for_carrier(carrier_code):
-    """
-    الولايات اللي هاد الشركة تخدمها فعليًا (عندها على الأقل نوع توصيل واحد متوفر).
-    مفيدة باش ما نعرضوش للزبون ولاية غادي يختارها ويلقى "غير متوفر" بعد.
-    """
-    carrier = Carrier.query.filter_by(code=carrier_code, is_active=True).first()
-    if not carrier:
-        return []
-
-    rates = (
-        ShippingRate.query.filter_by(carrier_id=carrier.id)
-        .order_by(ShippingRate.wilaya_code)
-        .all()
-    )
-    return [r for r in rates if r.home_price is not None or r.office_price is not None]
-
-
 def calculate_shipping(carrier_code, wilaya_code, delivery_type="home", is_free=False):
     """
     الدالة الرئيسية: تحسب سعر التوصيل.
@@ -123,20 +105,3 @@ def calculate_shipping(carrier_code, wilaya_code, delivery_type="home", is_free=
         price=round_up_to_100(raw_price),
         carrier_name=carrier.name,
     )
-
-
-def find_cheapest_option(wilaya_code, delivery_type="home"):
-    """
-    يلقى أرخص شركة توصيل لولاية معينة — مفيدة باش نقترحو على الزبون
-    "أرخص خيار: X بـY دج" بدل ما يقلّب هو.
-    يرجع (Carrier, price) أو (None, None) إذا ماكان حتى خيار متوفر.
-    """
-    best_carrier, best_price = None, None
-
-    for carrier in get_active_carriers():
-        quote = calculate_shipping(carrier.code, wilaya_code, delivery_type)
-        if quote.status == STATUS_OK:
-            if best_price is None or quote.price < best_price:
-                best_carrier, best_price = carrier, quote.price
-
-    return best_carrier, best_price

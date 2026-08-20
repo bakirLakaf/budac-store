@@ -6,11 +6,10 @@
 """
 
 from flask import (
-    Blueprint, render_template, abort, request, redirect,
-    url_for, flash, jsonify,
+    Blueprint, render_template, abort, request, redirect, url_for,
 )
 
-from models import db, LandingPage, Product, Carrier
+from models import db, LandingPage, Carrier
 from services.orders import create_order, OrderError
 from services.shipping import calculate_shipping, get_active_carriers
 from routes.cart import _get_all_wilayas

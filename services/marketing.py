@@ -11,7 +11,7 @@
 
 import json
 
-from models import db, AbandonedCart, UpsellRule, Product
+from models import db, AbandonedCart, UpsellRule
 
 
 def save_abandoned_cart(customer_data, lines, total):

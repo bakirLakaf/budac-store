@@ -6,7 +6,7 @@
     <a href="{{ url_for('admin.products_list') }}" class="btn-admin btn-ghost">← رجوع للقائمة</a>
 </div>
 
-<form method="post" enctype="multipart/form-data" class="admin-form">
+<form method="post" enctype="multipart/form-data" class="admin-form" id="productForm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-grid">
         <div class="form-col">
@@ -214,11 +214,32 @@
             </p>
             {% endif %}
 
-            <label class="field">
-                <span>زيد صور (تقدر تختار أكثر من وحدة)</span>
-                <input type="file" name="images" accept="image/*" multiple>
-                <small class="hint">JPG / PNG / WebP — الحد الأقصى 5 ميغا للصورة</small>
-            </label>
+            {% if product %}
+            {# ═══════ رفع صورة بصورة ═══════
+               🔴 قبل، الصور كانت تتبعث مع الفورم كامل فطلب واحد — و3 صور
+               متوسطات كانو يتعدّاو حد الطلب (6 ميغا) فيقطع الاتصال
+               وتضيع كل التعديلات. دابا كل صورة طلب مستقل، بشريط تقدّم،
+               وزر الحفظ مقفول حتى تكمل. #}
+            <div class="field uploader"
+                 data-url="{{ url_for('admin.product_image_upload', product_id=product.id) }}">
+                <span class="uploader-label">زيد صور (تقدر تختار أكثر من وحدة)</span>
+                <input type="file" id="imagePicker" accept="image/*" multiple>
+                <small class="hint">
+                    JPG / PNG / WebP — الحد الأقصى 5 ميغا للصورة.
+                    كل صورة تترفع وحدها وتتزاد فورًا للمعرض.
+                </small>
+
+                <div class="upload-progress" id="uploadProgress" hidden>
+                    <div class="upload-bar"><span id="uploadBarFill"></span></div>
+                    <p class="upload-status" id="uploadStatus" role="status"></p>
+                    <ul class="upload-list" id="uploadList"></ul>
+                </div>
+            </div>
+            {% else %}
+            <p class="hint">
+                💡 احفظ المنتج أول، ومن بعد تقدر تزيد الصور وحدة بوحدة.
+            </p>
+            {% endif %}
         </div>
     </div>
 </form>
@@ -902,6 +923,159 @@ window.getCsrf = window.getCsrf || function () {
 
         sync(false);
     }
+
+    // ---------- رفع الصور وحدة بوحدة ----------
+    /**
+     * 🔴 الخلل القديم: كل الصور كانت تتبعث مع الفورم كامل فطلب واحد.
+     * `MAX_CONTENT_LENGTH` = 6 ميغا للطلب كامل، والحد لكل صورة 5 ميغا،
+     * فـ3 صور متوسطات يقطعو الاتصال (ERR_HTTP2_PROTOCOL_ERROR) وتضيع
+     * كل التعديلات اللي درتها فالصفحة.
+     *
+     * الحل: كل صورة طلب مستقل بـXMLHttpRequest (باش نقراو تقدّم الرفع
+     * الحقيقي — `fetch` ما يعطيش تقدّم الرفع). زر الحفظ يتقفل حتى يكملو.
+     */
+    (function () {
+        var box = document.querySelector('.uploader');
+        if (!box) return;
+
+        var picker = document.getElementById('imagePicker');
+        var wrap = document.getElementById('uploadProgress');
+        var fill = document.getElementById('uploadBarFill');
+        var status = document.getElementById('uploadStatus');
+        var list = document.getElementById('uploadList');
+        var form = document.getElementById('productForm');
+
+        var busy = false;
+
+        /** يقفل/يفتح كل أزرار الحفظ فالصفحة */
+        function lock(on) {
+            busy = on;
+            document.querySelectorAll(
+                '#productForm button[type="submit"], .save-bar button'
+            ).forEach(function (b) {
+                b.disabled = on;
+                b.textContent = on ? '⏳ جاري رفع الصور...' : (b.dataset.was || b.textContent);
+                if (!on && b.dataset.was) b.textContent = b.dataset.was;
+            });
+        }
+
+        // نحفظو النص الأصلي للأزرار قبل ما نبدّلوه
+        document.querySelectorAll(
+            '#productForm button[type="submit"], .save-bar button'
+        ).forEach(function (b) { b.dataset.was = b.textContent; });
+
+        /** ⚠️ يمنع مغادرة الصفحة فوسط الرفع */
+        window.addEventListener('beforeunload', function (e) {
+            if (!busy) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
+
+        if (form) {
+            form.addEventListener('submit', function (e) {
+                if (busy) {
+                    e.preventDefault();
+                    alert('استنى، الصور مازالها ترفع.');
+                }
+            });
+        }
+
+        /** يرفع ملفًا واحدًا ويرجّع Promise */
+        function uploadOne(file, onProgress) {
+            return new Promise(function (resolve, reject) {
+                var body = new FormData();
+                body.append('image', file);
+                body.append('csrf_token', getCsrf());
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', box.dataset.url);
+                xhr.setRequestHeader('X-Requested-With', 'fetch');
+
+                xhr.upload.addEventListener('progress', function (e) {
+                    if (e.lengthComputable) onProgress(e.loaded / e.total);
+                });
+
+                xhr.addEventListener('load', function () {
+                    var data;
+                    try {
+                        data = JSON.parse(xhr.responseText);
+                    } catch (err) {
+                        reject(new Error('رد غير مفهوم من السيرفر (' + xhr.status + ')'));
+                        return;
+                    }
+                    if (xhr.status >= 200 && xhr.status < 300 && data.ok) resolve(data);
+                    else reject(new Error(data.message || 'فشل الرفع'));
+                });
+
+                xhr.addEventListener('error', function () {
+                    reject(new Error('انقطع الاتصال — الصورة كبيرة بزاف؟'));
+                });
+
+                xhr.addEventListener('abort', function () {
+                    reject(new Error('اتلغى الرفع'));
+                });
+
+                xhr.send(body);
+            });
+        }
+
+        function addRow(name, text, cls) {
+            var li = document.createElement('li');
+            li.className = 'upload-row ' + (cls || '');
+            li.textContent = text + ' — ' + name;
+            list.appendChild(li);
+            return li;
+        }
+
+        picker.addEventListener('change', function () {
+            var files = Array.prototype.slice.call(picker.files || []);
+            if (!files.length) return;
+
+            wrap.hidden = false;
+            list.innerHTML = '';
+            lock(true);
+
+            var done = 0;
+            var failed = 0;
+
+            function step(i) {
+                if (i >= files.length) {
+                    lock(false);
+                    fill.style.width = '100%';
+                    status.textContent = failed
+                        ? '⚠️ ' + done + ' نجحو · ' + failed + ' فشلو — عاود المرة الجاية'
+                        : '✅ ' + done + ' صور اتزادو. حدّث الصفحة باش تبان فالمعرض.';
+                    picker.value = '';
+
+                    // نحدّثو الصفحة تلقائيًا باش المعرض يبان بالصور الجديدة
+                    if (done && !failed) {
+                        setTimeout(function () { location.reload(); }, 1200);
+                    }
+                    return;
+                }
+
+                var file = files[i];
+                status.textContent = 'يرفع ' + (i + 1) + ' من ' + files.length +
+                                     ' — ' + file.name;
+
+                uploadOne(file, function (ratio) {
+                    var total = (i + ratio) / files.length;
+                    fill.style.width = Math.round(total * 100) + '%';
+                })
+                    .then(function () {
+                        done += 1;
+                        addRow(file.name, '✅', 'is-ok');
+                    })
+                    .catch(function (err) {
+                        failed += 1;
+                        addRow(file.name, '🔴 ' + err.message, 'is-bad');
+                    })
+                    .then(function () { step(i + 1); });
+            }
+
+            step(0);
+        });
+    })();
 
     // ---------- تعديل اسم الموديل فمكانو ----------
     function saveVariantLabel(box) {
