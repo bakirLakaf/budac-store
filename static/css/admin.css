@@ -45,13 +45,6 @@
 
 .variant-info { min-width: 0; }
 
-.variant-name {
-    display: block;
-    font-size: 15px; font-weight: 700;
-    color: #2E1A47;
-    line-height: 1.4;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 .variant-meta {
     display: block; margin-top: 2px;
     font-size: 12.5px; color: #6B6478;
@@ -309,7 +302,6 @@ body {
 .alert-card strong { display: block; margin-bottom: 8px; }
 .alert-card ul { margin: 8px 0; padding-right: 18px; font-size: 13px; }
 .alert-card a { color: var(--a-primary); }
-.alert-danger { border-right-color: var(--a-danger); }
 .alert-warning { border-right-color: var(--a-warning); }
 
 .quick-actions { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -416,13 +408,6 @@ body {
 .flash-success { background: #DFF3E7; color: var(--a-ok); border-right: 4px solid var(--a-ok); }
 .flash-error { background: #FBE3E0; color: var(--a-danger); border-right: 4px solid var(--a-danger); }
 .flash-warning { background: #FFF3D6; color: var(--a-warning); border-right: 4px solid var(--a-warning); }
-
-/* ---------- صور ---------- */
-/* ⚠️ التنسيقات الكاملة لإدارة الصور موجودة تحت (قسم «إدارة صور المنتج»).
-   البلوك القديم اللي كان هنا اتمسح لأنه كان يتعارض معاه. */
-
-.image-delete-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-.image-delete-row form { margin: 0; }
 .banner-preview { width: 100%; border-radius: 10px; margin-top: 10px; border: 1px solid var(--a-border); }
 
 /* ---------- منتجات العرض ---------- */
@@ -668,52 +653,6 @@ body {
 .ic-linked.is-warn { background: #FDF2D8; color: #8A6100; }
 
 .test-result.is-warn { background: #FDF2D8; color: #6B4E00; }
-
-.sync-unmatched {
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
-    font-size: 13px;
-}
-.sync-unmatched ul { margin: 6px 0; padding-inline-start: 20px; }
-.sync-unmatched li { line-height: 1.8; }
-.sync-unmatched small { color: #6B6257; display: block; margin-top: 6px; }
-
-/* ---------- صور الموديلات ---------- */
-.variants-table .variant-img-cell { width: 64px; }
-
-.variant-thumb {
-    width: 48px;
-    height: 48px;
-    border-radius: 8px;
-    object-fit: cover;
-    border: 1px solid #E6E0D4;
-    display: block;
-}
-.variant-thumb-empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #F4F0E8;
-    color: #A89D8C;
-    font-size: 18px;
-}
-
-.variant-actions {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    align-items: center;
-}
-.variant-actions form { margin: 0; }
-
-/* زر رفع الملف: <input type=file> مخبّي داخل <label> */
-.btn-file {
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
 
 /* ---------- تشخيص بيانات شركة التوصيل ---------- */
 .sync-buttons { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -1090,7 +1029,6 @@ body {
     font-size: 12.5px; font-weight: 600;
     color: var(--a-text-soft);
 }
-
 
 @media (max-width: 520px) {
     .variant-head { flex-wrap: wrap; }
@@ -1660,3 +1598,46 @@ body {
 .vlabel-state.is-ok { color: var(--a-ok); }
 .vlabel-state.is-bad { color: var(--a-danger); cursor: help; }
 .vlabel-state.is-busy { color: var(--a-primary-light); }
+
+/* ---------- شريط تقدّم رفع الصور ---------- */
+.uploader-label {
+    display: block; margin-bottom: 6px;
+    font-size: 14px; font-weight: 700; color: var(--a-primary);
+}
+
+.upload-progress { margin-top: 12px; }
+
+.upload-bar {
+    height: 8px; border-radius: 99px; overflow: hidden;
+    background: var(--a-border);
+}
+.upload-bar > span {
+    display: block; height: 100%; width: 0;
+    background: var(--a-primary);
+    transition: width 0.15s linear;
+}
+
+.upload-status {
+    margin: 8px 0 0;
+    font-size: 13px; font-weight: 700; color: var(--a-primary);
+}
+
+.upload-list {
+    margin: 8px 0 0; padding: 0; list-style: none;
+    max-height: 160px; overflow-y: auto;
+}
+
+.upload-row {
+    padding: 4px 0;
+    font-size: 12px;
+    border-bottom: 1px solid var(--a-border);
+}
+.upload-row:last-child { border-bottom: none; }
+.upload-row.is-ok { color: var(--a-ok); }
+.upload-row.is-bad { color: var(--a-danger); }
+
+/* زر الحفظ وهو مقفول أثناء الرفع */
+#productForm button[type="submit"]:disabled,
+.save-bar button:disabled {
+    opacity: 0.55; cursor: not-allowed;
+}

@@ -68,14 +68,6 @@ a { color: inherit; text-decoration: none; }
     line-height: 1.1;
 }
 
-.logo-word {
-    font-family: var(--font-display);
-    font-size: 30px;
-    font-weight: 700;
-    color: var(--color-gold-soft);
-    letter-spacing: 1px;
-}
-
 .logo-tagline {
     font-size: 12px;
     color: #C9BEDD;
@@ -205,10 +197,7 @@ a { color: inherit; text-decoration: none; }
 .product-card:hover {
     transform: translateY(-4px);
     box-shadow: 0 16px 32px -14px rgba(46, 26, 71, 0.32);
-}
-
-.product-card-image,
-.product-detail-image {
+}.product-card-image {
     position: relative;
     display: flex;
     align-items: center;
@@ -216,32 +205,21 @@ a { color: inherit; text-decoration: none; }
     overflow: hidden;
 }
 
-.product-card-image { aspect-ratio: 1 / 1; }
-
-.product-card-image::before,
-.product-card-image::after,
-.product-detail-image::before,
-.product-detail-image::after {
+.product-card-image { aspect-ratio: 1 / 1; }.product-card-image::before,
+.product-card-image::after {
     content: "";
     position: absolute;
     inline-size: 26px;
     block-size: 26px;
     border: 1.5px solid rgba(255, 255, 255, 0.55);
     pointer-events: none;
-}
-
-.product-card-image::before, .product-detail-image::before {
+}.product-card-image::before {
     top: 12px; inset-inline-start: 12px;
     border-inline-end: none; border-bottom: none;
-}
-
-.product-card-image::after, .product-detail-image::after {
+}.product-card-image::after {
     bottom: 12px; inset-inline-end: 12px;
     border-inline-start: none; border-top: none;
-}
-
-.product-card-image img,
-.product-detail-image img {
+}.product-card-image img {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -281,12 +259,6 @@ a { color: inherit; text-decoration: none; }
     color: var(--color-ink);
 }
 
-.product-card-variant {
-    font-size: 12px;
-    color: var(--color-ink-soft);
-    margin: 0 0 8px;
-}
-
 .product-card-price {
     font-size: 16px;
     font-weight: 700;
@@ -308,12 +280,6 @@ a { color: inherit; text-decoration: none; }
     grid-template-columns: 1fr 1fr;
     gap: 48px;
     align-items: start;
-}
-
-.product-detail-image {
-    aspect-ratio: 1 / 1;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
 }
 
 .product-detail-category {
@@ -390,8 +356,6 @@ a { color: inherit; text-decoration: none; }
     margin-top: 40px;
 }
 
-.footer-inner { text-align: center; }
-
 .footer-brand {
     font-family: var(--font-display);
     color: var(--color-gold-soft);
@@ -399,14 +363,11 @@ a { color: inherit; text-decoration: none; }
     margin: 0 0 4px;
 }
 
-.footer-meta { font-size: 13px; margin: 0; }
-
 /* ---------- موبايل ---------- */
 @media (max-width: 720px) {
     .hero-title { font-size: 32px; }
     .product-detail-inner { grid-template-columns: 1fr; gap: 28px; }
     .header-inner { padding: 16px 20px; }
-    .logo-word { font-size: 24px; }
 }
 
 /* احترام تفضيل تقليل الحركة */
@@ -418,35 +379,6 @@ a { color: inherit; text-decoration: none; }
 a:focus-visible, button:focus-visible {
     outline: 2px solid var(--color-gold);
     outline-offset: 2px;
-}
-
-/* ============ إضافات: التصنيفات، العروض، المعرض والـZoom، التنويعات ============ */
-
-/* ---------- شريط التصنيفات ---------- */
-.category-filter-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 28px;
-}
-
-.category-chip {
-    display: inline-block;
-    padding: 8px 20px;
-    border-radius: 999px;
-    border: 1.5px solid var(--color-primary);
-    color: var(--color-primary);
-    font-size: 14px;
-    font-weight: 600;
-    text-decoration: none;
-    transition: background 0.15s ease, color 0.15s ease;
-}
-
-.category-chip:hover { background: rgba(46, 26, 71, 0.08); }
-
-.category-chip.is-active {
-    background: var(--color-primary);
-    color: #fff;
 }
 
 /* ---------- شارة العروض/الخصم ---------- */
@@ -592,8 +524,6 @@ a:focus-visible, button:focus-visible {
 /* ---------- تحسينات موبايل للإضافات الجديدة ---------- */
 @media (max-width: 720px) {
     .gallery-thumb { width: 56px; height: 56px; }
-    .category-filter-row { gap: 8px; }
-    .category-chip { padding: 6px 16px; font-size: 13px; }
 }
 
 /* ============ العروض الخاصة ============ */
@@ -747,16 +677,6 @@ a:focus-visible, button:focus-visible {
 .offer-price-detail strong { color: var(--color-sage); }
 .strike { text-decoration: line-through; }
 
-.offer-deadline {
-    font-size: 14px;
-    color: #B8860B;
-    background: #FFF9E6;
-    padding: 8px 14px;
-    border-radius: 8px;
-    display: inline-block;
-    margin: 0 0 16px;
-}
-
 .offer-detail-description {
     white-space: pre-line;
     line-height: 1.9;
@@ -835,7 +755,6 @@ a:focus-visible, button:focus-visible {
     display: inline-block; background: var(--color-gold-soft); color: var(--color-primary);
     font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-bottom: 4px;
 }
-.stock-warning { color: #C0392B; font-size: 12px; margin: 6px 0 0; font-weight: 600; }
 
 .cart-qty-form { display: flex; gap: 6px; align-items: center; }
 .qty-field { width: 64px; padding: 7px; border: 1.5px solid #E0DAD2; border-radius: 8px; text-align: center; font-family: inherit; }
@@ -1308,7 +1227,6 @@ a:focus-visible, button:focus-visible {
 }
 
 /* ═══════════ تصحيحات: البحث، الشعار الفرعي، الفوتر ═══════════ */
-
 
 /* ---------- الشعار الفرعي بخط Tajawal ---------- */
 .logo-tagline {
@@ -2590,13 +2508,9 @@ body.drawer-open { overflow: hidden; }
 /* البطاقة المخفية عند الفلترة */
 .product-card.is-filtered-out { display: none; }
 
-/* أزرار التصنيف: فالهاتف فقط */
-.category-filter-mobile { display: none; }
-
 @media (max-width: 1024px) {
     .shop-layout { grid-template-columns: 1fr; gap: 0; }
     .shop-sidebar { display: none; }
-    .category-filter-mobile { display: flex; }
 }
 
 /* ---------- 4) قسم "عرض خاص" بالصورة الكبيرة ---------- */
@@ -2783,21 +2697,6 @@ img, video, iframe, table { max-width: 100%; }
     .footer-intro-title { font-size: 20px; }
     .footer-intro-sub { font-size: 13px; }
 
-    /* الأعمدة كانت متزاحمة فأربع خانات ضيقة → عمودين */
-    .footer-inner,
-    .footer-columns {
-        grid-template-columns: 1fr 1fr !important;
-        gap: 24px 16px;
-        text-align: start;
-    }
-
-    /* عمود العلامة يأخذ العرض كامل ويتوسّط */
-    .footer-brand-col {
-        grid-column: 1 / -1;
-        text-align: center;
-    }
-    .footer-brand-col img { margin-inline: auto; }
-
     .footer-heading { font-size: 14px; margin-bottom: 10px; }
     .footer-links a,
     .footer-contact li { font-size: 13px; line-height: 2; }
@@ -2808,8 +2707,6 @@ img, video, iframe, table { max-width: 100%; }
 
 @media (max-width: 420px) {
     /* شاشة ضيقة بزاف → عمود واحد */
-    .footer-inner,
-    .footer-columns { grid-template-columns: 1fr !important; text-align: center; }
     .footer-social { justify-content: center; }
 }
 
