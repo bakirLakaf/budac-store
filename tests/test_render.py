@@ -145,6 +145,31 @@ def main():
           bool(m and "data-price-display" in m.group(1)))
     check("سعر الموديل (120) موجود فالصفحة", "120" in html)
 
+    # ───────── 4.5) السعر المعروض = سعر الموديل الافتراضي ─────────
+    section("4.5 سعر المنتج مشتق من الموديل الافتراضي")
+    from models import Product as _P
+    with app.app_context():
+        prod = _P.query.filter_by(slug=slug).first()
+        check("display_price = سعر الموديل الافتراضي (120)",
+              prod.display_price == 120, f"جا {prod.display_price}")
+        check("price_display يستعمل السعر المشتق",
+              "120" in prod.price_display, prod.price_display)
+        check("العمود price مازال 180 (احتياطي)", prod.price == 180)
+        # التخفيض يتحسب من السعر المشتق: 200 vs 120 = 40%
+        check("has_discount يقارن بالسعر المشتق", prod.has_discount is True)
+        check("discount_percent = 40%", prod.discount_percent == 40,
+              f"جا {prod.discount_percent}")
+
+    check("سعر المنتج فوق ماشي 180",
+          ">180 دج<" not in html.replace(" ", ""), "180 مازال معروض")
+    check("basePrice للإجمالي الحيّ = 120", "var basePrice = 120;" in html)
+    check("JSON-LD يستعمل السعر المشتق", '"price": "120"' in html)
+
+    section("4.6 الصنف الصحيح للموديل المختار")
+    check("ما يستعملش is-selected المفقود",
+          ".is-selected" not in html)
+    check("يستعمل is-active", "[data-tiers].is-active" in html)
+
     # ───────── 5) الأمان الأساسي فالصفحة ─────────
     section("5. رموز CSRF والحقول المخفية")
     check("csrf_token فالفورم", 'name="csrf_token"' in html)

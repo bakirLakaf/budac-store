@@ -39,7 +39,7 @@
         "@type": "Offer",
         "url": "{{ request.base_url }}",
         "priceCurrency": "DZD",
-        "price": "{{ product.price }}",
+        "price": "{{ product.display_price }}",
         "availability": "https://schema.org/{{ 'InStock' if product.is_in_stock else 'OutOfStock' }}",
         "seller": { "@type": "Organization", "name": "{{ store_name }}" }
     }
@@ -1052,7 +1052,9 @@
         if (chip) setTimeout(function () { render(chip); }, 0);
     });
 
-    render(document.querySelector('[data-packs].is-selected')
+    // 🔴 الصنف الحقيقي فالقالب هو `is-active` ماشي `is-selected` —
+    // بلا هاد التصحيح، العروض تتعرض دايمًا لأول موديل فالقائمة.
+    render(document.querySelector('[data-packs].is-active')
            || document.querySelector('[data-packs]'));
 })();
 </script>
@@ -1167,7 +1169,7 @@
     var sumEl = document.getElementById('liveSum');
     var noteEl = document.getElementById('liveNote');
     var packInput = document.getElementById('selectedPackId');
-    var basePrice = {{ product.price }};
+    var basePrice = {{ product.display_price }};
 
     function money(n) {
         return Number(n).toLocaleString('en-US') + ' دج';
@@ -1175,7 +1177,9 @@
 
     /** الموديل المختار حاليًا */
     function currentChip() {
-        return document.querySelector('[data-tiers].is-selected')
+        // 🔴 نفس الخلل: `is-selected` ما كانش موجودًا، فالإجمالي الحيّ
+        // كان يحسب دايمًا بأول موديل بدل المختار.
+        return document.querySelector('[data-tiers].is-active')
             || document.querySelector('[data-tiers]');
     }
 

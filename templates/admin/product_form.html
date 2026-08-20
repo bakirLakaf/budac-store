@@ -37,6 +37,17 @@
                 <label class="field">
                     <span>السعر (دج) *</span>
                     <input type="number" name="price" min="0" required value="{{ product.price if product else '' }}">
+                    {# ⚠️ كي يكون فيه موديلات، السعر اللي يشوفو الزبون هو
+                       سعر الموديل الافتراضي. هذا الحقل يبقى احتياطيًا
+                       للموديلات اللي خليتها بلا سعر. #}
+                    {% if product and product.default_variant %}
+                    <small class="hint">
+                        الزبون يشوف سعر الموديل الافتراضي
+                        (<strong>{{ product.default_variant.label }}</strong> —
+                        {{ product.default_variant.price_display }}).
+                        هذا الحقل يخدم غير للموديلات بلا سعر خاص.
+                    </small>
+                    {% endif %}
                 </label>
                 <label class="field">
                     <span>السعر قبل التخفيض</span>
