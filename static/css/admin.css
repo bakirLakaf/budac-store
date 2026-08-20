@@ -413,55 +413,8 @@ body {
 .flash-warning { background: #FFF3D6; color: var(--a-warning); border-right: 4px solid var(--a-warning); }
 
 /* ---------- صور ---------- */
-.image-manager { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
-.image-item { position: relative; width: 92px; height: 92px; border-radius: 10px; overflow: hidden; border: 1px solid var(--a-border); }
-.image-item img { width: 100%; height: 100%; object-fit: cover; }
-.image-main-tag {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    background: rgba(46,26,71,0.85); color: #fff; font-size: 10px; text-align: center; padding: 2px;
-}
-
-/* 🔴 كانو ناقصين كليًا: الأزرار كانت فالHTML بصح بلا CSS = غير مرئية،
-   فما كنتش تقدر تحذف صورة ولا تبدّل الرئيسية. */
-.image-item { width: 104px; height: 104px; }
-.image-item.is-main { border: 2px solid var(--a-primary); }
-
-.image-item-actions {
-    position: absolute;
-    top: 4px;
-    inset-inline-end: 4px;
-    display: flex;
-    gap: 4px;
-    opacity: 0;
-    transition: opacity 0.15s;
-}
-/* فالهاتف ماكانش "مرور" — نخليوهم ظاهرين دائمًا */
-.image-item:hover .image-item-actions,
-.image-item:focus-within .image-item-actions { opacity: 1; }
-@media (hover: none) {
-    .image-item-actions { opacity: 1; }
-}
-
-.image-item-actions form { margin: 0; }
-
-.img-btn {
-    width: 26px;
-    height: 26px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 14px;
-    line-height: 1;
-    color: #fff;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-}
-.img-btn-main { background: rgba(46, 26, 71, 0.92); }
-.img-btn-main:hover { background: #C9A227; color: #2E1A47; }
-.img-btn-del { background: rgba(179, 38, 30, 0.92); font-size: 18px; }
-.img-btn-del:hover { background: #B3261E; }
+/* ⚠️ التنسيقات الكاملة لإدارة الصور موجودة تحت (قسم «إدارة صور المنتج»).
+   البلوك القديم اللي كان هنا اتمسح لأنه كان يتعارض معاه. */
 
 .image-delete-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .image-delete-row form { margin: 0; }
@@ -1513,10 +1466,13 @@ body {
 }
 
 /* ═══════════ إدارة الصور — الشبكة ═══════════ */
+/* ---------- إدارة صور المنتج ---------- */
+/* ⚠️ المربّع كان 126px = 5 أزرار محشورين فوق بعضهم. كبّرناه لـ160px
+   وخلّينا الأزرار flex-wrap فصفّين مريحين بحجاب داكن. */
 .image-manager {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 14px;
     margin-bottom: 12px;
 }
 
@@ -1527,8 +1483,8 @@ body {
     border-radius: 12px;
     overflow: hidden;
     background: var(--a-bg);
-    transition: border-color 0.14s ease, opacity 0.14s ease;
 }
+
 .image-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .image-item.is-main { border-color: var(--a-gold); }
@@ -1545,49 +1501,46 @@ body {
     position: absolute; inset-inline: 0; bottom: 0;
     padding: 3px 0; text-align: center;
     font-size: 11px; font-weight: 800;
-    display: none;
+    display: none; z-index: 2;
 }
-.image-main-tag { background: var(--a-gold); color: var(--a-primary); }
-.image-del-tag { background: var(--a-danger); color: #fff; }
-
-.image-item.is-main .image-main-tag { display: block; }
-.image-item.is-deleted .image-del-tag { display: block; }
+.image-item.is-main .image-main-tag { display: block; background: var(--a-gold); color: #2E1A47; }
+.image-item.is-deleted .image-del-tag { display: block; background: var(--a-danger); color: #fff; }
 .image-item.is-deleted .image-main-tag { display: none; }
 
-/* ⚠️ الأزرار كانت 5 فصف واحد داخل مربع صغير — تتكدّس وتختفي
-   النجمة. دابا صفّان بمساحة كافية، وخلفية داكنة تخلّيهم يبانو
-   على أي صورة. */
+/* الأزرار: 5 أزرار يتوزعو تلقائيًا 3 + 2 بلا تكديس */
 .image-item-actions {
     position: absolute; inset: 0;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    align-content: center; justify-items: center;
-    gap: 6px;
-    padding: 8px;
-    background: rgba(30, 24, 40, 0.72);
+    display: flex; flex-wrap: wrap;
+    align-content: center; justify-content: center;
+    gap: 8px;
+    padding: 10px;
+    background: rgba(30, 15, 45, 0.55);
     opacity: 0;
-    transition: opacity 0.14s ease;
+    transition: opacity 0.15s;
 }
+
 .image-item:hover .image-item-actions,
 .image-item:focus-within .image-item-actions { opacity: 1; }
 @media (hover: none) { .image-item-actions { opacity: 1; } }
 
+.image-item-actions form { margin: 0; }
+
 .img-btn {
-    width: 32px; height: 32px;
+    width: 34px; height: 34px;
     display: flex; align-items: center; justify-content: center;
-    border: none; border-radius: 9px;
-    background: rgba(255, 255, 255, 0.92);
+    border: none; border-radius: 10px;
+    background: rgba(255, 255, 255, 0.95);
     color: var(--a-primary);
-    font-size: 15px; font-weight: 800; line-height: 1;
+    font-size: 16px; font-weight: 800; line-height: 1;
     cursor: pointer;
-    transition: all 0.12s ease;
+    transition: background 0.12s, transform 0.12s;
 }
-.img-btn:hover { background: #fff; transform: scale(1.08); }
+.img-btn:hover { background: #fff; transform: scale(1.1); }
 .img-btn:focus-visible { outline: 2px solid var(--a-gold); outline-offset: 2px; }
 
 .img-btn-main:hover { background: var(--a-gold); }
 .img-btn-del:hover { background: var(--a-danger); color: #fff; }
-.img-btn-zoom { font-size: 13px; }
+.img-btn-zoom { font-size: 14px; }
 
 #imageDirtyNote {
     padding: 10px 14px;
