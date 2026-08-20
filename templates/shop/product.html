@@ -149,20 +149,9 @@
                 </div>
             </div>
 
-            {# ---------- جدول أسعار الجملة للموديل المختار ---------- #}
-            {# ═══════ العروض الجاهزة ═══════
-               وحدات بيع لها اسم وسعر ثابت (رولو، ساشي...). الزبون
-               يختار وحدة منها بدل ما يحسب بالحبة. #}
-            <div class="packs-box" id="packsBox" hidden>
-                <p class="packs-title">🎁 عروض جاهزة</p>
-                <div class="packs-list" id="packsList"></div>
-            </div>
-
-            <div class="tiers-box" id="tiersBox" hidden>
-                <p class="tiers-title">📦 كل ما تشري أكثر، ترخص الحبة</p>
-                <div class="tiers-list" id="tiersList"></div>
-                <p class="tiers-hint" id="tiersHint"></p>
-            </div>
+            {# ⚠️ العروض وأسعار الكمية اتنقلو تحت — قريب من محدّد
+               الكمية وزر الشراء. كانو بعيدين فوق الوصف والحاسبة،
+               فالزبون يختار الكمية بلا ما يشوف أن الحبة ترخص. #}
             {% elif product.color_variant %}
                 <p class="product-detail-variant">اللون: {{ product.color_variant }}</p>
             {% endif %}
@@ -271,6 +260,23 @@
                     <input type="hidden" name="pack_id" id="selectedPackId" value="">
                     <input type="hidden" name="variant_id" id="selectedVariantId"
                            value="{{ product.default_variant.id if product.default_variant else '' }}">
+
+                    {% if product.variants %}
+                    {# ═══════ العروض الجاهزة ═══════
+                       وحدات بيع لها اسم وسعر ثابت (رولو، ساشي...). الزبون
+                       يختار وحدة منها بدل ما يحسب بالحبة. #}
+                    <div class="packs-box" id="packsBox" hidden>
+                        <p class="packs-title">🎁 عروض جاهزة</p>
+                        <div class="packs-list" id="packsList"></div>
+                    </div>
+
+                    {# ═══════ أسعار حسب الكمية ═══════ #}
+                    <div class="tiers-box" id="tiersBox" hidden>
+                        <p class="tiers-title">📦 كل ما تشري أكثر، ترخص الحبة</p>
+                        <div class="tiers-list" id="tiersList"></div>
+                        <p class="tiers-hint" id="tiersHint"></p>
+                    </div>
+                    {% endif %}
 
                     <div class="qty-picker">
                         <label for="qtyInput">الكمية</label>
