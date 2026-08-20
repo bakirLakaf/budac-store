@@ -294,6 +294,56 @@ def main():
         miss_v = sorted(used_v - defined)
         check(f"{os.path.basename(f)}: ماكانش متغير مجهول", not miss_v, str(miss_v))
 
+    # ───────── 7.8) حذف موديل ما يمحيش الصورة ─────────
+    section("7.8 حذف الموديل يقطع الربط برك")
+    from models import ProductVariant as _V
+    with app.app_context():
+        before = len(_P.query.filter_by(slug=slug).first().images)
+        vid = _V.query.filter_by(label="نوار/دوري").first().id
+
+    r = client.post(f"/admin/variants/{vid}/delete")
+    check(f"الحذف نجح ({r.status_code})", r.status_code in (200, 302))
+
+    with app.app_context():
+        prod2 = _P.query.filter_by(slug=slug).first()
+        check("الموديل اتمسح",
+              db.session.get(_V, vid) is None)
+        check("عدد الصور ما تنقصش", len(prod2.images) == before,
+              f"{len(prod2.images)} بدل {before}")
+        check("صورة الموديل المحذوف باقية",
+              "c.webp" in [i.image_filename for i in prod2.images])
+        check("الصورة الرئيسية ما تمسّتش", prod2.image_filename == "b.webp")
+
+    # ───────── 7.9) تعديل اسم الموديل ─────────
+    section("7.9 تعديل اسم الموديل فمكانو")
+    with app.app_context():
+        vid2 = _V.query.filter_by(label="شفاف/دوري").first().id
+
+    r = client.post(f"/admin/variants/{vid2}/label",
+                    data={"label": "شفاف/برونز"},
+                    headers={"X-Requested-With": "fetch"})
+    check(f"التعديل نجح ({r.status_code})", r.status_code == 200)
+    with app.app_context():
+        check("الاسم اتبدّل", db.session.get(_V, vid2).label == "شفاف/برونز",
+              db.session.get(_V, vid2).label)
+
+    r = client.post(f"/admin/variants/{vid2}/label", data={"label": "   "},
+                    headers={"X-Requested-With": "fetch"})
+    check("الاسم الفارغ مرفوض", r.status_code == 400)
+
+    r = client.post(f"/admin/variants/{vid2}/label",
+                    data={"label": "دوري/دوري"},
+                    headers={"X-Requested-With": "fetch"})
+    check("الاسم المكرر مرفوض", r.status_code == 400)
+
+    with app.app_context():
+        check("بعد الرفض، الاسم ما تبدّلش",
+              db.session.get(_V, vid2).label == "شفاف/برونز")
+
+    admin_html2 = client.get(f"/admin/products/{pid}/edit").get_data(as_text=True)
+    check("حقل الاسم موجود فاللوحة", "vlabel-input" in admin_html2)
+    check("زر حفظ الاسم موجود", "vlabel-save" in admin_html2)
+
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")
     import glob

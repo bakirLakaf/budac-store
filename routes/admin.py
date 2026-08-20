@@ -709,8 +709,13 @@ def variant_delete(variant_id):
     product_id = variant.product_id
     was_default = variant.is_default
 
-    if variant.image_filename:
-        delete_image(variant.image_filename, "products")
+    # 🔴 كان هنا `delete_image(variant.image_filename)` — يمحي الملف من
+    # القرص. كان صحيحًا كي كل موديل يرفع صورتو الخاصة، لكن دابا صور
+    # الموديلات **مختارة من صور المنتج**، فحذف موديل كان يمحي صورة
+    # مشتركة ويخلّي خانة فارغة فالمعرض (وحتى الصورة الرئيسية).
+    #
+    # القاعدة الجديدة: حذف الموديل يقطع الربط برك. الصور تتحذف من
+    # قسم «الصور» وحدو.
 
     db.session.delete(variant)
     db.session.flush()
@@ -2523,6 +2528,48 @@ def variant_price(variant_id):
     variant.price = price
     db.session.commit()
     return reply(True, f"«{variant.label}» ولّى بـ{price:,} دج")
+
+
+@admin_bp.route("/variants/<int:variant_id>/label", methods=["POST"])
+@login_required
+def variant_label(variant_id):
+    """
+    يبدّل اسم موديل واحد — تعديل سريع فمكانو، كيما السعر.
+
+    ⚠️ قبل، تبديل اسم موديل كان مستحيلاً: لازم تمسحو وتعاود تزيدو،
+    وتخسر معاه أسعار الكمية والعروض الجاهزة كاملين.
+    """
+    variant = ProductVariant.query.get_or_404(variant_id)
+    product = variant.product
+
+    label = (request.form.get("label") or "").strip()
+    is_ajax = request.headers.get("X-Requested-With") == "fetch"
+
+    def reply(ok, message, category="success"):
+        if is_ajax:
+            return jsonify({"ok": ok, "message": message,
+                            "label": variant.label}), (200 if ok else 400)
+        flash(message, category)
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    if not label:
+        return reply(False, "اسم الموديل ما يقدرش يكون فارغ", "error")
+
+    if len(label) > 160:
+        return reply(False, "الاسم طويل بزاف (160 حرف كحد أقصى)", "error")
+
+    # ⚠️ اسمان متشابهان فنفس المنتج = الزبون يحتار
+    twin = ProductVariant.query.filter(
+        ProductVariant.product_id == product.id,
+        ProductVariant.id != variant.id,
+        ProductVariant.label == label,
+    ).first()
+    if twin:
+        return reply(False, f"«{label}» موجود من قبل فهاد المنتج", "error")
+
+    variant.label = label
+    db.session.commit()
+    return reply(True, f"الاسم ولّى «{label}»")
 
 
 @admin_bp.route("/products/export")

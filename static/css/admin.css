@@ -1623,3 +1623,40 @@ body {
     color: var(--a-primary-light);
 }
 .variant-imgno.is-none { color: var(--a-danger); }
+
+/* ---------- اسم الموديل القابل للتعديل ---------- */
+.vlabel {
+    display: inline-flex; align-items: center; gap: 4px;
+    vertical-align: middle;
+}
+
+.vlabel-input {
+    width: 190px; max-width: 46vw;
+    padding: 5px 9px;
+    border: 1px solid var(--a-border);
+    border-radius: 8px;
+    background: var(--a-surface);
+    font-family: inherit; font-size: 14px; font-weight: 800;
+    color: var(--a-primary);
+    text-align: right;
+}
+.vlabel-input:focus {
+    outline: none;
+    border-color: var(--a-primary);
+    box-shadow: 0 0 0 3px rgba(46, 26, 71, 0.12);
+}
+
+.vlabel-save {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; border-radius: 7px;
+    background: var(--a-primary); color: #fff;
+    font-size: 13px; font-weight: 800; line-height: 1;
+    cursor: pointer;
+}
+.vlabel-save:hover { background: var(--a-primary-light); }
+
+.vlabel-state { font-size: 12px; min-width: 14px; }
+.vlabel-state.is-ok { color: var(--a-ok); }
+.vlabel-state.is-bad { color: var(--a-danger); cursor: help; }
+.vlabel-state.is-busy { color: var(--a-primary-light); }
