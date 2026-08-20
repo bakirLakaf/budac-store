@@ -42,9 +42,10 @@
                        للموديلات اللي خليتها بلا سعر. #}
                     {% if product and product.default_variant %}
                     <small class="hint">
-                        الزبون يشوف سعر الموديل الافتراضي
+                        الزبون يشوف سعر الموديل المربوط بالصورة الرئيسية ★
                         (<strong>{{ product.default_variant.label }}</strong> —
                         {{ product.default_variant.price_display }}).
+                        بدّل الصورة الرئيسية باش تبدّل الموديل الافتراضي.
                         هذا الحقل يخدم غير للموديلات بلا سعر خاص.
                     </small>
                     {% endif %}
@@ -202,6 +203,13 @@
                 مرّر الماوس على الصورة: <strong>‹ ›</strong> للترتيب ·
                 <strong>🔍</strong> تكبير · <strong>★</strong> رئيسية · <strong>×</strong> حذف.
             </p>
+
+            {# الصور هي المرجع — نوضّحو للأدمن باش يعرف أن ترتيبها يأثّر #}
+            <p class="hint">
+                📌 <strong>ترتيب الصور يحدّد ترتيب الموديلات.</strong>
+                الموديل المربوط بالصورة الرئيسية ★ يولّي الافتراضي
+                (مختار من البداية وسعرو هو اللي يبان للزبون).
+            </p>
             {% endif %}
 
             <label class="field">
@@ -280,7 +288,7 @@
                 <button type="button" class="bulk-link" data-pick="none">صفّي</button>
             </div>
             <div class="bulk-chips">
-                {% for v in product.variants %}
+                {% for v in product.ordered_variants %}
                 <label class="bulk-chip">
                     <input type="checkbox" name="tier_bulk_variants" value="{{ v.id }}">
                     <span>{{ v.label }}</span>
@@ -346,7 +354,7 @@
             </div>
 
             <div class="bulk-chips">
-                {% for v in product.variants %}
+                {% for v in product.ordered_variants %}
                 <label class="bulk-chip">
                     <input type="checkbox" name="bulk_variants" value="{{ v.id }}">
                     <span>{{ v.label }}</span>
@@ -408,7 +416,7 @@
                 <button type="button" class="bulk-link" data-pick="none">صفّي</button>
             </div>
             <div class="bulk-chips">
-                {% for v in product.variants %}
+                {% for v in product.ordered_variants %}
                 <label class="bulk-chip">
                     <input type="checkbox" name="price_bulk_variants" value="{{ v.id }}">
                     <span>{{ v.label }} <em>({{ v.effective_price }})</em></span>
@@ -437,7 +445,7 @@
 
 {% if product.variants %}
 <div class="variants-manager">
-    {% for v in product.variants %}
+    {% for v in product.ordered_variants %}
     <div class="variant-card">
 
         {# ---------- الرأس: الاسم والسعر والحذف ---------- #}
@@ -463,7 +471,12 @@
                     {% endif %}
 
                     {% if v.sku %}<span class="dot">·</span>{{ v.sku }}{% endif %}
-                    {% if v.is_default %}<span class="tag-default">افتراضي</span>{% endif %}
+                    {# ⚠️ الافتراضي دابا يتحدّد من **الصورة الرئيسية**، ماشي
+                       من علامة `is_default` وحدها. نعرضو الحقيقة باش
+                       الأدمن ما يحتارش. #}
+                    {% if v == product.default_variant %}
+                    <span class="tag-default" title="مربوط بالصورة الرئيسية ★">افتراضي</span>
+                    {% endif %}
                 </span>
             </div>
 

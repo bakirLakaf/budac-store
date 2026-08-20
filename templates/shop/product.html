@@ -132,7 +132,7 @@
             <div class="variant-picker">
                 <p class="variant-picker-label">اختر الموديل:</p>
                 <div class="variant-options">
-                    {% for v in product.variants %}
+                    {% for v in product.ordered_variants %}
                     <button type="button"
                             class="variant-chip {{ 'is-active' if v == product.default_variant else '' }} {{ 'is-out' if not v.is_in_stock else '' }}"
                             data-variant-id="{{ v.id }}"

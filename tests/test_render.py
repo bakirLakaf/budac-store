@@ -50,17 +50,30 @@ def build():
         db.session.add(p)
         db.session.commit()
 
-        db.session.add(ProductImage(product_id=p.id, image_filename="a.webp"))
+        # 3 صور بترتيب: b (رئيسية) ← a ← c
+        db.session.add_all([
+            ProductImage(product_id=p.id, image_filename="b.webp", sort_order=0),
+            ProductImage(product_id=p.id, image_filename="a.webp", sort_order=1),
+            ProductImage(product_id=p.id, image_filename="c.webp", sort_order=2),
+        ])
+        p.image_filename = "b.webp"   # الصورة الرئيسية ★
         db.session.commit()
 
         # الموديل الافتراضي سعرو 120 — مختلف عن سعر المنتج (180)
-        v_def = ProductVariant(product_id=p.id, label="شفاف/دوري", price=120,
-                               stock_quantity=0, is_default=True,
-                               image_filename="a.webp")
-        v_two = ProductVariant(product_id=p.id, label="حطب/دوري", price=200,
-                               stock_quantity=0)
-        db.session.add_all([v_def, v_two])
+        # ⚠️ نزيدوهم **بترتيب مقلوب** عمدًا، وعلامة is_default على موديل
+        # ماشي هو صاحب الصورة الرئيسية — باش نتأكد أن الصور هي اللي تغلب.
+        v_c = ProductVariant(product_id=p.id, label="نوار/دوري", price=300,
+                             stock_quantity=0, image_filename="c.webp")
+        v_a = ProductVariant(product_id=p.id, label="شفاف/دوري", price=120,
+                             stock_quantity=0, is_default=True,
+                             image_filename="a.webp")
+        v_b = ProductVariant(product_id=p.id, label="دوري/دوري", price=250,
+                             stock_quantity=0, image_filename="b.webp")
+        v_none = ProductVariant(product_id=p.id, label="بلا صورة", price=999,
+                                stock_quantity=0)
+        db.session.add_all([v_c, v_a, v_b, v_none])
         db.session.flush()
+        v_def = v_b   # المتوقّع: صاحب الصورة الرئيسية
 
         db.session.add(VariantPriceTier(variant_id=v_def.id, min_quantity=100,
                                         max_quantity=None, unit_price=165))
@@ -150,20 +163,43 @@ def main():
     from models import Product as _P
     with app.app_context():
         prod = _P.query.filter_by(slug=slug).first()
-        check("display_price = سعر الموديل الافتراضي (120)",
-              prod.display_price == 120, f"جا {prod.display_price}")
+        check("display_price = سعر موديل الصورة الرئيسية (250)",
+              prod.display_price == 250, f"جا {prod.display_price}")
         check("price_display يستعمل السعر المشتق",
-              "120" in prod.price_display, prod.price_display)
+              "250" in prod.price_display, prod.price_display)
         check("العمود price مازال 180 (احتياطي)", prod.price == 180)
-        # التخفيض يتحسب من السعر المشتق: 200 vs 120 = 40%
-        check("has_discount يقارن بالسعر المشتق", prod.has_discount is True)
-        check("discount_percent = 40%", prod.discount_percent == 40,
-              f"جا {prod.discount_percent}")
+        # 200 < 250 → ماكانش تخفيض
+        check("has_discount يقارن بالسعر المشتق", prod.has_discount is False)
 
-    check("سعر المنتج فوق ماشي 180",
-          ">180 دج<" not in html.replace(" ", ""), "180 مازال معروض")
-    check("basePrice للإجمالي الحيّ = 120", "var basePrice = 120;" in html)
-    check("JSON-LD يستعمل السعر المشتق", '"price": "120"' in html)
+    check("basePrice للإجمالي الحيّ = 250", "var basePrice = 250;" in html)
+    check("JSON-LD يستعمل السعر المشتق", '"price": "250"' in html)
+
+    section("4.7 ترتيب الموديلات يتبع ترتيب الصور")
+    with app.app_context():
+        prod = _P.query.filter_by(slug=slug).first()
+        labels = [v.label for v in prod.ordered_variants]
+        check("الترتيب: b ← a ← c ← بلا صورة",
+              labels == ["دوري/دوري", "شفاف/دوري", "نوار/دوري", "بلا صورة"],
+              str(labels))
+        check("الافتراضي = موديل الصورة الرئيسية ★",
+              prod.default_variant.label == "دوري/دوري",
+              prod.default_variant.label)
+        check("علامة is_default القديمة ما تغلبش الصورة",
+              prod.default_variant.label != "شفاف/دوري")
+
+    # الترتيب فالصفحة نفسها
+    order_html = re.findall(r'class="variant-chip[^"]*"[^>]*>\s*([^<]+?)\s*<',
+                            html)
+    check("ترتيب الأزرار فالصفحة صحيح",
+          [x.strip() for x in order_html][:4]
+          == ["دوري/دوري", "شفاف/دوري", "نوار/دوري", "بلا صورة"],
+          str(order_html[:4]))
+
+    active = re.search(
+        r'class="variant-chip[^"]*is-active[^"]*"[^>]*>\s*([^<]+?)\s*<', html)
+    check("الزر المختار = موديل الصورة الرئيسية",
+          bool(active) and active.group(1).strip() == "دوري/دوري",
+          active.group(1) if active else "ماكانش")
 
     section("4.6 الصنف الصحيح للموديل المختار")
     check("ما يستعملش is-selected المفقود",
