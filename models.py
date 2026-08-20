@@ -357,10 +357,33 @@ class Product(db.Model):
             return None
         return round(sum(r.rating for r in approved) / len(approved), 1)
 
+    # ══════════════════════════════════════════════════════════
+    # السعر المعروض
+    #
+    # 🔴 كان خلل حقيقي: العنوان يعرض `self.price` (سعر المنتج)، بينما
+    # الإجمالي تحت يحسب بسعر **الموديل الافتراضي**. الزبون يشوف رقمين
+    # مختلفين لنفس السلعة فنفس الشاشة.
+    #
+    # الحل: كي يكون فيه موديلات، السعر المعروض = سعر الموديل الافتراضي.
+    # حقل «السعر» فلوحة التحكم يبقى موجود كـ**سعر احتياطي** للموديلات
+    # اللي ما عندهاش سعر خاص (variant.price = None).
+    #
+    # ⚠️ ماكانش دوران لانهائي: `variant.effective_price` يقرا العمود
+    # `self.price` مباشرة، ماشي هاد الخاصية.
+    # ══════════════════════════════════════════════════════════
+
+    @property
+    def display_price(self):
+        """السعر اللي يشوفو الزبون — سعر الموديل الافتراضي إذا كان."""
+        v = self.default_variant
+        if v is not None:
+            return v.effective_price
+        return self.price
+
     @property
     def price_display(self):
         """سعر منسق للعرض: 1200 → '1,200 دج'"""
-        return f"{self.price:,} دج"
+        return f"{self.display_price:,} دج"
 
     @property
     def compare_at_price_display(self):
@@ -370,13 +393,14 @@ class Product(db.Model):
 
     @property
     def has_discount(self):
-        return self.compare_at_price is not None and self.compare_at_price > self.price
+        return (self.compare_at_price is not None
+                and self.compare_at_price > self.display_price)
 
     @property
     def discount_percent(self):
         if not self.has_discount:
             return 0
-        return round(100 - (self.price / self.compare_at_price * 100))
+        return round(100 - (self.display_price / self.compare_at_price * 100))
 
     @property
     def gallery_images(self):
