@@ -164,6 +164,8 @@
                     <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
                          alt="" data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}">
 
+                    {# رقم الصورة — يوافق «صورة N» فبطاقات الموديلات #}
+                    <span class="image-no">{{ loop.index }}</span>
                     <span class="image-main-tag">★ رئيسية</span>
                     <span class="image-del-tag">سيُحذف</span>
 
@@ -443,7 +445,22 @@
     (كل ما زاد يشري، كل ما رخص سعر الحبة).
 </p>
 
+{# ═══════ تشخيص الترتيب ═══════
+   ⚠️ الموديلات تتبع ترتيب الصور. إذا موديل ماشي فبلاصتو، غالبًا صورتو
+   ماشي مربوطة مليح. هاد اللوحة تخليك تشوف الحقيقة بلا تخمين. #}
 {% if product.variants %}
+{% set rank = product._image_rank %}
+{% set unlinked = product.ordered_variants
+                  | rejectattr('image_filename', 'in', rank) | list %}
+{% if unlinked %}
+<div class="flash flash-warning">
+    ⚠️ <strong>{{ unlinked | length }}</strong> موديل بلا صورة مربوطة —
+    يمشيو للآخر فالترتيب:
+    {% for v in unlinked %}«{{ v.label }}»{% if not loop.last %} · {% endif %}{% endfor %}.
+    اربطهم بصورة من قائمة «صورة الموديل» تحت باش يدخلو فالترتيب.
+</div>
+{% endif %}
+
 <div class="variants-manager">
     {% for v in product.ordered_variants %}
     <div class="variant-card">
@@ -451,6 +468,16 @@
         {# ---------- الرأس: الاسم والسعر والحذف ---------- #}
         <div class="variant-head">
             <div class="variant-info">
+                {# رقم الترتيب + رقم الصورة المربوطة — تشخيص فوري #}
+                <span class="variant-rank"
+                      title="ترتيب الموديل · الصورة المربوطة">
+                    {{ loop.index }}
+                    {%- if v.image_filename in rank %}
+                        <span class="variant-imgno">صورة {{ rank[v.image_filename] + 1 }}</span>
+                    {%- else %}
+                        <span class="variant-imgno is-none">بلا صورة</span>
+                    {%- endif %}
+                </span>
                 <strong class="variant-name">{{ v.label }}</strong>
                 {# ⚠️ السعر قابل للتعديل فمكانو — قبل كان نصًا فقط،
                    والأدمن ما يعرفش وين يبدّلو. الحفظ فوري بلا إعادة

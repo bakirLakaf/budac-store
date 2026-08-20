@@ -1594,3 +1594,32 @@ body {
 }
 .xl-form { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
 .xl-form input[type="file"] { font-size: 13px; max-width: 100%; }
+
+/* ---------- تشخيص ترتيب الصور والموديلات ---------- */
+/* ⚠️ الموديلات تتبع ترتيب الصور. هاد الأرقام تخلّي الأدمن يشوف
+   الربط بعينيه بدل ما يخمّن علاش موديل ماشي فبلاصتو. */
+.image-no {
+    position: absolute; top: 6px; inset-inline-start: 6px;
+    min-width: 20px; height: 20px; padding: 0 5px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px;
+    background: rgba(30, 15, 45, 0.78); color: #fff;
+    font-size: 11px; font-weight: 800; line-height: 1;
+    z-index: 3;
+}
+
+.variant-rank {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-inline-end: 8px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: var(--a-bg);
+    border: 1px solid var(--a-border);
+    font-size: 12px; font-weight: 800; color: var(--a-primary);
+}
+
+.variant-imgno {
+    font-weight: 600; font-size: 11px;
+    color: var(--a-primary-light);
+}
+.variant-imgno.is-none { color: var(--a-danger); }

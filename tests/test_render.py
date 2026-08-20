@@ -206,6 +206,28 @@ def main():
           ".is-selected" not in html)
     check("يستعمل is-active", "[data-tiers].is-active" in html)
 
+    section("4.8 ترتيب الصور ثابت (sort_order + id)")
+    with app.app_context():
+        prod = _P.query.filter_by(slug=slug).first()
+        # كل الصور بـsort_order مختلف — نتأكد أن الترتيب يحترمو
+        names = [i.image_filename for i in prod.images]
+        check("ترتيب الصور: b ← a ← c",
+              names == ["b.webp", "a.webp", "c.webp"], str(names))
+
+        # حالة البيانات القديمة: كل sort_order = 0
+        for img in prod.images:
+            img.sort_order = 0
+        db.session.commit()
+        db.session.expire(prod)
+        again = [i.image_filename for i in prod.images]
+        check("بـsort_order كلها صفر، الترتيب يبقى ثابت (حسب id)",
+              again == ["b.webp", "a.webp", "c.webp"], str(again))
+
+        # نرجّعو الوضع
+        for pos, img in enumerate(prod.images):
+            img.sort_order = pos
+        db.session.commit()
+
     # ───────── 5) الأمان الأساسي فالصفحة ─────────
     section("5. رموز CSRF والحقول المخفية")
     check("csrf_token فالفورم", 'name="csrf_token"' in html)
