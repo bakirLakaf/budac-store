@@ -10,6 +10,8 @@
             <thead><tr><th>صورة</th><th>الاسم</th><th>الرابط</th><th>منتجات</th><th></th></tr></thead>
             <tbody>
                 {% for c in categories %}
+                {# ⚠️ التعديل فمكانو: الاسم حقل مباشرة فالجدول. صفحة
+                   منفصلة لحقل واحد تضيّع نقرتين بلا فائدة. #}
                 <tr>
                     <td>
                         {% if c.image_filename %}
@@ -18,15 +20,32 @@
                             <span class="thumb-sm thumb-empty">؟</span>
                         {% endif %}
                     </td>
-                    <td>{{ c.name }}</td>
-                    <td><code>{{ c.slug }}</code></td>
+                    <td>
+                        <input type="text" name="name" value="{{ c.name }}"
+                               form="cat-{{ c.id }}" maxlength="120" required
+                               class="cat-name-input" aria-label="اسم التصنيف">
+                    </td>
+                    <td>
+                        {# الرابط ما يتبدّلش — يكسر السيو والروابط القديمة #}
+                        <code title="ما يتبدّلش — مربوط بجوجل والروابط">{{ c.slug }}</code>
+                    </td>
                     <td>{{ counts.get(c.id, 0) }}</td>
                     <td>
-                        <form method="post" action="{{ url_for('admin.category_delete', category_id=c.id) }}"
-                              onsubmit="return confirm('تمسح التصنيف «{{ c.name }}»؟')">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn-admin btn-sm btn-danger">حذف</button>
-                        </form>
+                        <div class="cat-actions">
+                            <form method="post" id="cat-{{ c.id }}"
+                                  enctype="multipart/form-data"
+                                  action="{{ url_for('admin.category_edit', category_id=c.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="is_active" value="1">
+                                <button type="submit" class="btn-admin btn-sm">احفظ</button>
+                            </form>
+
+                            <form method="post" action="{{ url_for('admin.category_delete', category_id=c.id) }}"
+                                  onsubmit="return confirm('تمسح التصنيف «{{ c.name }}»؟')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-admin btn-sm btn-danger">حذف</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

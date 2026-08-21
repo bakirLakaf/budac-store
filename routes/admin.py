@@ -836,6 +836,60 @@ def categories_list():
     )
 
 
+@admin_bp.route("/categories/<int:category_id>/edit", methods=["POST"])
+@login_required
+def category_edit(category_id):
+    """
+    يعدّل تصنيفًا موجودًا: الاسم، الصورة، والتفعيل.
+
+    ⚠️ الـ`slug` **ما يتبدّلش**. هو اللي فالروابط (`/category/handles-knobs`)
+    وفجوجل. تبديلو يكسر كل الروابط القديمة والسيو. إذا لازم يتبدّل،
+    يتدار يدويًا مع إعادة توجيه — وهذا خارج نطاق هاد الفورم.
+    """
+    category = Category.query.get_or_404(category_id)
+
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        flash("اسم التصنيف مطلوب", "error")
+        return redirect(url_for("admin.categories_list"))
+
+    if len(name) > 120:
+        flash("الاسم طويل بزاف (120 حرف كحد أقصى)", "error")
+        return redirect(url_for("admin.categories_list"))
+
+    # اسمان متشابهان يحيّرو الزبون
+    twin = Category.query.filter(
+        Category.id != category.id, Category.name == name
+    ).first()
+    if twin:
+        flash(f"«{name}» موجود من قبل", "error")
+        return redirect(url_for("admin.categories_list"))
+
+    old_name = category.name
+    category.name = name
+    category.is_active = bool(request.form.get("is_active"))
+
+    file = request.files.get("image")
+    if file and file.filename:
+        try:
+            new_image = save_image(file, "categories", base_name=category.slug)
+            # الصورة القديمة تتمسح غير بعد ما تنجح الجديدة
+            if category.image_filename:
+                delete_image(category.image_filename, "categories")
+            category.image_filename = new_image
+        except UploadError as e:
+            flash(f"صورة مرفوضة: {e}", "error")
+
+    db.session.commit()
+
+    if old_name != name:
+        flash(f"«{old_name}» ولّى «{name}»", "success")
+    else:
+        flash(f"تم تحديث «{name}»", "success")
+
+    return redirect(url_for("admin.categories_list"))
+
+
 @admin_bp.route("/categories/<int:category_id>/delete", methods=["POST"])
 @login_required
 def category_delete(category_id):

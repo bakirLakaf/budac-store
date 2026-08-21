@@ -1650,3 +1650,23 @@ body {
     color: rgba(255, 255, 255, 0.45);
     letter-spacing: 0.5px;
 }
+
+/* ---------- تعديل التصنيف فمكانو ---------- */
+.cat-name-input {
+    width: 100%; min-width: 150px;
+    padding: 6px 10px;
+    border: 1px solid var(--a-border);
+    border-radius: 8px;
+    background: var(--a-surface);
+    font-family: inherit; font-size: 14px; font-weight: 700;
+    color: var(--a-primary);
+    text-align: right;
+}
+.cat-name-input:focus {
+    outline: none;
+    border-color: var(--a-primary);
+    box-shadow: 0 0 0 3px rgba(46, 26, 71, 0.12);
+}
+
+.cat-actions { display: flex; gap: 6px; align-items: center; }
+.cat-actions form { margin: 0; }

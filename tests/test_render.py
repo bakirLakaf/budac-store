@@ -412,6 +412,38 @@ def main():
                     headers={"X-Requested-With": "fetch"})
     check("بلا ملف → 400", r.status_code == 400)
 
+    # 🔴 خلل عدّى للإنتاج: `secure_filename` تحذف الحروف العربية حتى
+    # النقطة، فالامتداد يضيع وأي صورة باسم عربي تترفض.
+    section("7.10.d أسماء ملفات عربية")
+    for arabic in ["لاد كادر متعدد الالوان.png",
+                   "صورة المنتج.jpg",
+                   "أرجل حديد ٢٠٢٦.webp",
+                   "منتج - نسخة (2).jpeg"]:
+        rr = client.post(up, data={"image": fake_image(600, arabic)},
+                         content_type="multipart/form-data",
+                         headers={"X-Requested-With": "fetch"})
+        check(f"«{arabic}» مقبولة", rr.status_code == 200,
+              (rr.get_json() or {}).get("message", str(rr.status_code)))
+
+    # الامتداد الممنوع يبقى ممنوع حتى باسم عربي
+    rr = client.post(up, data={"image": (io.BytesIO(b"MZ"), "برنامج خبيث.exe")},
+                     content_type="multipart/form-data",
+                     headers={"X-Requested-With": "fetch"})
+    check("«.exe» باسم عربي مرفوضة", rr.status_code == 400)
+
+    rr = client.post(up, data={"image": (io.BytesIO(b"x"), "سكربت.php")},
+                     content_type="multipart/form-data",
+                     headers={"X-Requested-With": "fetch"})
+    check("«.php» باسم عربي مرفوضة", rr.status_code == 400)
+
+    # الاسم المحفوظ ما يحتويش حروفًا عربية ولا مسارات
+    with app.app_context():
+        saved = [i.image_filename for i in
+                 _P.query.filter_by(slug=slug).first().images]
+    check("الأسماء المحفوظة ASCII بلا مسارات",
+          all(n.isascii() and "/" not in n and ".." not in n for n in saved),
+          str([n for n in saved if not n.isascii()][:2]))
+
     # ⚠️ هذا هو الاختبار اللي كان ناقص وخلّى العطل يوصل للإنتاج:
     # نتأكدو أن طلب أكبر من الحد يترفض بـ413 ماشي بانقطاع، وأن كل
     # صورة وحدها تبقى تحت الحد.
@@ -483,6 +515,43 @@ def main():
                     content_type="multipart/form-data",
                     headers={"X-Requested-With": "fetch"})
     check("منتج بلا موديلات: الرفع يخدم", r.status_code == 200, str(r.status_code))
+
+    # ───────── 7.13) تعديل التصنيف ─────────
+    section("7.13 تعديل التصنيف من اللوحة")
+    from models import Category as _C
+    with app.app_context():
+        cid = _C.query.first().id
+        old_slug = db.session.get(_C, cid).slug
+
+    cats_html = client.get("/admin/categories").get_data(as_text=True)
+    check("حقل الاسم موجود فالجدول", "cat-name-input" in cats_html)
+    check("زر الحفظ موجود", f'id="cat-{cid}"' in cats_html)
+
+    r = client.post(f"/admin/categories/{cid}/edit",
+                    data={"name": "أغطية وقطع تزيين", "is_active": "1"})
+    check(f"التعديل نجح ({r.status_code})", r.status_code in (200, 302))
+    with app.app_context():
+        c2 = db.session.get(_C, cid)
+        check("الاسم اتبدّل", c2.name == "أغطية وقطع تزيين", c2.name)
+        check("⚠️ الـslug ما تبدّلش (السيو محفوظ)", c2.slug == old_slug,
+              f"{c2.slug} بدل {old_slug}")
+
+    r = client.post(f"/admin/categories/{cid}/edit", data={"name": "  "})
+    with app.app_context():
+        check("الاسم الفارغ مرفوض",
+              db.session.get(_C, cid).name == "أغطية وقطع تزيين")
+
+    # اسم مكرر
+    with app.app_context():
+        db.session.add(_C(name="تصنيف آخر", slug="other-cat"))
+        db.session.commit()
+        other_id = _C.query.filter_by(slug="other-cat").first().id
+
+    client.post(f"/admin/categories/{other_id}/edit",
+                data={"name": "أغطية وقطع تزيين"})
+    with app.app_context():
+        check("الاسم المكرر مرفوض",
+              db.session.get(_C, other_id).name == "تصنيف آخر")
 
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")

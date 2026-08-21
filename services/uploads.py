@@ -65,8 +65,15 @@ def save_image(file_storage, subfolder, base_name=None, make_thumb=True):
     if not file_storage or not file_storage.filename:
         raise UploadError("ما اخترتش حتى ملف")
 
-    original_name = secure_filename(file_storage.filename)
-    ext = os.path.splitext(original_name)[1].lower()
+    # 🔴 خلل كان هنا: الامتداد كان يتقرا **بعد** `secure_filename`.
+    # لكن `secure_filename` تحذف الحروف العربية كليًا، حتى النقطة:
+    #     "لاد كادر متعدد الالوان.png"  →  "png"   (بلا نقطة!)
+    # فـ`splitext` ما تلقى حتى امتداد، وأي صورة باسم عربي تترفض.
+    #
+    # الحل: نقراو الامتداد من الاسم **الأصلي** قبل التنظيف. الأمان
+    # ما يتأثرش — الاسم النهائي المحفوظ يتولّد عندنا (سطر 95 تحت)،
+    # واسم المستخدم ما يوصلش أبدًا لنظام الملفات.
+    ext = os.path.splitext(file_storage.filename or "")[1].lower().strip()
 
     if ext not in ALLOWED_EXTENSIONS:
         allowed = "، ".join(sorted(ALLOWED_EXTENSIONS))
