@@ -448,6 +448,42 @@ def main():
     check("يقفل الحفظ أثناء الرفع", "b.disabled = on" in up_html)
     check("ينبّه قبل مغادرة الصفحة", "beforeunload" in up_html)
 
+    # 🔴 الخلل اللي ضيّع 3 جولات: كود الرفع كان محشورًا داخل IIFE ديال
+    # «أسعار الكمية»، وذاك يخرج بـ`return` مبكّر إذا ماكانش موديلات —
+    # فالرافع ما يشتغلش أبدًا. نتأكدو أنه فكتلة <script> وحدو.
+    section("7.12 كود الرفع فكتلة مستقلة")
+    blocks = re.findall(r"<script[^>]*>(.*?)</script>", up_html, re.S)
+    owner = [b for b in blocks if "imagePicker" in b]
+    check("كود الرفع فكتلة وحدة", len(owner) == 1, f"{len(owner)} كتلة")
+    if owner:
+        b = owner[0]
+        check("الكتلة ما فيهاش كود أسعار الكمية",
+              "makeRow" not in b and "unit_price" not in b)
+        check("الكتلة ما فيهاش كود الموديلات",
+              "vlabel" not in b and "vprice" not in b)
+        # عدد الأقواس متوازن داخل الكتلة = ماشي مقطوعة
+        check("الكتلة مقفولة مليح", b.count("{") == b.count("}"),
+              f"{b.count('{')} vs {b.count('}')}")
+
+    # منتج بلا موديلات: الرافع لازم يخدم كذلك
+    with app.app_context():
+        bare = _P(name="بلا موديلات", slug="bare", price=50,
+                  category_id=_P.query.first().category_id, stock_quantity=0)
+        db.session.add(bare)
+        db.session.commit()
+        bare_id = bare.id
+
+    bare_html = client.get(f"/admin/products/{bare_id}/edit").get_data(as_text=True)
+    check("منتج بلا موديلات: الرافع موجود", 'id="imagePicker"' in bare_html)
+    check("منتج بلا موديلات: شريط التقدّم موجود",
+          'id="uploadProgress"' in bare_html)
+
+    r = client.post(f"/admin/products/{bare_id}/images/upload",
+                    data={"image": fake_image(700, "bare.jpg")},
+                    content_type="multipart/form-data",
+                    headers={"X-Requested-With": "fetch"})
+    check("منتج بلا موديلات: الرفع يخدم", r.status_code == 200, str(r.status_code))
+
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")
     import glob
