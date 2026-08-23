@@ -19,17 +19,27 @@
         <a href="{{ url_for('admin.dashboard') }}" class="{{ 'is-active' if request.endpoint == 'admin.dashboard' }}">
             نظرة عامة
         </a>
+        {# ⚠️ نوعين من الأرقام، وباينين بالألوان:
+             • ذهبي = تنبيه، ثمة حاجة تستنى منك (طلبية جديدة)
+             • هادي = جرد برك، كم عندك من كل شي #}
         <a href="{{ url_for('admin.orders_list') }}" class="{{ 'is-active' if 'order' in request.endpoint }}">
             الطلبيات
+            {% if new_orders %}
+            <span class="nav-badge" title="طلبيات جديدة ما تواصلتش معاهم">{{ new_orders }}</span>
+            {% elif total_orders %}
+            <span class="nav-count">{{ total_orders }}</span>
+            {% endif %}
         </a>
         <a href="{{ url_for('admin.products_list') }}" class="{{ 'is-active' if 'product' in request.endpoint or 'variant' in request.endpoint }}">
             المنتجات
+            {% if total_products %}<span class="nav-count">{{ total_products }}</span>{% endif %}
         </a>
         {# ⚠️ التجميع: 14 رابط فقائمة وحدة يخلّي العين تمشي فيهم كلهم
            فكل مرة. العناوين تخلّيك تقفز مباشرة للمجموعة اللي تحتاجها. #}
         <span class="nav-group">المتجر</span>
         <a href="{{ url_for('admin.categories_list') }}" class="{{ 'is-active' if 'categor' in request.endpoint }}">
             التصنيفات
+            {% if total_categories %}<span class="nav-count">{{ total_categories }}</span>{% endif %}
         </a>
         <a href="{{ url_for('admin.offers_list') }}" class="{{ 'is-active' if 'offer' in request.endpoint }}">
             العروض الخاصة

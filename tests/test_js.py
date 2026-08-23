@@ -226,15 +226,32 @@ def main():
         real = """
             globalThis.__KNOWN__ = ['.uploader', 'imagePicker',
                 'uploadProgress', 'uploadBarFill', 'uploadStatus',
-                'uploadList', 'productForm'];
+                'uploadList', 'extraPicker', 'extraProgress',
+                'extraBarFill', 'extraStatus', 'extraList', 'productForm'];
+
+            // ⚠️ `initUploader` يتنادى عبر querySelectorAll('.uploader')،
+            // فلازم المحاكاة ترجّع رافعين حقيقيين (منتج + توضيحي) باش
+            // نتأكدو أن الاثنين يتسجّلو.
+            var made = 0;
+            document.querySelectorAll = function (sel) {
+                if (sel === '.uploader') {
+                    var a = new El(); a.dataset.kind = 'main';
+                    var b = new El(); b.dataset.kind = 'extra';
+                    made = 2;
+                    return [a, b];
+                }
+                return [];
+            };
         """
         ok, out = run_block(real + up[0], """
             if (!listeners['change'])
                 { console.error('ما سجّلش مستمع change'); process.exit(1); }
+            if (listeners['change'] < 2)
+                { console.error('رافع واحد برك تسجّل، لازم 2'); process.exit(1); }
             if (!listeners['win:beforeunload'])
                 { console.error('ما سجّلش beforeunload'); process.exit(1); }
         """)
-        check("الرافع يسجّل change + beforeunload", ok, out[:200])
+        check("الرافعين (منتج + توضيحي) يتسجّلو", ok, out[:200])
 
     # ---------- اسم الموديل ----------
     lab = [b for b in blks if "vlabel-save" in b]

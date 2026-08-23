@@ -323,6 +323,30 @@
     </div>
 </section>
 
+{# ═══════════ صور توضيحية ═══════════
+   ⚠️ ماشي صور السلعة — هاذو يوريو كيفاش تستعملها ووين تتحط.
+   حطّيناهم **تحت** المعرض والشراء: الزبون اللي قرّر ما نعطلوهش،
+   واللي مازال متردد يلقى معلومة زايدة تقنعو. #}
+{% if product.extra_images %}
+<section class="extra-shots">
+    <h2 class="section-heading">شوف كيفاش تبان</h2>
+
+    <div class="extra-shots-grid">
+        {% for img in product.extra_images %}
+        <figure class="extra-shot">
+            <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
+                 alt="{{ img.caption or product.name }}"
+                 loading="lazy"
+                 data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}">
+            {% if img.caption %}
+            <figcaption>{{ img.caption }}</figcaption>
+            {% endif %}
+        </figure>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
 {% if product.gallery_images %}
 <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="معرض صور المنتج" hidden>
     <button type="button" class="lightbox-close" id="lightboxClose" aria-label="إغلاق">×</button>

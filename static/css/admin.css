@@ -245,7 +245,12 @@ body {
 
 .admin-nav { flex: 1; padding: 16px 0; }
 .admin-nav a {
-    display: block;
+    /* ⚠️ كان `block` — الرقم كان يطيح تحت النص فسطر وحدو.
+       flex يخلّي الرقم فآخر السطر بمحاذاة نظيفة. */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     padding: 12px 24px;
     color: #D5CEE4;
     text-decoration: none;
@@ -546,10 +551,27 @@ body {
 
 /* ═══════════ السلات المتروكة، التقييمات، الاقتراحات ═══════════ */
 
+/* ⚠️ نوعين من الأرقام فالقائمة، والفرق باين بالعين:
+     .nav-badge = تنبيه ذهبي، ثمة حاجة تستنى منك
+     .nav-count = جرد هادي، معلومة برك
+   لو كانو كيف كيف، الأدمن يتعوّد على الذهبي ويحقرو. */
 .nav-badge {
     background: var(--a-gold); color: var(--a-primary);
     font-size: 10px; font-weight: 700;
     padding: 1px 7px; border-radius: 999px; margin-inline-start: 6px;
+}
+
+.nav-count {
+    background: rgba(255, 255, 255, 0.13);
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 10px; font-weight: 700;
+    padding: 1px 7px; border-radius: 999px; margin-inline-start: 6px;
+}
+
+/* فالرابط النشط، الرقم يبان أوضح */
+.admin-nav a.is-active .nav-count {
+    background: rgba(255, 255, 255, 0.22);
+    color: rgba(255, 255, 255, 0.85);
 }
 
 .alert-money { border-right-color: var(--a-gold); background: #FFFDF5; }
@@ -1670,3 +1692,26 @@ body {
 
 .cat-actions { display: flex; gap: 6px; align-items: center; }
 .cat-actions form { margin: 0; }
+
+/* ---------- الصور التوضيحية فاللوحة ---------- */
+.extra-manager .image-item { border-style: dashed; }
+.img-inline-form { margin: 0; display: contents; }
+.empty-note { opacity: 0.75; }
+
+.extra-caption {
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px 9px;
+    border: 1px solid var(--a-border);
+    border-radius: 8px;
+    background: var(--a-surface);
+    font-family: inherit; font-size: 12.5px;
+    color: var(--a-primary);
+    text-align: right;
+}
+.extra-caption:focus {
+    outline: none;
+    border-color: var(--a-primary);
+}
+.extra-caption.is-saving { opacity: 0.6; }
+.extra-caption.is-bad { border-color: var(--a-danger); }

@@ -46,10 +46,22 @@ def inject_admin_counters():
 
     try:
         return {
+            # ⚠️ عدّادات **تنبيه**: تبان غير كي يكون شي حاجة تستنى منك.
             "pending_abandoned": AbandonedCart.query.filter_by(
                 status=AbandonedCart.STATUS_NEW
             ).count(),
             "pending_reviews": Review.query.filter_by(is_approved=False).count(),
+            # ⚠️ الطلبية الجديدة حالتها `pending` ماشي `new` —
+            # `STATUS_NEW` تخص السلات المتروكة، ماشي الطلبيات.
+            "new_orders": Order.query.filter_by(
+                status=Order.STATUS_PENDING
+            ).count(),
+
+            # عدّادات **جرد**: كم عندك من كل حاجة. تبان ديما بلون هادي
+            # باش ما تتخلطش مع التنبيهات اللي فوق.
+            "total_orders": Order.query.count(),
+            "total_products": Product.query.count(),
+            "total_categories": Category.query.count(),
         }
     except Exception:
         return {}  # قاعدة البيانات مازال ما اتعمّرتش
@@ -504,17 +516,25 @@ def product_image_upload(product_id):
     except UploadError as e:
         return jsonify({"ok": False, "message": str(e)}), 400
 
-    # تمشي فالآخر — الأدمن يرتّبها بعد إذا بغى
-    last = max((i.sort_order for i in product.images), default=-1)
+    # ⚠️ نوعين: صورة منتج حقيقية (تتربط بموديل) ولا صورة توضيحية.
+    # الفرق مهم — التوضيحية ما تدخلش فترتيب الموديلات.
+    is_extra = request.form.get("kind") == "extra"
+
+    # ترتيب مستقل لكل نوع باش ما يتداخلوش
+    same_kind = [i for i in product.images if i.is_extra == is_extra]
+    last = max((i.sort_order for i in same_kind), default=-1)
+
     image = ProductImage(
         product_id=product.id,
         image_filename=filename,
         sort_order=last + 1,
+        is_extra=is_extra,
     )
     db.session.add(image)
 
-    # أول صورة فالمنتج تولّي الرئيسية تلقائيًا
-    if not product.image_filename:
+    # أول **صورة منتج** تولّي الرئيسية تلقائيًا.
+    # الصور التوضيحية ما تقدرش تكون رئيسية.
+    if not is_extra and not product.image_filename:
         product.image_filename = filename
 
     db.session.commit()
@@ -525,8 +545,34 @@ def product_image_upload(product_id):
         "filename": filename,
         "url": url_for("static", filename=f"img/products/{filename}"),
         "is_main": product.image_filename == filename,
-        "message": "تمت إضافة الصورة",
+        "is_extra": is_extra,
+        "message": "تمت إضافة الصورة التوضيحية" if is_extra else "تمت إضافة الصورة",
     })
+
+
+@admin_bp.route("/products/<int:product_id>/images/<int:image_id>/caption",
+                methods=["POST"])
+@login_required
+def product_image_caption(product_id, image_id):
+    """
+    يحفظ وصفًا قصيرًا للصورة التوضيحية («كيفاش تركّبها»).
+
+    ⚠️ نتأكدو أن الصورة تخص هاد المنتج — باش حد ما يعدّلش صورة
+    منتج آخر ببعث id غالط.
+    """
+    image = ProductImage.query.filter_by(
+        id=image_id, product_id=product_id
+    ).first_or_404()
+
+    caption = (request.form.get("caption") or "").strip()
+    if len(caption) > 200:
+        return jsonify({"ok": False, "message": "الوصف طويل بزاف (200 حرف)"}), 400
+
+    image.caption = caption or None
+    db.session.commit()
+
+    return jsonify({"ok": True, "caption": image.caption or "",
+                    "message": "انحفظ الوصف"})
 
 
 @admin_bp.route("/products/<int:product_id>/delete", methods=["POST"])
@@ -565,6 +611,12 @@ def product_image_make_main(product_id, image_id):
     ديال صورة منتج آخر ويخلط الصور بين المنتجات.
     """
     image = ProductImage.query.filter_by(id=image_id, product_id=product_id).first_or_404()
+
+    # ⚠️ الصورة التوضيحية ما تقدرش تكون رئيسية — الرئيسية هي اللي
+    # تبان فبطاقة المنتج وفالسلة، ولازم تكون صورة السلعة نفسها.
+    if image.is_extra:
+        flash("الصور التوضيحية ما تقدرش تكون رئيسية", "error")
+        return redirect(url_for("admin.product_form", product_id=product_id))
 
     image.product.image_filename = image.image_filename
     db.session.commit()
@@ -690,10 +742,13 @@ def variant_image(variant_id):
         db.session.commit()
         return reply(True, f"تحيّدت صورة «{variant.label}»")
 
-    # نتحققو أن الصورة فعلاً من صور هاد المنتج (أمان: ما نقبلوش أي اسم)
-    valid = any(img.image_filename == filename for img in product.images)
+    # نتحققو أن الصورة فعلاً من **صور المنتج** (أمان: ما نقبلوش أي اسم).
+    # ⚠️ الصور التوضيحية مستثناة — هي توري كيفاش يتستعمل المنتج، ماشي
+    # موديلاً يقدر الزبون يختارو.
+    valid = any(img.image_filename == filename for img in product.main_images)
     if not valid and filename != product.image_filename:
-        return reply(False, "هاد الصورة ماشي من صور هاد المنتج", "error")
+        return reply(False, "لازم تختار صورة من صور المنتج (ماشي التوضيحية)",
+                     "error")
 
     variant.image_filename = filename
     db.session.commit()
@@ -2569,7 +2624,10 @@ def product_image_move(product_id, image_id):
 
     direction = request.form.get("dir")
 
-    ordered = sorted(product.images, key=lambda i: (i.sort_order, i.id))
+    # ⚠️ كل نوع يتحرك داخل مجموعتو وحدو. لو خلطناهم، صورة توضيحية
+    # تقدر تتبدّل مع صورة منتج ويتخربّط ترتيب الموديلات.
+    group = [i for i in product.images if i.is_extra == image.is_extra]
+    ordered = sorted(group, key=lambda i: (i.sort_order, i.id))
 
     # ⚠️ نعاودو ترقيم sort_order: البيانات القديمة ممكن كلها أصفار،
     # وبلا ترقيم نظيف التحريك ما يبانش.

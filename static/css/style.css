@@ -3283,3 +3283,48 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
     .ship-table { font-size: 13px; }
     .ship-table tbody td, .ship-table thead th { padding: 8px 9px; }
 }
+
+/* ---------- صور توضيحية ---------- */
+/* ⚠️ ماشي صور السلعة — يوريو كيفاش تستعملها ووين تتحط.
+   تبان تحت المعرض والشراء باش ما تعطّلش اللي قرّر. */
+.extra-shots {
+    max-width: 1120px;
+    margin: 8px auto 44px;
+    padding: 0 16px;
+}
+
+.extra-shots-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.extra-shot {
+    margin: 0;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid rgba(46, 26, 71, 0.10);
+}
+
+.extra-shot img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    display: block;
+}
+
+.extra-shot figcaption {
+    padding: 10px 12px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #4A2F6B;
+}
+
+@media (max-width: 640px) {
+    .extra-shots-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+    }
+}

@@ -147,7 +147,7 @@
         <div class="form-col">
             <h2 class="section-title">الصور</h2>
 
-            {% if product and product.images %}
+            {% if product and product.main_images %}
             {# ═══════════ إدارة الصور ═══════════
                ⚠️ كل شي **محلي** حتى تضغط «حفظ المنتج»:
                  • الترتيب، الصورة الرئيسية، والحذف كلهم يتطبّقو فالمتصفح
@@ -155,7 +155,7 @@
                  • تقدر تتراجع قبل الحفظ
                الحقول المخفية تحت تحمل القرارات للسيرفر. #}
             <div class="image-manager" id="imageManager">
-                {% for img in product.images %}
+                {% for img in product.main_images %}
                 {% set is_main = img.image_filename == product.image_filename %}
                 <div class="image-item {{ 'is-main' if is_main }}"
                      data-id="{{ img.id }}"
@@ -239,6 +239,89 @@
             <p class="hint">
                 💡 احفظ المنتج أول، ومن بعد تقدر تزيد الصور وحدة بوحدة.
             </p>
+            {% endif %}
+
+            {# ═══════════ صور أخرى (توضيحية) ═══════════
+               ⚠️ الفرق عن الصور فوق:
+                 • فوق = صور السلعة الحقيقية، مربوطة بالموديلات
+                 • هنا = صور توضيحية برك (كيفاش تستعملو، وين يتحط)
+               التوضيحية **ما تدخلش** فترتيب الموديلات وما تقدرش تكون
+               رئيسية. تبان تحت المعرض فصفحة المنتج. #}
+            {% if product %}
+            <hr class="divider">
+
+            <h2 class="section-title">صور أخرى (توضيحية)</h2>
+            <p class="hint">
+                صور تشرح المنتج: كيفاش يتستعمل، وين يتحط، المقاسات…
+                <strong>ما تتربطش بموديل</strong> وما تأثّرش على الترتيب.
+            </p>
+
+            {% if product.extra_images %}
+            <div class="image-manager extra-manager">
+                {% for img in product.extra_images %}
+                <div class="image-item is-extra" data-id="{{ img.id }}">
+                    <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
+                         alt="" data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}">
+
+                    <span class="image-no">{{ loop.index }}</span>
+
+                    <div class="image-item-actions">
+                        <form method="post" class="img-inline-form"
+                              action="{{ url_for('admin.product_image_move', product_id=product.id, image_id=img.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="dir" value="up">
+                            <button type="submit" class="img-btn img-btn-move"
+                                    title="حرّكها لليمين">‹</button>
+                        </form>
+
+                        <button type="button" class="img-btn img-btn-zoom" data-zoom
+                                title="شوفها كاملة">🔍</button>
+
+                        <form method="post" class="img-inline-form"
+                              onsubmit="return confirm('تمسح هاد الصورة التوضيحية؟')"
+                              action="{{ url_for('admin.product_image_delete', product_id=product.id, image_id=img.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="img-btn img-btn-del" title="حذف">×</button>
+                        </form>
+
+                        <form method="post" class="img-inline-form"
+                              action="{{ url_for('admin.product_image_move', product_id=product.id, image_id=img.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="dir" value="down">
+                            <button type="submit" class="img-btn img-btn-move"
+                                    title="حرّكها لليسار">›</button>
+                        </form>
+                    </div>
+
+                    {# وصف قصير يبان تحت الصورة فصفحة المنتج #}
+                    <input type="text" class="extra-caption"
+                           value="{{ img.caption or '' }}" maxlength="200"
+                           placeholder="وصف قصير (اختياري)"
+                           aria-label="وصف الصورة"
+                           data-url="{{ url_for('admin.product_image_caption', product_id=product.id, image_id=img.id) }}">
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="hint empty-note">ماكانش صور توضيحية بعد.</p>
+            {% endif %}
+
+            {# رافع مستقل — نفس المسار مع kind=extra #}
+            <div class="field uploader"
+                 data-url="{{ url_for('admin.product_image_upload', product_id=product.id) }}"
+                 data-kind="extra">
+                <span class="uploader-label">زيد صور توضيحية</span>
+                <input type="file" id="extraPicker" accept="image/*" multiple>
+                <small class="hint">
+                    JPG / PNG / WebP — الحد الأقصى 5 ميغا للصورة.
+                </small>
+
+                <div class="upload-progress" id="extraProgress" hidden>
+                    <div class="upload-bar"><span id="extraBarFill"></span></div>
+                    <p class="upload-status" id="extraStatus" role="status"></p>
+                    <ul class="upload-list" id="extraList"></ul>
+                </div>
+            </div>
             {% endif %}
         </div>
     </div>
@@ -1381,16 +1464,23 @@ window.getCsrf = window.getCsrf || function () {
  * الحل: كل صورة طلب مستقل بـXMLHttpRequest (باش نقراو تقدّم الرفع
  * الحقيقي — `fetch` ما يعطيش تقدّم الرفع). زر الحفظ يتقفل حتى يكملو.
  */
-(function () {
-    var box = document.querySelector('.uploader');
+/* ⚠️ ولّى يخدم رافعين: صور المنتج وصور توضيحية. كل واحد عندو
+   عناصرو الخاصة، والفرق بيناتهم `data-kind` اللي يتبعث للسيرفر. */
+function initUploader(box) {
     if (!box) return;
 
-    var picker = document.getElementById('imagePicker');
-    var wrap = document.getElementById('uploadProgress');
-    var fill = document.getElementById('uploadBarFill');
-    var status = document.getElementById('uploadStatus');
-    var list = document.getElementById('uploadList');
+    var ids = box.dataset.kind === 'extra'
+        ? ['extraPicker', 'extraProgress', 'extraBarFill', 'extraStatus', 'extraList']
+        : ['imagePicker', 'uploadProgress', 'uploadBarFill', 'uploadStatus', 'uploadList'];
+
+    var picker = document.getElementById(ids[0]);
+    var wrap = document.getElementById(ids[1]);
+    var fill = document.getElementById(ids[2]);
+    var status = document.getElementById(ids[3]);
+    var list = document.getElementById(ids[4]);
     var form = document.getElementById('productForm');
+
+    if (!picker) return;
 
     var busy = false;
 
@@ -1433,6 +1523,8 @@ window.getCsrf = window.getCsrf || function () {
             var body = new FormData();
             body.append('image', file);
             body.append('csrf_token', getCsrf());
+            // صورة منتج ولا توضيحية — السيرفر يفرّق بيهم
+            body.append('kind', box.dataset.kind || 'main');
 
             var xhr = new XMLHttpRequest();
             xhr.open('POST', box.dataset.url);
@@ -1522,7 +1614,45 @@ window.getCsrf = window.getCsrf || function () {
 
         step(0);
     });
-})();
+}
+
+// نشغّلو كل الرافعين الموجودين فالصفحة
+document.querySelectorAll('.uploader').forEach(initUploader);
+
+/* ---------- وصف الصورة التوضيحية ---------- */
+/* يحفظ عند مغادرة الحقل، غير إذا تبدّلت القيمة فعلاً. */
+document.addEventListener('focusin', function (e) {
+    var i = e.target.closest('.extra-caption');
+    if (i) i.dataset.was = i.value.trim();
+});
+
+document.addEventListener('focusout', function (e) {
+    var input = e.target.closest('.extra-caption');
+    if (!input) return;
+    if (input.value.trim() === (input.dataset.was || '')) return;
+
+    var body = new FormData();
+    body.append('caption', input.value.trim());
+    body.append('csrf_token', getCsrf());
+
+    input.classList.add('is-saving');
+
+    fetch(input.dataset.url, {
+        method: 'POST',
+        body: body,
+        headers: { 'X-Requested-With': 'fetch' },
+    })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            input.classList.remove('is-saving');
+            input.classList.toggle('is-bad', !d.ok);
+            if (d.ok) input.dataset.was = input.value.trim();
+        })
+        .catch(function () {
+            input.classList.remove('is-saving');
+            input.classList.add('is-bad');
+        });
+});
 </script>
 
 {% endblock %}

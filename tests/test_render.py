@@ -553,6 +553,143 @@ def main():
         check("الاسم المكرر مرفوض",
               db.session.get(_C, other_id).name == "تصنيف آخر")
 
+    # ───────── 7.14) صور توضيحية ─────────
+    section("7.14 صور أخرى (توضيحية)")
+    from models import ProductImage as _PI
+
+    with app.app_context():
+        main_before = len(_P.query.filter_by(slug=slug).first().main_images)
+
+    # نرفعو صورة توضيحية
+    r = client.post(up, data={"image": fake_image(800, "howto.jpg"),
+                              "kind": "extra"},
+                    content_type="multipart/form-data",
+                    headers={"X-Requested-With": "fetch"})
+    check(f"رفع صورة توضيحية ({r.status_code})", r.status_code == 200)
+    check("الرد يقول أنها توضيحية",
+          bool(r.get_json() and r.get_json().get("is_extra")))
+    extra_id = r.get_json().get("id") if r.status_code == 200 else None
+
+    with app.app_context():
+        prod4 = _P.query.filter_by(slug=slug).first()
+        check("صور المنتج ما زادتش", len(prod4.main_images) == main_before,
+              f"{len(prod4.main_images)} بدل {main_before}")
+        check("الصورة التوضيحية اتزادت", len(prod4.extra_images) == 1)
+        check("⚠️ ما تدخلش فترتيب الموديلات",
+              "howto" not in " ".join(prod4._image_rank.keys()))
+        check("ما تبانش فمعرض المتجر",
+              all("howto" not in g for g in prod4.gallery_images))
+
+    # التوضيحية ما تقدرش تكون رئيسية
+    with app.app_context():
+        old_main = _P.query.filter_by(slug=slug).first().image_filename
+    r = client.post(f"/admin/products/{pid}/images/{extra_id}/make-main")
+    with app.app_context():
+        check("التوضيحية مرفوضة كصورة رئيسية",
+              _P.query.filter_by(slug=slug).first().image_filename == old_main)
+
+    # الموديل ما يقدرش يترتبط بصورة توضيحية
+    with app.app_context():
+        vid3 = _V.query.filter_by(product_id=pid).first().id
+        extra_name = _P.query.filter_by(slug=slug).first().extra_images[0].image_filename
+    r = client.post(f"/admin/variants/{vid3}/image",
+                    data={"image_filename": extra_name},
+                    headers={"X-Requested-With": "fetch"})
+    check("الموديل ما يترتبطش بصورة توضيحية", r.status_code == 400,
+          str(r.status_code))
+
+    # الوصف
+    r = client.post(f"/admin/products/{pid}/images/{extra_id}/caption",
+                    data={"caption": "كيفاش تركّبها على الصينية"},
+                    headers={"X-Requested-With": "fetch"})
+    check(f"حفظ الوصف ({r.status_code})", r.status_code == 200)
+    with app.app_context():
+        check("الوصف انحفظ",
+              db.session.get(_PI, extra_id).caption == "كيفاش تركّبها على الصينية")
+
+    r = client.post(f"/admin/products/{pid}/images/{extra_id}/caption",
+                    data={"caption": "x" * 250},
+                    headers={"X-Requested-With": "fetch"})
+    check("الوصف الطويل مرفوض", r.status_code == 400)
+
+    # صفحة المنتج
+    shop_html = client.get(f"/product/{slug}").get_data(as_text=True)
+    check("قسم الصور التوضيحية يبان", "extra-shots" in shop_html)
+    check("الوصف يبان تحت الصورة",
+          "كيفاش تركّبها على الصينية" in shop_html)
+
+    # ⚠️ القسم لازم يجي **بعد** الشراء، ماشي قبل
+    i_cart = shop_html.find("add-to-cart-form")
+    i_extra = shop_html.find("extra-shots")
+    check("القسم تحت زر الشراء", 0 < i_cart < i_extra,
+          f"{i_cart} vs {i_extra}")
+
+    # اللوحة
+    adm = client.get(f"/admin/products/{pid}/edit").get_data(as_text=True)
+    check("رافع الصور التوضيحية موجود", 'id="extraPicker"' in adm)
+    check("حقل الوصف موجود", "extra-caption" in adm)
+
+    # منتج بلا صور توضيحية: القسم ما يبانش
+    bare_shop = client.get(f"/product/bare").get_data(as_text=True) \
+        if client.get("/product/bare").status_code == 200 else ""
+    if bare_shop:
+        check("منتج بلا توضيحية: القسم مخفي", "extra-shots" not in bare_shop)
+
+    # ───────── 7.15) أرقام القائمة الجانبية ─────────
+    section("7.15 أرقام القائمة الجانبية")
+    from models import Order as _O, Category as _Cat
+
+    with app.app_context():
+        n_products = _P.query.count()
+        n_cats = _Cat.query.count()
+
+    nav = client.get("/admin/products").get_data(as_text=True)
+    check("رقم المنتجات يبان",
+          f'<span class="nav-count">{n_products}</span>' in nav,
+          f"متوقّع {n_products}")
+    check("رقم التصنيفات يبان",
+          f'<span class="nav-count">{n_cats}</span>' in nav,
+          f"متوقّع {n_cats}")
+
+    # الطلبيات: بلا طلبيات → ماكانش رقم
+    with app.app_context():
+        check("ماكانش طلبيات بعد", _O.query.count() == 0)
+    check("بلا طلبيات: ماكانش رقم للطلبيات",
+          nav.count("nav-count") == 2, f"لقينا {nav.count('nav-count')}")
+
+    # نزيدو طلبية جديدة → لازم شارة ذهبية (تنبيه) ماشي رقم هادي
+    with app.app_context():
+        db.session.add(_O(
+            order_number="BD-TEST01", customer_name="اختبار",
+            customer_phone="0550000000", wilaya_code="16",
+            wilaya_name="الجزائر", commune="باب الوادي",
+            delivery_type="home", shipping_price=500,
+            subtotal=2000, total=2500, status=_O.STATUS_PENDING,
+        ))
+        db.session.commit()
+
+    nav2 = client.get("/admin/orders").get_data(as_text=True)
+    check("الطلبية الجديدة تبان كشارة تنبيه (ذهبية)",
+          '<span class="nav-badge" title="طلبيات جديدة ما تواصلتش معاهم">1</span>' in nav2)
+
+    # نأكّدو الطلبية → التنبيه يختفي ويولّي جرد
+    with app.app_context():
+        o = _O.query.filter_by(order_number="BD-TEST01").first()
+        o.status = _O.STATUS_CONFIRMED
+        db.session.commit()
+
+    nav3 = client.get("/admin/orders").get_data(as_text=True)
+    check("بعد التأكيد: التنبيه يختفي",
+          'title="طلبيات جديدة ما تواصلتش معاهم"' not in nav3)
+    check("ويولّي رقم جرد هادي",
+          nav3.count('<span class="nav-count">') == 3,
+          f"لقينا {nav3.count(chr(60) + 'span class=' + chr(34) + 'nav-count' + chr(34) + chr(62))}")
+
+    # ⚠️ الرقم ما يبانش لزائر ماشي أدمن
+    anon = app.test_client()
+    pub = anon.get("/").get_data(as_text=True)
+    check("صفحات المتجر ما فيهاش أرقام اللوحة", "nav-count" not in pub)
+
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")
     import glob
