@@ -75,6 +75,16 @@ class Category(db.Model):
 class ProductImage(db.Model):
     """
     صورة من صور المنتج (منتج واحد يقدر يكون عندو بزاف صور).
+
+    فيه نوعين من الصور، والفرق بيناتهم مهم:
+
+    1) **صور المنتج** (`is_extra = False`) — الصور الحقيقية للسلعة.
+       هاذو المربوطين بالموديلات، وترتيبهم يحدّد ترتيب الموديلات
+       والافتراضي منهم.
+
+    2) **صور أخرى** (`is_extra = True`) — توضيحية برك: كيفاش يتستعمل،
+       وين يتحط، مقاسات... ما تتربطش بموديل، وما تدخلش فالترتيب.
+       تبان تحت المعرض الرئيسي فصفحة المنتج.
     """
 
     __tablename__ = "product_images"
@@ -83,6 +93,15 @@ class ProductImage(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
     image_filename = db.Column(db.String(255), nullable=False)
     sort_order = db.Column(db.Integer, nullable=False, default=0)  # ترتيب الظهور فالمعرض
+
+    # ⚠️ `default=False` + `server_default` باش الصفوف القديمة تولّي
+    # كلها صور منتج عادية بعد الهجرة — ماشي NULL.
+    is_extra = db.Column(
+        db.Boolean, nullable=False, default=False, server_default="0"
+    )
+
+    # وصف قصير يبان تحت الصورة التوضيحية («كيفاش تركّبها»)
+    caption = db.Column(db.String(200))
 
     product = db.relationship("Product", back_populates="images")
 
@@ -408,12 +427,14 @@ class Product(db.Model):
     @property
     def gallery_images(self):
         """
-        قائمة كل صور المنتج للمعرض. إذا عندو صور فـProductImage، نستعملها.
+        قائمة صور المنتج للمعرض. إذا عندو صور فـProductImage، نستعملها.
         وإلا نرجعو للصورة الرئيسية القديمة (image_filename) باش التوافق يبقى خدام
         حتى للمنتجات اللي زدناها قبل ميزة الصور المتعددة.
+
+        ⚠️ الصور التوضيحية **مستثناة** — عندها قسمها الخاص تحت المعرض.
         """
-        if self.images:
-            return [img.image_filename for img in self.images]
+        if self.main_images:
+            return [img.image_filename for img in self.main_images]
         if self.image_filename:
             return [self.image_filename]
         return []
@@ -433,9 +454,26 @@ class Product(db.Model):
     # ══════════════════════════════════════════════════════════
 
     @property
+    def main_images(self):
+        """صور المنتج الحقيقية — هي اللي فالمعرض وتتربط بالموديلات."""
+        return [i for i in self.images if not i.is_extra]
+
+    @property
+    def extra_images(self):
+        """
+        صور توضيحية — كيفاش يتستعمل، وين يتحط.
+        تبان تحت المعرض الرئيسي، وما تدخلش فترتيب الموديلات.
+        """
+        return [i for i in self.images if i.is_extra]
+
+    @property
     def _image_rank(self):
-        """خريطة: اسم ملف الصورة → ترتيبها فالمعرض."""
-        return {img.image_filename: i for i, img in enumerate(self.images)}
+        """
+        خريطة: اسم ملف الصورة → ترتيبها فالمعرض.
+
+        ⚠️ الصور التوضيحية مستثناة — ما تأثّرش على ترتيب الموديلات.
+        """
+        return {img.image_filename: i for i, img in enumerate(self.main_images)}
 
     @property
     def ordered_variants(self):

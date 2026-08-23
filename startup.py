@@ -46,6 +46,7 @@ def run():
         # المتكرر آمن تمامًا.
         _repair_stale_communes(db)
         _add_missing_columns(db)
+        _fix_null_flags(db)
 
         # ---------- 1.7) البلديات ----------
         _seed_communes()
@@ -99,6 +100,45 @@ def run():
             print(f"   ⚠️ تنظيف الزوار ما خدمش: {e}")
 
         print("✅ التجهيز خلص — نشغّلو الموقع\n")
+
+
+def _fix_null_flags(db):
+    """
+    يصلّح الأعمدة المنطقية اللي بقات NULL.
+
+    ⚠️ علاش لازم؟ إذا عمود انزاد قبل ما نحطّو `DEFAULT FALSE`، الصفوف
+    القديمة تولّي NULL. وفـSQL، `NULL == False` ترجّع NULL ماشي True —
+    فالصفوف يختفيو من أي فلترة. صرا مع `product_images.is_extra`:
+    كل صور المنتجات القديمة كانت غادي تختفي من المعرض.
+
+    التشغيل المتكرر آمن — يمسّ غير الصفوف اللي فيها NULL.
+    """
+    from sqlalchemy import text, inspect
+
+    targets = [
+        ("product_images", "is_extra", "0"),
+    ]
+
+    inspector = inspect(db.engine)
+    tables = set(inspector.get_table_names())
+
+    for table, column, default in targets:
+        if table not in tables:
+            continue
+        if column not in {c["name"] for c in inspector.get_columns(table)}:
+            continue
+
+        try:
+            result = db.session.execute(
+                text(f"UPDATE {table} SET {column} = {default} "
+                     f"WHERE {column} IS NULL")
+            )
+            db.session.commit()
+            if result.rowcount:
+                print(f"   🔧 صلّحنا {result.rowcount} صف فـ{table}.{column}")
+        except Exception as e:
+            db.session.rollback()
+            print(f"   ⚠️ ما قدرناش نصلّحو {table}.{column}: {e}")
 
 
 def _seed_communes():
@@ -190,6 +230,11 @@ def _add_missing_columns(db):
         ("orders", "pickup_point_id", "VARCHAR(80)"),
         ("orders", "pickup_point_name", "VARCHAR(200)"),
         ("communes", "daira", "VARCHAR(150)"),
+        # ⚠️ `DEFAULT FALSE` ضروري: بلاه، الصفوف القديمة تولّي NULL،
+        # و`img.is_extra == False` ما تلقاهمش (NULL ماشي False فـSQL).
+        # النتيجة: كل صور المنتجات القديمة تختفي من المعرض.
+        ("product_images", "is_extra", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("product_images", "caption", "VARCHAR(200)"),
     ]
 
     inspector = inspect(db.engine)
