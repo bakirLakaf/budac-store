@@ -1635,16 +1635,21 @@ def reviews_list():
         query = query.filter_by(is_approved=False)
     elif show == "approved":
         query = query.filter_by(is_approved=True)
+    elif show == "store":
+        # تقييمات المتجر وحدها — مفيدة كي تبغي تراجعهم دفعة
+        query = query.filter(Review.product_id.is_(None))
 
     reviews = query.order_by(Review.created_at.desc()).limit(200).all()
 
     pending_count = Review.query.filter_by(is_approved=False).count()
     approved_count = Review.query.filter_by(is_approved=True).count()
+    store_count = Review.query.filter(Review.product_id.is_(None)).count()
 
     return render_template(
         "admin/reviews.html",
         reviews=reviews, show=show,
         pending_count=pending_count, approved_count=approved_count,
+        store_count=store_count,
     )
 
 

@@ -12,6 +12,10 @@
        class="status-tab {{ 'is-active' if show == 'approved' }}">
         منشورة <span class="tab-count">{{ approved_count }}</span>
     </a>
+    <a href="{{ url_for('admin.reviews_list', show='store') }}"
+       class="status-tab {{ 'is-active' if show == 'store' }}">
+        🏪 المتجر <span class="tab-count">{{ store_count }}</span>
+    </a>
     <a href="{{ url_for('admin.reviews_list', show='all') }}"
        class="status-tab {{ 'is-active' if show == 'all' }}">الكل</a>
 </div>
@@ -21,12 +25,24 @@
 {% endif %}
 
 {% if reviews %}
+<div class="admin-table-wrap">
 <table class="admin-table">
     <thead><tr><th>المنتج</th><th>الاسم</th><th>التقييم</th><th>الرأي</th><th>التاريخ</th><th></th></tr></thead>
     <tbody>
         {% for r in reviews %}
         <tr class="{{ 'row-muted' if not r.is_approved }}">
-            <td><a href="{{ url_for('admin.product_form', product_id=r.product_id) }}" class="row-link">{{ r.product.name }}</a></td>
+            {# 🔴 كان `r.product.name` مباشرة — يطيح بـNone لتقييمات
+               المتجر (product_id فارغ). #}
+            <td>
+                {% if r.is_store_review %}
+                <span class="tag tag-gold">🏪 المتجر</span>
+                {% elif r.product %}
+                <a href="{{ url_for('admin.product_form', product_id=r.product_id) }}"
+                   class="row-link">{{ r.product.name }}</a>
+                {% else %}
+                <span class="muted-cell">منتج محذوف</span>
+                {% endif %}
+            </td>
             <td>{{ r.author_name }}</td>
             <td><span class="review-stars-admin">{{ r.stars }}</span></td>
             <td class="review-comment-cell">{{ r.comment or '—' }}</td>
@@ -48,6 +64,7 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% else %}
 <div class="empty-box"><p>ماكاين حتى تقييم هنا.</p></div>
 {% endif %}

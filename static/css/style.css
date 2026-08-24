@@ -885,6 +885,10 @@ a:focus-visible, button:focus-visible {
 .status-pill { display: inline-block; padding: 4px 14px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .status-pending { background: #FFF3D6; color: #8A6D0F; }
 .status-confirmed { background: #E0EDFB; color: #1B5FA8; }
+/* ⚠️ الحالات الجديدة لازم يكون عندها لون، وإلا تبان بلا خلفية
+   وتختلط مع النص العادي. */
+.status-preparing { background: #FDF1D8; color: #8A6300; }
+.status-prepared { background: #E4F3E9; color: #1E6B44; }
 .status-shipped { background: #EFE9F7; color: #5B3E8E; }
 .status-delivered { background: #DFF3E7; color: #2E7D53; }
 .status-cancelled { background: #FBE3E0; color: #C0392B; }
@@ -3327,4 +3331,288 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
         grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
         gap: 12px;
     }
+}
+
+/* ═══════════ تقييمات المتجر ═══════════ */
+.store-reviews {
+    max-width: 760px;
+    margin: 0 auto 56px;
+    padding: 24px 16px 0;
+}
+
+.page-sub {
+    margin: -6px 0 24px;
+    color: var(--color-ink-soft);
+    font-size: 15px;
+}
+
+/* ---------- الملخّص ---------- */
+.rv-summary {
+    display: flex; flex-wrap: wrap; gap: 24px; align-items: center;
+    padding: 20px;
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    background: var(--color-surface);
+    margin-bottom: 24px;
+}
+
+.rv-score { text-align: center; min-width: 120px; }
+.rv-avg {
+    display: block;
+    font-size: 44px; font-weight: 900; line-height: 1;
+    color: var(--color-primary);
+}
+.rv-stars { display: block; margin: 4px 0; color: var(--color-gold); font-size: 19px; }
+.rv-count { font-size: 13px; color: var(--color-ink-soft); }
+
+.rv-bars { flex: 1; min-width: 220px; display: grid; gap: 5px; }
+.rv-bar-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.rv-bar-label { width: 34px; color: var(--color-ink-soft); white-space: nowrap; }
+.rv-bar {
+    flex: 1; height: 8px; border-radius: 99px;
+    background: rgba(46, 26, 71, 0.08); overflow: hidden;
+}
+.rv-bar > span { display: block; height: 100%; background: var(--color-gold); }
+.rv-bar-count { width: 26px; text-align: end; color: var(--color-ink-soft); }
+
+/* ---------- بطاقات التقييم ---------- */
+.rv-list { display: grid; gap: 12px; margin-bottom: 32px; }
+
+.rv-card {
+    padding: 14px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: var(--color-surface);
+}
+.rv-card-top {
+    display: flex; justify-content: space-between;
+    align-items: center; gap: 10px; margin-bottom: 6px;
+}
+.rv-name { color: var(--color-primary); font-size: 14.5px; }
+.rv-card-stars { color: var(--color-gold); font-size: 15px; white-space: nowrap; }
+.rv-comment { margin: 0 0 8px; line-height: 1.7; color: var(--color-ink); }
+.rv-date { font-size: 12px; color: var(--color-ink-soft); }
+
+.rv-empty {
+    padding: 32px 20px; text-align: center;
+    border: 1px dashed var(--color-border);
+    border-radius: 16px;
+    margin-bottom: 28px;
+}
+
+/* ---------- الفورم ---------- */
+.rv-form-box {
+    padding: 20px;
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    background: var(--color-surface);
+}
+
+.rv-form { display: grid; gap: 14px; margin-top: 14px; }
+
+.rv-field { display: grid; gap: 6px; }
+.rv-field > span { font-size: 13.5px; font-weight: 700; color: var(--color-primary); }
+.rv-field input, .rv-field textarea {
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    font-family: inherit; font-size: 15px;
+    background: var(--color-bg);
+}
+.rv-field input:focus, .rv-field textarea:focus {
+    outline: none; border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-border);
+}
+
+.rv-rating { border: none; padding: 0; margin: 0; }
+.rv-rating legend {
+    font-size: 13.5px; font-weight: 700; color: var(--color-primary);
+    margin-bottom: 4px; padding: 0;
+}
+
+/* ⚠️ النجوم بـradio: الترتيب فالـHTML من 5 لـ1، والـCSS يلوّن
+   المختار وكل اللي بعدو (`~`). هكذا تخدم بلا JavaScript. */
+.rv-star-pick {
+    display: inline-flex; flex-direction: row-reverse;
+    gap: 4px; font-size: 32px; line-height: 1;
+}
+.rv-star-pick input { position: absolute; opacity: 0; width: 0; height: 0; }
+.rv-star-pick label {
+    color: rgba(46, 26, 71, 0.20);
+    cursor: pointer;
+    transition: color 0.12s, transform 0.12s;
+}
+.rv-star-pick label:hover { transform: scale(1.15); }
+.rv-star-pick input:checked ~ label { color: var(--color-gold); }
+.rv-star-pick input:focus-visible + label {
+    outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 4px;
+}
+
+@media (max-width: 640px) {
+    .rv-summary { gap: 16px; padding: 16px; }
+    .rv-avg { font-size: 36px; }
+}
+
+/* ═══════════ طلبياتي ═══════════ */
+.my-orders {
+    max-width: 720px;
+    margin: 0 auto 56px;
+    padding: 24px 16px 0;
+}
+
+/* ---------- فورم البحث ---------- */
+.mo-lookup {
+    padding: 18px;
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    background: var(--color-surface);
+    margin-bottom: 22px;
+}
+.mo-lookup-title {
+    margin: 0 0 12px;
+    font-size: 15px; font-weight: 800;
+    color: var(--color-primary);
+}
+.mo-lookup-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin-bottom: 12px;
+}
+.mo-field { display: grid; gap: 5px; }
+.mo-field > span { font-size: 13px; font-weight: 700; color: var(--color-primary); }
+.mo-field input {
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-bg);
+    font-family: inherit; font-size: 15px;
+}
+.mo-field input:focus {
+    outline: none; border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(46, 26, 71, 0.10);
+}
+
+.mo-msg { margin: 8px 0 0; font-size: 13px; min-height: 18px; }
+.mo-msg.is-ok { color: var(--color-sage); }
+.mo-msg.is-bad { color: var(--color-blush); }
+
+/* ---------- بطاقة الطلبية ---------- */
+.mo-card {
+    padding: 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    background: var(--color-surface);
+    margin-bottom: 14px;
+}
+.mo-card-top {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 14px;
+}
+.mo-num { flex: 1; font-size: 16px; color: var(--color-primary); }
+.mo-remove {
+    width: 26px; height: 26px;
+    border: none; border-radius: 50%;
+    background: var(--color-bg);
+    color: var(--color-ink-soft);
+    font-size: 17px; line-height: 1; cursor: pointer;
+}
+.mo-remove:hover { background: var(--color-border); }
+
+/* ---------- شريط التقدّم ---------- */
+/* ⚠️ عمودي ماشي أفقي: 6 مراحل بأسماء عربية ما يدخلوش فعرض
+   الهاتف. العمودي يقرا مليح فكل الشاشات. */
+.mo-steps {
+    list-style: none; margin: 0 0 14px; padding: 0;
+    position: relative;
+}
+.mo-step {
+    display: flex; align-items: center; gap: 10px;
+    padding: 5px 0;
+    font-size: 13.5px;
+    color: var(--color-ink-soft);
+}
+.mo-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--color-border);
+    flex-shrink: 0;
+    position: relative;
+}
+/* الخط اللي يربط النقاط */
+.mo-step:not(:last-child) .mo-dot::after {
+    content: ""; position: absolute;
+    top: 12px; inset-inline-start: 5px;
+    width: 2px; height: 16px;
+    background: var(--color-border);
+}
+.mo-step.is-done { color: var(--color-ink); }
+.mo-step.is-done .mo-dot { background: var(--color-sage); }
+.mo-step.is-done .mo-dot::after { background: var(--color-sage); }
+.mo-step.is-active { color: var(--color-primary); font-weight: 800; }
+.mo-step.is-active .mo-dot {
+    background: var(--color-gold);
+    box-shadow: 0 0 0 4px rgba(201, 162, 39, 0.22);
+}
+
+.mo-cancelled {
+    padding: 10px 12px; border-radius: 10px;
+    background: rgba(201, 138, 138, 0.14);
+    color: var(--color-blush);
+    font-size: 13.5px; font-weight: 700;
+    margin: 0 0 14px;
+}
+
+/* ---------- المنتجات والمجاميع ---------- */
+.mo-items {
+    list-style: none; margin: 0 0 12px; padding: 12px 0;
+    border-block: 1px solid var(--color-border);
+    display: grid; gap: 7px;
+}
+.mo-items li {
+    display: flex; justify-content: space-between; gap: 10px;
+    font-size: 13.5px;
+}
+.mo-items small { color: var(--color-ink-soft); }
+
+.mo-row {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 4px 0; font-size: 13.5px;
+    color: var(--color-ink-soft);
+}
+.mo-row strong { color: var(--color-ink); }
+.mo-total {
+    margin-top: 6px; padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+    font-size: 15px;
+}
+.mo-total strong { color: var(--color-primary); font-size: 17px; }
+
+/* ---------- الأزرار ---------- */
+.mo-actions {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;
+}
+.mo-actions .btn-ghost {
+    padding: 8px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+    font-family: inherit; font-size: 13px; font-weight: 700;
+    color: var(--color-primary);
+    cursor: pointer;
+}
+.mo-actions .btn-ghost:hover { background: var(--color-bg); }
+.mo-actions .mo-danger { color: var(--color-blush); }
+.mo-actions .mo-danger:hover { border-color: var(--color-blush); }
+
+.mo-locked { margin: 12px 0 0; }
+.mo-card-msg { margin: 10px 0 0; font-size: 13px; min-height: 16px; }
+.mo-card-msg.is-ok { color: var(--color-sage); }
+.mo-card-msg.is-bad { color: var(--color-blush); }
+
+.mo-empty {
+    padding: 34px 20px; text-align: center;
+    border: 1px dashed var(--color-border);
+    border-radius: 16px;
+}
+
+@media (max-width: 560px) {
+    .mo-lookup-row { grid-template-columns: 1fr; }
 }

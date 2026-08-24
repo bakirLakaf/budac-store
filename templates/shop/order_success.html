@@ -89,10 +89,37 @@
 
             <div class="success-actions">
                 <a href="{{ url_for('shop.home') }}" class="btn-primary">كمّل التسوق</a>
-                <a href="{{ url_for('cart.track_order') }}" class="btn-ghost-link">تتبّع الطلبية</a>
+                <a href="{{ url_for('cart.my_orders') }}" class="btn-ghost-link">طلبياتي</a>
             </div>
         </div>
     </div>
 </section>
+
+<script>
+/* ═══════ حفظ الطلبية على هاد الجهاز ═══════
+   ⚠️ الزبون ما يحفظش رقم الطلبية عادة. نخزّنو المفتاح هنا تلقائيًا
+   باش كي يدخل «طلبياتي» يلقاها مستنّاه — بلا ما يكتب والو.
+
+   نخزّنو الرقم والهاتف برك، ماشي المعلومات: التفاصيل تتجاب من
+   السيرفر كل مرة، فالحالة تبقى صحيحة. */
+(function () {
+    var KEY = 'budac_orders';
+    var number = {{ order.order_number | tojson }};
+    var phone = {{ order.customer_phone | tojson }};
+
+    try {
+        var raw = localStorage.getItem(KEY);
+        var list = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(list)) list = [];
+
+        list = list.filter(function (o) { return o && o.n !== number; });
+        list.unshift({ n: number, p: phone });
+
+        localStorage.setItem(KEY, JSON.stringify(list.slice(0, 30)));
+    } catch (e) {
+        /* التخزين معطّل (تصفح خاص) — الزبون يقدر يزيدها يدويًا */
+    }
+})();
+</script>
 
 {% endblock %}

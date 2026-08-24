@@ -35,7 +35,51 @@
     </button>
 </div>
 
-<table class="admin-table">
+{# ═══════ بطاقات الموبايل ═══════
+   ⚠️ الجدول عندو 10 أعمدة — فشاشة 400px يتقصّ ويولّي الأدمن يزحلق
+   يمينًا ويسارًا. البطاقات توري نفس المعلومات فسطرين واضحين.
+   الاثنين موجودين، وCSS يخفي واحد حسب عرض الشاشة. #}
+<div class="order-cards">
+    {% for o in orders %}
+    <div class="order-card">
+        <div class="order-card-top">
+            <label class="order-card-pick">
+                <input type="checkbox" name="order_ids" value="{{ o.id }}"
+                       class="bulk-check" aria-label="اختر {{ o.order_number }}">
+            </label>
+            <a href="{{ url_for('admin.order_detail', order_id=o.id) }}"
+               class="order-card-num">{{ o.order_number }}</a>
+            <span class="status-pill status-{{ o.status }}">{{ o.status_label }}</span>
+        </div>
+
+        <div class="order-card-name">{{ o.customer_name }}</div>
+
+        <div class="order-card-meta">
+            <span>📍 {{ o.wilaya_name }}</span>
+            <span>📦 {{ o.item_count }} قطعة</span>
+            <span class="order-card-date">{{ o.created_at.strftime('%m-%d %H:%M') }}</span>
+        </div>
+
+        <div class="order-card-foot">
+            <strong class="order-card-total">{{ o.total_display }}</strong>
+
+            <div class="order-card-actions">
+                {% if o.whatsapp_phone %}
+                <a href="https://wa.me/{{ o.whatsapp_phone }}"
+                   target="_blank" rel="noopener"
+                   class="btn-admin btn-sm btn-ghost">💬 واتساب</a>
+                {% endif %}
+                <a href="tel:{{ o.customer_phone }}"
+                   class="btn-admin btn-sm btn-ghost" dir="ltr">📞 {{ o.customer_phone }}</a>
+                <a href="{{ url_for('admin.order_detail', order_id=o.id) }}"
+                   class="btn-admin btn-sm">فتح</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<table class="admin-table orders-table">
     <thead>
         <tr>
         <th style="width:34px"><input type="checkbox" id="bulkAll" aria-label="اختر الكل"></th>

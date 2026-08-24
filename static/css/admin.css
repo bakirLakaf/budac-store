@@ -490,6 +490,10 @@ body {
 }
 .status-pending { background: #FFF3D6; color: #8A6D0F; }
 .status-confirmed { background: #E0EDFB; color: #1B5FA8; }
+/* ⚠️ الحالات الجديدة لازم يكون عندها لون، وإلا تبان بلا خلفية
+   وتختلط مع النص العادي. */
+.status-preparing { background: #FDF1D8; color: #8A6300; }
+.status-prepared { background: #E4F3E9; color: #1E6B44; }
 .status-shipped { background: #EFE9F7; color: #5B3E8E; }
 .status-delivered { background: #DFF3E7; color: var(--a-ok); }
 .status-cancelled { background: #FBE3E0; color: var(--a-danger); }
@@ -1906,4 +1910,83 @@ img.thumb-sm:hover {
     border: 1px solid var(--a-border);
     font-size: 12px; font-weight: 700;
     color: var(--a-primary-light);
+}
+
+/* ═══════════ بطاقات الطلبيات — الموبايل ═══════════ */
+/* ⚠️ الجدول عندو 10 أعمدة، يتقصّ فالموبايل. نبدّلوه ببطاقات تحت
+   700px. الاثنين فالـHTML وCSS يخفي واحد — أبسط من JS وما فيهش
+   وميض عند التحميل. */
+.order-cards { display: none; }
+
+@media (max-width: 700px) {
+    .orders-table { display: none; }
+    .order-cards { display: grid; gap: 10px; }
+}
+
+.order-card {
+    padding: 12px 14px;
+    border: 1px solid var(--a-border);
+    border-radius: 14px;
+    background: var(--a-surface);
+}
+
+.order-card-top {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px;
+}
+.order-card-pick { display: flex; margin: 0; }
+.order-card-num {
+    flex: 1;
+    font-size: 15px; font-weight: 800;
+    color: var(--a-primary);
+    text-decoration: none;
+    direction: ltr; text-align: start;
+}
+
+.order-card-name {
+    font-size: 14px; font-weight: 700;
+    color: var(--a-primary);
+    margin-bottom: 6px;
+}
+
+.order-card-meta {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    font-size: 12px;
+    color: var(--a-primary-light);
+    margin-bottom: 10px;
+}
+.order-card-date { opacity: 0.75; }
+
+.order-card-foot {
+    display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: space-between; gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--a-border);
+}
+.order-card-total { font-size: 16px; color: var(--a-primary); }
+
+.order-card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ═══════════ الجداول الأخرى فالموبايل ═══════════ */
+/* ⚠️ بطاقات مخصّصة لكل جدول = تكرار كبير. للجداول اللي ماشي
+   الطلبيات، نديرو زحلقة أفقية نظيفة مع تثبيت العمود الأول —
+   الأدمن يشوف اسم المنتج ديما ويزحلق للباقي. */
+@media (max-width: 700px) {
+    .admin-table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-inline: -14px;
+        padding-inline: 14px;
+    }
+    .admin-table-wrap .admin-table { min-width: 640px; }
+
+    /* تلميح بصري أن فيه محتوى على الجنب */
+    .admin-table-wrap::after {
+        content: "← زحلق باش تشوف الباقي";
+        display: block;
+        padding: 6px 2px 0;
+        font-size: 11px;
+        color: var(--a-primary-light);
+        opacity: 0.7;
+    }
 }

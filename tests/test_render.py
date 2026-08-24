@@ -1136,6 +1136,256 @@ def main():
     check("عدد الخانات القابلة للنسخ ≥ 3",
           page9.count("copyable") >= 3, page9.count("copyable"))
 
+    # ───────── 7.22) الحالات الجديدة ─────────
+    section("7.22 قيد التجهيز · تم التجهيز")
+    from models import Order as _O5, Review as _R
+
+    check("STATUS_PREPARING موجودة", hasattr(_O5, "STATUS_PREPARING"))
+    check("STATUS_PREPARED موجودة", hasattr(_O5, "STATUS_PREPARED"))
+    check("«قيد التجهيز» فالتسميات",
+          _O5.STATUS_LABELS.get("preparing") == "قيد التجهيز")
+    check("«تم التجهيز» فالتسميات",
+          _O5.STATUS_LABELS.get("prepared") == "تم التجهيز")
+    check("الترتيب فيه 6 مراحل", len(_O5.STATUS_FLOW) == 6, _O5.STATUS_FLOW)
+    check("الترتيب منطقي: تجهيز قبل الشحن",
+          _O5.STATUS_FLOW.index("preparing") < _O5.STATUS_FLOW.index("shipped"))
+
+    css = open("static/css/admin.css", encoding="utf-8").read()
+    for st in ["preparing", "prepared"]:
+        check(f"لون .status-{st} معرّف", f".status-{st}" in css)
+
+    with app.app_context():
+        o = _O5.query.first()
+        o.status = "preparing"
+        db.session.commit()
+        oid_s = o.id
+    pg = client.get(f"/admin/orders/{oid_s}").get_data(as_text=True)
+    check("الحالة تبان فصفحة الطلبية", "قيد التجهيز" in pg)
+    check("⚠️ التعديل مسموح فحالة التجهيز",
+          "add-item-form" in pg or "ما تتعدّلش" not in pg)
+
+    # ───────── 7.23) بطاقات الموبايل ─────────
+    section("7.23 بطاقات الطلبيات للموبايل")
+    lst2 = client.get("/admin/orders").get_data(as_text=True)
+    check("البطاقات موجودة", "order-cards" in lst2)
+    check("الجدول مازال موجود (سطح المكتب)", "orders-table" in lst2)
+    check("البطاقة فيها المجموع", "order-card-total" in lst2)
+    check("البطاقة فيها زر واتساب", "wa.me" in lst2)
+
+    css_a = open("static/css/admin.css", encoding="utf-8").read()
+    check("CSS يخفي البطاقات فالكبير", ".order-cards { display: none; }" in css_a)
+    check("CSS يخفي الجدول فالموبايل",
+          ".orders-table { display: none; }" in css_a)
+
+    # الجداول الأخرى قابلة للزحلقة
+    # ⚠️ الغلاف يبان غير كي يكون فيه صفوف — صفحة فارغة ما تعرضش
+    # جدولاً أصلاً. نفحصو صفحات فيها بيانات.
+    for path, label in [("/admin/products", "المنتجات"),
+                        ("/admin/categories", "التصنيفات"),
+                        ("/admin/coupons", "الكوبونات")]:
+        pg2 = client.get(path).get_data(as_text=True)
+        check(f"{label}: جدول قابل للزحلقة", "admin-table-wrap" in pg2,
+              "الصفحة فارغة؟" if "admin-table" not in pg2 else "الغلاف ناقص")
+
+    # القالب نفسو فيه الغلاف حتى لو الصفحة فارغة درك
+    rv_tpl = open("templates/admin/reviews.html", encoding="utf-8").read()
+    check("قالب التقييمات فيه الغلاف", "admin-table-wrap" in rv_tpl)
+
+    # ───────── 7.24) تقييمات المتجر ─────────
+    section("7.24 تقييمات المتجر")
+    with app.app_context():
+        check("ماكانش تقييمات بالبداية", _R.store_stats() == (0, 0),
+              _R.store_stats())
+
+    # الصفحة تخدم وهي فارغة
+    r = client.get("/reviews")
+    check(f"/reviews يتعرض ({r.status_code})", r.status_code == 200)
+    empty_pg = r.get_data(as_text=True)
+    check("حالة فارغة صادقة (ماكانش 0 من 5)",
+          "rv-empty" in empty_pg and "aggregateRating" not in empty_pg)
+    check("الفورم موجود", "add_store_review" in empty_pg
+          or "rv-form" in empty_pg)
+
+    # إرسال تقييم
+    r = client.post("/reviews", data={"author_name": "أمين ب.",
+                                      "rating": 5,
+                                      "comment": "خدمة سريعة وتغليف مليح"})
+    check(f"إرسال التقييم ({r.status_code})", r.status_code in (200, 302))
+    with app.app_context():
+        rv = _R.query.filter(_R.product_id.is_(None)).first()
+        check("انحفظ كتقييم للمتجر", rv is not None and rv.product_id is None)
+        check("⚠️ ما يبانش قبل الموافقة", rv.is_approved is False)
+        check("is_store_review = True", rv.is_store_review is True)
+        check("target_label = المتجر", rv.target_label == "المتجر")
+        rid = rv.id
+
+    # ⚠️ ما يبانش قبل الموافقة — نفحصو **قائمة التقييمات** برك،
+    # لأن رسالة الشكر فالفلاش ممكن تكون فالصفحة كذلك.
+    pg3 = client.get("/reviews").get_data(as_text=True)
+    rv_section = pg3.split('class="rv-list"')[1] if 'class="rv-list"' in pg3 else ""
+    check("غير المعتمد ما يبانش فالقائمة",
+          "أمين ب." not in rv_section,
+          "موجود فالقائمة" if rv_section else "ماكانش قائمة (سليم)")
+
+    # بعد الموافقة
+    client.post(f"/admin/reviews/{rid}/approve")
+    pg4 = client.get("/reviews").get_data(as_text=True)
+    check("بعد الموافقة يبان", "أمين ب." in pg4)
+    check("البيانات المنظمة تبان", "aggregateRating" in pg4)
+    with app.app_context():
+        check("الإحصائيات (5.0, 1)", _R.store_stats() == (5.0, 1),
+              _R.store_stats())
+
+    # مدخلات فاسدة
+    for name, data in [
+        ("اسم فارغ", {"author_name": "", "rating": 5}),
+        ("اسم حرف واحد", {"author_name": "أ", "rating": 5}),
+        ("بلا نجوم", {"author_name": "سعاد", "rating": ""}),
+        ("نجوم 0", {"author_name": "سعاد", "rating": 0}),
+        ("نجوم 9", {"author_name": "سعاد", "rating": 9}),
+        ("نجوم نص", {"author_name": "سعاد", "rating": "abc"}),
+    ]:
+        before_n = None
+        with app.app_context():
+            before_n = _R.query.filter(_R.product_id.is_(None)).count()
+        client.post("/reviews", data=data)
+        with app.app_context():
+            after_n = _R.query.filter(_R.product_id.is_(None)).count()
+        check(f"{name} مرفوض", after_n == before_n, f"{before_n} → {after_n}")
+
+    # ⚠️ تقييم المتجر ما يبانش فصفحة منتج
+    prod_pg = client.get(f"/product/{slug}").get_data(as_text=True)
+    check("تقييم المتجر ما يبانش فصفحة المنتج", "أمين ب." not in prod_pg)
+
+    # لوحة الأدمن ما تطيحش مع تقييم بلا منتج
+    adm_r = client.get("/admin/reviews?show=all")
+    check(f"لوحة التقييمات تتعرض ({adm_r.status_code})",
+          adm_r.status_code == 200)
+    check("تبويب المتجر موجود", "🏪 المتجر" in adm_r.get_data(as_text=True))
+
+    adm_store = client.get("/admin/reviews?show=store")
+    check("فلترة تقييمات المتجر تخدم", adm_store.status_code == 200)
+    check("أمين يبان فيها", "أمين ب." in adm_store.get_data(as_text=True))
+
+    # الرابط فالفوتر
+    home = client.get("/").get_data(as_text=True)
+    check("رابط «آراء الزبائن» فالفوتر", "آراء الزبائن" in home)
+
+    # ───────── 7.25) طلبياتي ─────────
+    section("7.25 صفحة «طلبياتي» للزبون")
+    from models import Order as _O6
+
+    r = client.get("/my-orders")
+    check(f"الصفحة تتعرض ({r.status_code})", r.status_code == 200)
+    mo = r.get_data(as_text=True)
+    check("فورم البحث موجود", 'id="lookupForm"' in mo)
+    check("⚠️ يقرا CSRF من meta ماشي input",
+          'meta[name="csrf-token"]' in mo)
+
+    with app.app_context():
+        o = _O6.query.filter_by(order_number="BD-EDIT").first()
+        o.customer_phone = "0551486151"
+        o.status = _O6.STATUS_PENDING
+        o.tracking_number = None
+        db.session.commit()
+        onum = o.order_number
+
+    # البحث
+    r = client.post("/my-orders/lookup",
+                    data={"order_number": onum, "phone": "0551486151"})
+    check(f"البحث الصحيح ({r.status_code})", r.status_code == 200)
+    data = r.get_json() or {}
+    check("الرد فيه الطلبية", data.get("ok") and "order" in data)
+    if data.get("ok"):
+        od = data["order"]
+        check("فيه المراحل", len(od.get("steps", [])) == 6, len(od.get("steps", [])))
+        check("فيه المنتجات", len(od.get("items", [])) > 0)
+        check("can_edit = True فحالة «جديدة»", od.get("can_edit") is True)
+
+    # ⚠️ صيغ الهاتف المختلفة لازم تخدم كلها
+    for variant in ["0551486151", "551486151", "213551486151",
+                    "+213 551 48 61 51", "0551-48-61-51"]:
+        rr = client.post("/my-orders/lookup",
+                         data={"order_number": onum, "phone": variant})
+        check(f"هاتف «{variant}» يخدم", rr.status_code == 200, rr.status_code)
+
+    # ⚠️ الأمان: رقم صحيح + هاتف غالط = مرفوض
+    for name, num, ph in [
+        ("هاتف غالط", onum, "0999999999"),
+        ("رقم غالط", "BD-NOPE", "0551486151"),
+        ("بلا هاتف", onum, ""),
+        ("بلا رقم", "", "0551486151"),
+        ("هاتف حروف", onum, "abcdefgh"),
+    ]:
+        rr = client.post("/my-orders/lookup",
+                         data={"order_number": num, "phone": ph})
+        check(f"🔒 {name} مرفوض", rr.status_code == 404, rr.status_code)
+
+    # الرسالة وحدة — ما تكشفش واش الرقم موجود
+    r1 = client.post("/my-orders/lookup",
+                     data={"order_number": onum, "phone": "0999999999"})
+    r2 = client.post("/my-orders/lookup",
+                     data={"order_number": "BD-NOPE", "phone": "0999999999"})
+    check("🔒 نفس الرسالة للحالتين",
+          (r1.get_json() or {}).get("message") == (r2.get_json() or {}).get("message"))
+
+    # ملاحظة الزبون
+    r = client.post(f"/my-orders/{onum}/note",
+                    data={"phone": "0551486151",
+                          "note": "زيدلي 2 من الأبيض"})
+    check(f"إرسال ملاحظة ({r.status_code})", r.status_code == 200)
+    with app.app_context():
+        o = _O6.query.filter_by(order_number=onum).first()
+        check("الملاحظة انحفظات فالطلبية",
+              "زيدلي 2 من الأبيض" in (o.customer_note or ""),
+              o.customer_note)
+
+    r = client.post(f"/my-orders/{onum}/note",
+                    data={"phone": "0551486151", "note": "x"})
+    check("ملاحظة قصيرة مرفوضة", r.status_code == 400)
+
+    r = client.post(f"/my-orders/{onum}/note",
+                    data={"phone": "0999999999", "note": "محاولة اختراق"})
+    check("🔒 ملاحظة بهاتف غالط مرفوضة", r.status_code == 404)
+
+    # ⚠️ بعد ما تخرج للتوصيل: الزبون ما يقدرش يعدّل
+    with app.app_context():
+        o = _O6.query.filter_by(order_number=onum).first()
+        o.status = _O6.STATUS_SHIPPED
+        db.session.commit()
+        check("customer_can_edit = False فـ«فالطريق»",
+              o.customer_can_edit is False)
+
+    r = client.post(f"/my-orders/{onum}/note",
+                    data={"phone": "0551486151", "note": "بدّلي الموديل"})
+    check("🔒 التعديل مرفوض بعد الشحن", r.status_code == 400)
+    r = client.post(f"/my-orders/{onum}/cancel", data={"phone": "0551486151"})
+    check("🔒 الإلغاء مرفوض بعد الشحن", r.status_code == 400)
+    with app.app_context():
+        check("الحالة ما تبدّلتش",
+              _O6.query.filter_by(order_number=onum).first().status == "shipped")
+
+    # الإلغاء يخدم فحالة «جديدة»
+    with app.app_context():
+        o = _O6.query.filter_by(order_number=onum).first()
+        o.status = _O6.STATUS_PENDING
+        db.session.commit()
+    r = client.post(f"/my-orders/{onum}/cancel", data={"phone": "0551486151"})
+    check(f"الإلغاء يخدم ({r.status_code})", r.status_code == 200)
+    with app.app_context():
+        o = _O6.query.filter_by(order_number=onum).first()
+        check("الحالة ولّات «ملغاة»", o.status == "cancelled", o.status)
+        check("الملغاة ماكانش عندها مراحل", o.progress_steps == [],
+              o.progress_steps)
+
+    # صفحة النجاح تحفظ الطلبية تلقائيًا
+    succ = open("templates/shop/order_success.html", encoding="utf-8").read()
+    check("صفحة النجاح تحفظ فالتخزين المحلي", "budac_orders" in succ)
+
+    # الروابط اتبدّلو
+    home2 = client.get("/").get_data(as_text=True)
+    check("رابط «طلبياتي» فالموقع", "طلبياتي" in home2)
+
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")
     import glob

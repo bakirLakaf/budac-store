@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}آراء الزبائن — {{ store_name }}{% endblock %}
+{% block meta_description %}شوف واش يقولو زبائن {{ store_name }} على الخدمة والتوصيل وجودة المنتجات.{% endblock %}
+
+{% block content %}
+
+{# ⚠️ بيانات منظمة لجوجل — تخلّي النجوم تبان فنتائج البحث.
+   نعرضوها غير إذا كاين تقييمات حقيقية: `aggregateRating` بلا
+   تقييمات = جوجل يعتبرها مخالفة ويقدر يعاقب الموقع. #}
+{% if count %}
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Store",
+    "name": {{ store_name | tojson }},
+    "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "{{ avg }}",
+        "reviewCount": "{{ count }}",
+        "bestRating": "5",
+        "worstRating": "1"
+    }
+}
+</script>
+{% endif %}
+
+<section class="store-reviews">
+    <h1 class="page-heading">آراء الزبائن</h1>
+    <p class="page-sub">
+        رأيكم فالخدمة والتوصيل — ماشي فمنتج واحد.
+    </p>
+
+    {% if count %}
+    {# ───────── الملخّص ───────── #}
+    <div class="rv-summary">
+        <div class="rv-score">
+            <span class="rv-avg">{{ avg }}</span>
+            <span class="rv-stars">{{ "★" * (avg | round | int) }}{{ "☆" * (5 - (avg | round | int)) }}</span>
+            <span class="rv-count">{{ count }} تقييم</span>
+        </div>
+
+        {# توزيع النجوم — أصدق من رقم واحد، ويبيّن أنك ما تخبّيش والو #}
+        <div class="rv-bars">
+            {% for n in [5, 4, 3, 2, 1] %}
+            {% set c = breakdown.get(n, 0) %}
+            <div class="rv-bar-row">
+                <span class="rv-bar-label">{{ n }} ★</span>
+                <span class="rv-bar">
+                    <span style="width: {{ (c / count * 100) | round | int }}%"></span>
+                </span>
+                <span class="rv-bar-count">{{ c }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# ───────── التقييمات ───────── #}
+    <div class="rv-list">
+        {% for r in reviews %}
+        <article class="rv-card">
+            <div class="rv-card-top">
+                <strong class="rv-name">{{ r.author_name }}</strong>
+                <span class="rv-card-stars">{{ r.stars }}</span>
+            </div>
+            {% if r.comment %}
+            <p class="rv-comment">{{ r.comment }}</p>
+            {% endif %}
+            <span class="rv-date">{{ r.created_at.strftime('%Y-%m-%d') }}</span>
+        </article>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    {# ⚠️ حالة فارغة صادقة — ما نخترعوش تقييمات ولا نوريو «0 من 5» #}
+    <div class="rv-empty">
+        <p>مازال ماكانش تقييمات منشورة.</p>
+        <p class="hint">كون أول واحد يشارك رأيو 👇</p>
+    </div>
+    {% endif %}
+
+    {# ───────── فورم التقييم ───────── #}
+    <div class="rv-form-box" id="form">
+        <h2 class="section-heading">شارك رأيك</h2>
+        <p class="hint">رأيك يتنشر بعد المراجعة.</p>
+
+        <form method="post" action="{{ url_for('shop.add_store_review') }}"
+              class="rv-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <label class="rv-field">
+                <span>اسمك</span>
+                <input type="text" name="author_name" required
+                       maxlength="120" placeholder="مثلاً: أمين ب.">
+            </label>
+
+            <fieldset class="rv-rating">
+                <legend>تقييمك</legend>
+                {# ⚠️ النجوم بـradio ماشي JS — تخدم حتى بلا JavaScript،
+                   ولوحة المفاتيح تتنقل بيناتهم عادي. #}
+                <div class="rv-star-pick">
+                    {% for n in [5, 4, 3, 2, 1] %}
+                    <input type="radio" name="rating" id="star{{ n }}"
+                           value="{{ n }}" {{ 'required' if loop.first }}>
+                    <label for="star{{ n }}" title="{{ n }} من 5">★</label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+
+            <label class="rv-field">
+                <span>رأيك (اختياري)</span>
+                <textarea name="comment" rows="4" maxlength="1000"
+                          placeholder="كيفاش كانت التجربة؟ التوصيل، التغليف، الرد على الرسائل…"></textarea>
+            </label>
+
+            <button type="submit" class="btn-primary">ابعث رأيك</button>
+        </form>
+    </div>
+</section>
+
+{% endblock %}

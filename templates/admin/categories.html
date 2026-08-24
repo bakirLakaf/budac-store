@@ -6,7 +6,8 @@
 <div class="form-grid">
     <div class="form-col">
         {% if categories %}
-        <table class="admin-table">
+        <div class="admin-table-wrap">
+<table class="admin-table">
             <thead><tr><th>صورة</th><th>الاسم</th><th>الرابط</th><th>منتجات</th><th></th></tr></thead>
             <tbody>
                 {% for c in categories %}
@@ -54,6 +55,7 @@
                 {% endfor %}
             </tbody>
         </table>
+</div>
         {% else %}
         <div class="empty-box"><p>ماكاين حتى تصنيف بعد.</p></div>
         {% endif %}

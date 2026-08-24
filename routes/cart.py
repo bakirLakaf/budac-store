@@ -7,7 +7,7 @@ from flask import (
     session, flash, jsonify, abort,
 )
 
-from models import db, Coupon, Order, ShippingRate
+from models import db, Coupon, Order, ShippingRate, utcnow
 from services import cart as cart_service
 from services.marketing import (
     save_abandoned_cart, mark_cart_recovered, get_upsell_suggestions,
@@ -488,6 +488,148 @@ def track_order():
                 flash("ما لقيناش طلبية بهاد المعلومات — تأكد منهم", "error")
 
     return render_template("shop/track.html", order=order)
+
+
+# ══════════════════════════════════════════════════════════════
+# «طلبياتي» — الزبون يشوف ويعدّل طلبياتو
+#
+# ⚠️ ماكانش حسابات فالمتجر (دفع عند الاستلام، بلا تسجيل). فكيفاش
+# نعرفو الزبون؟ **رقم الطلبية + الهاتف** معًا — الاثنين لازمين باش
+# حد ما يقدرش يتصفح طلبيات الناس برقم عشوائي.
+#
+# والمتصفح يحفظ الطلبيات اللي فتحها (localStorage) باش ما يعاودش
+# يكتب الرقم كل مرة. التحقق يبقى ديما على السيرفر — المتصفح يخزّن
+# المفاتيح برك، ما يعطيش صلاحية.
+# ══════════════════════════════════════════════════════════════
+
+def _find_order(number, phone):
+    """يلقى طلبية بالرقم + الهاتف. يرجّع None إذا ما توافقوش."""
+    number = (number or "").strip().upper()
+    phone = (phone or "").strip()
+    if not number or not phone:
+        return None
+
+    # ⚠️ نقارنو الهاتف بالأرقام برك — الزبون يقدر يكتبو بصيغة أخرى
+    # (0555-11-22-33 ولا +213...) وهو نفس الرقم.
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if not digits:
+        return None
+
+    order = Order.query.filter_by(order_number=number).first()
+    if order is None:
+        return None
+
+    saved = "".join(ch for ch in (order.customer_phone or "") if ch.isdigit())
+    if saved[-9:] != digits[-9:]:
+        return None
+
+    return order
+
+
+@cart_bp.route("/my-orders")
+def my_orders():
+    """
+    صفحة «طلبياتي» — الواجهة تعمّر من التخزين المحلي عبر JS،
+    والتفاصيل تتجاب من `/my-orders/lookup`.
+    """
+    return render_template("shop/my_orders.html")
+
+
+@cart_bp.route("/my-orders/lookup", methods=["POST"])
+def my_orders_lookup():
+    """
+    يرجّع تفاصيل طلبية بالرقم + الهاتف (JSON).
+
+    ⚠️ رسالة وحدة للحالتين (رقم غالط ولا هاتف غالط) — باش ما نكشفوش
+    واش رقم الطلبية موجود.
+    """
+    number = request.form.get("order_number") or ""
+    phone = request.form.get("phone") or ""
+
+    order = _find_order(number, phone)
+    if order is None:
+        return jsonify({"ok": False,
+                        "message": "ما لقيناش طلبية بهاد المعلومات"}), 404
+
+    return jsonify({
+        "ok": True,
+        "order": {
+            "number": order.order_number,
+            "status": order.status,
+            "status_label": order.status_label,
+            "total": order.total_display,
+            "wilaya": order.wilaya_name,
+            "delivery": order.delivery_type_label,
+            "tracking": order.tracking_number or "",
+            "created": order.created_at.strftime("%Y-%m-%d"),
+            "can_edit": order.customer_can_edit,
+            "steps": order.progress_steps,
+            "items": [
+                {
+                    "name": it.item_name,
+                    "variant": it.variant_label or "",
+                    "quantity": it.quantity,
+                    "total": it.line_total_display,
+                }
+                for it in order.items
+            ],
+        },
+    })
+
+
+@cart_bp.route("/my-orders/<number>/cancel", methods=["POST"])
+def my_order_cancel(number):
+    """الزبون يلغي طلبيتو — غير قبل ما تخرج للتوصيل."""
+    order = _find_order(number, request.form.get("phone"))
+    if order is None:
+        return jsonify({"ok": False, "message": "ما لقيناش الطلبية"}), 404
+
+    if not order.customer_can_edit:
+        return jsonify({
+            "ok": False,
+            "message": "الطلبية خرجات للتوصيل — تواصل معانا فالواتساب",
+        }), 400
+
+    order.status = Order.STATUS_CANCELLED
+    db.session.commit()
+
+    return jsonify({"ok": True, "message": "اتلغات الطلبية"})
+
+
+@cart_bp.route("/my-orders/<number>/note", methods=["POST"])
+def my_order_note(number):
+    """
+    الزبون يبعث ملاحظة على طلبيتو (زيادة، نقصان، تبديل موديل).
+
+    ⚠️ علاش ملاحظة ماشي تعديل مباشر؟ الزيادة والتبديل يحتاجو تحقّق
+    من التوفّر والسعر. نخلّيو الأدمن يشوفها ويعدّل بيدو — أأمن من
+    تعديل تلقائي يقدر يخرّب الفاتورة.
+    """
+    order = _find_order(number, request.form.get("phone"))
+    if order is None:
+        return jsonify({"ok": False, "message": "ما لقيناش الطلبية"}), 404
+
+    if not order.customer_can_edit:
+        return jsonify({
+            "ok": False,
+            "message": "الطلبية خرجات للتوصيل — تواصل معانا فالواتساب",
+        }), 400
+
+    note = (request.form.get("note") or "").strip()
+    if len(note) < 3:
+        return jsonify({"ok": False, "message": "اكتب طلبك بالتفصيل"}), 400
+
+    stamp = utcnow().strftime("%m-%d %H:%M")
+    line = f"[{stamp}] طلب الزبون: {note[:500]}"
+    order.customer_note = (
+        f"{order.customer_note}\n{line}" if order.customer_note else line
+    )
+    db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "message": "وصلنا طلبك — نتواصلو معاك قريب 💜",
+    })
 
 
 # ==================== أدوات مساعدة ====================

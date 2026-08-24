@@ -6,7 +6,8 @@
 <div class="form-grid">
     <div class="form-col">
         {% if coupons %}
-        <table class="admin-table">
+        <div class="admin-table-wrap">
+<table class="admin-table">
             <thead><tr><th>الكود</th><th>النوع</th><th>القيمة</th><th>حد أدنى</th><th>الاستعمال</th><th>ينتهي</th><th></th></tr></thead>
             <tbody>
                 {% for c in coupons %}
@@ -39,6 +40,7 @@
                 {% endfor %}
             </tbody>
         </table>
+</div>
         {% else %}
         <div class="empty-box"><p>ماكاين حتى كوبون بعد.</p></div>
         {% endif %}

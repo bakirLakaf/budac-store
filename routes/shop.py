@@ -215,6 +215,63 @@ def product_detail(slug):
     )
 
 
+@shop_bp.route("/reviews", methods=["GET"])
+def store_reviews():
+    """
+    صفحة تقييمات المتجر — رأي الزبائن فالخدمة كاملة، ماشي فمنتج.
+
+    ⚠️ الفرق عن تقييمات المنتج: هاذي على التوصيل، التغليف، سرعة الرد…
+    الزبون اللي يحكم على متجر جديد يقرا هاذي أكثر من تقييم منتج واحد.
+    """
+    reviews = (
+        Review.query
+        .filter(Review.product_id.is_(None), Review.is_approved.is_(True))
+        .order_by(Review.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    avg, count = Review.store_stats()
+
+    # توزيع النجوم — يوري الشفافية أكثر من رقم واحد
+    breakdown = {n: 0 for n in range(1, 6)}
+    for r in reviews:
+        breakdown[r.rating] = breakdown.get(r.rating, 0) + 1
+
+    return render_template(
+        "shop/reviews.html",
+        reviews=reviews, avg=avg, count=count, breakdown=breakdown,
+    )
+
+
+@shop_bp.route("/reviews", methods=["POST"])
+def add_store_review():
+    """
+    استقبال تقييم للمتجر.
+
+    ⚠️ كيما تقييم المنتج: ما يبانش قبل موافقة الأدمن.
+    """
+    name = (request.form.get("author_name") or "").strip()
+    rating = request.form.get("rating", type=int)
+    comment = (request.form.get("comment") or "").strip()
+
+    if not name or len(name) < 2:
+        flash("اكتب اسمك", "error")
+    elif not rating or not (1 <= rating <= 5):
+        flash("اختر عدد النجوم", "error")
+    else:
+        db.session.add(Review(
+            product_id=None,          # ← تقييم للمتجر
+            author_name=name[:120],
+            rating=rating,
+            comment=comment[:1000] or None,
+            is_approved=False,
+        ))
+        db.session.commit()
+        flash("شكرًا على رأيك! غادي يبان بعد المراجعة.", "success")
+
+    return redirect(url_for("shop.store_reviews") + "#form")
+
+
 @shop_bp.route("/product/<slug>/review", methods=["POST"])
 def add_review(slug):
     """

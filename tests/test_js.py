@@ -289,6 +289,29 @@ def main():
         ok2, out2 = run_block("globalThis.__KNOWN__ = ['nothing'];" + zoom[0], "")
         check("ما تطيحش إذا العنصر ماكانش", ok2, out2[:150])
 
+    # ---------- صفحة «طلبياتي» ----------
+    mo = os.path.join(TEMPLATES, "shop", "my_orders.html")
+    if os.path.exists(mo):
+        blocks_mo = [b for b in blocks_of(mo) if "budac_orders" in b]
+        check("كتلة «طلبياتي» موجودة", len(blocks_mo) == 1, len(blocks_mo))
+        if blocks_mo:
+            real = """
+                globalThis.__KNOWN__ = ['ordersHost', 'emptyBox',
+                    'lookupForm', 'lookupMsg', 'lookupBtn'];
+            """
+            ok, out = run_block(real + blocks_mo[0], """
+                if (!listeners['submit'])
+                    { console.error('ما سجّلش submit'); process.exit(1); }
+                if (!listeners['doc:click'])
+                    { console.error('ما سجّلش click'); process.exit(1); }
+            """)
+            check("«طلبياتي» تسجّل submit + click", ok, out[:200])
+
+            # ⚠️ لازم تخرج بهدوء إذا العناصر ماكانوش
+            ok2, out2 = run_block(
+                "globalThis.__KNOWN__ = ['nothing'];" + blocks_mo[0], "")
+            check("ما تطيحش إذا العناصر ماكانوش", ok2, out2[:150])
+
     # ---------- كل كتل كل القوالب تشتغل بلا استثناء ----------
     print("\n" + "=" * 60)
     print("كل كتل JS فكل القوالب")
