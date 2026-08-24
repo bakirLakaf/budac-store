@@ -10,9 +10,9 @@
 
 import random
 import string
-from datetime import datetime
 
 from models import (
+    utcnow,   # ⚠️ بديل datetime.utcnow المهجورة فـPython 3.12
     db, Order, OrderItem, Product, ProductVariant, Offer, Coupon,
 )
 
@@ -34,7 +34,7 @@ def generate_order_number():
             return number
 
     # احتياط شبه مستحيل يوصلو، لكن أحسن من فشل صامت
-    return f"BD-{int(datetime.utcnow().timestamp())}"
+    return f"BD-{int(utcnow().timestamp())}"
 
 
 def reserve_stock(lines):

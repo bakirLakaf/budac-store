@@ -9,6 +9,8 @@
 """
 
 from datetime import datetime
+
+from models import utcnow   # ⚠️ بديل datetime.utcnow المهجورة
 from functools import wraps
 
 from flask import (
@@ -152,7 +154,7 @@ def login():
         if user and user.check_password(password):
             session["admin_id"] = user.id
             session["admin_username"] = user.username
-            user.last_login_at = datetime.utcnow()
+            user.last_login_at = utcnow()
             db.session.commit()
 
             _LOGIN_ATTEMPTS.pop(ip, None)  # دخول ناجح → نصفّرو العداد
