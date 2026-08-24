@@ -167,6 +167,43 @@
         if (e.key === 'Escape' && !box.hidden) close();
     });
 })();
+
+/* ---------- زر نسخ سريع ---------- */
+/* أي زر عندو `data-copy` ينسخ قيمتو ويوري تأكيدًا قصيرًا. */
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-copy]');
+    if (!btn) return;
+
+    var text = btn.dataset.copy || '';
+    var original = btn.textContent;
+
+    function done(ok) {
+        btn.textContent = ok ? '✅ تنسخ' : '🔴 ما تنسخش';
+        setTimeout(function () { btn.textContent = original; }, 1600);
+    }
+
+    // ⚠️ `navigator.clipboard` ما يخدمش غير فـHTTPS ولا localhost.
+    // نديرو تراجعًا لطريقة قديمة باش تخدم فكل الحالات.
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(function () { done(true); },
+                                                 function () { done(false); });
+        return;
+    }
+
+    try {
+        var tmp = document.createElement('textarea');
+        tmp.value = text;
+        tmp.style.position = 'fixed';
+        tmp.style.opacity = '0';
+        document.body.appendChild(tmp);
+        tmp.select();
+        var ok = document.execCommand('copy');
+        document.body.removeChild(tmp);
+        done(ok);
+    } catch (err) {
+        done(false);
+    }
+});
 </script>
 
 </body>

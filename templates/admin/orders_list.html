@@ -49,7 +49,16 @@
                        class="bulk-check" aria-label="اختر {{ o.order_number }}"></td>
             <td><a href="{{ url_for('admin.order_detail', order_id=o.id) }}" class="row-link">{{ o.order_number }}</a></td>
             <td>{{ o.customer_name }}</td>
-            <td dir="ltr">{{ o.customer_phone }}</td>
+            <td dir="ltr">
+                {# ⚠️ الزر يفتح المحادثة برك، بلا رسالة جاهزة —
+                   القوالب الكاملة فصفحة تفاصيل الطلبية. #}
+                {% if o.whatsapp_phone %}
+                <a href="https://wa.me/{{ o.whatsapp_phone }}"
+                   target="_blank" rel="noopener" class="wa-quick"
+                   title="واتساب مع {{ o.customer_name }}">💬</a>
+                {% endif %}
+                {{ o.customer_phone }}
+            </td>
             <td>{{ o.wilaya_name }}</td>
             <td>{{ o.item_count }}</td>
             <td><strong>{{ o.total_display }}</strong></td>

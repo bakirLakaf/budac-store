@@ -762,6 +762,90 @@ def main():
     check("عنصر معاينة واحد فالصفحة",
           order_page.count('id="adminZoomer"') == 1)
 
+    # ───────── 7.17) أزرار الواتساب ─────────
+    section("7.17 التواصل مع الزبون عبر الواتساب")
+    from models import Order as _O3
+
+    with app.app_context():
+        o = _O3.query.first()
+        o.customer_phone = "0551486151"
+        o.customer_name = "علي"
+        o.tracking_number = "ZR99887"
+        o.carrier_name = "ZR Express"
+        db.session.commit()
+        oid2 = o.id
+
+        # صيغ الهاتف
+        for raw, want in [
+            ("0551486151", "213551486151"),
+            ("213551486151", "213551486151"),
+            ("00213551486151", "213551486151"),
+            ("+213 551 48 61 51", "213551486151"),
+            ("0551-48-61-51", "213551486151"),
+            ("", ""),
+            (None, ""),
+        ]:
+            o.customer_phone = raw
+            check(f"«{raw}» → {o.whatsapp_phone}", o.whatsapp_phone == want,
+                  f"المتوقّع {want}")
+
+        o.customer_phone = "0551486151"
+        db.session.commit()
+
+        # كل قالب رسالة يبني نصًا صالحًا
+        for kind in ["confirm", "shipped", "arrived", "modify",
+                     "missing", "noreply", "thanks", "unknown-kind"]:
+            msg = o.whatsapp_message(kind, "Budac")
+            check(f"رسالة «{kind}» مبنية", isinstance(msg, str) and len(msg) > 20,
+                  repr(msg)[:60])
+
+        # ⚠️ الرسالة لازم تكون فيها معلومات الطلبية الحقيقية
+        confirm = o.whatsapp_message("confirm", "Budac")
+        check("التأكيد فيه رقم الطلبية", o.order_number in confirm)
+        check("التأكيد فيه المجموع", o.total_display in confirm)
+        check("التأكيد فيه اسم الزبون", "علي" in confirm)
+
+        shipped = o.whatsapp_message("shipped", "Budac")
+        check("الشحن فيه رقم التتبّع", "ZR99887" in shipped)
+
+        # طلبية بلا تتبّع — الرسالة تتبنى بلا خطأ
+        o.tracking_number = None
+        db.session.commit()
+        s2 = o.whatsapp_message("shipped", "Budac")
+        check("بلا تتبّع: الرسالة مازالت صالحة",
+              "ZR99887" not in s2 and len(s2) > 20)
+
+    # الصفحة
+    page = client.get(f"/admin/orders/{oid2}").get_data(as_text=True)
+    check("لوحة الواتساب موجودة", "wa-panel" in page)
+    check("زر تأكيد الطلبية", "wa-primary" in page)
+    check("الروابط تمشي لـwa.me", "https://wa.me/213551486151" in page)
+    check("زر نسخ الرقم", "data-copy=" in page)
+
+    # ⚠️ النص لازم يكون مرمّزًا للرابط، ماشي خامًا
+    m = re.search(r'href="https://wa\.me/\d+\?text=([^"]+)"', page)
+    check("نص الرسالة مرمّز فالرابط",
+          bool(m) and " " not in m.group(1) and "%" in m.group(1),
+          (m.group(1)[:50] if m else "ماكانش"))
+
+    # زبون بلا هاتف
+    with app.app_context():
+        o = db.session.get(_O3, oid2)
+        saved_phone = o.customer_phone
+        o.customer_phone = ""
+        db.session.commit()
+    no_phone = client.get(f"/admin/orders/{oid2}").get_data(as_text=True)
+    check("بلا هاتف: الصفحة ما تطيحش وتوري تنبيهًا",
+          "wa-panel" not in no_phone and "ماكانش رقم هاتف" in no_phone)
+    with app.app_context():
+        o = db.session.get(_O3, oid2)
+        o.customer_phone = saved_phone
+        db.session.commit()
+
+    # قائمة الطلبيات
+    lst = client.get("/admin/orders").get_data(as_text=True)
+    check("زر واتساب سريع فالقائمة", "wa-quick" in lst)
+
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")
     import glob

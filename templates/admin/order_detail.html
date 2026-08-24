@@ -84,6 +84,80 @@
         <div class="hint-block"><strong>ملاحظة الزبون:</strong><br>{{ order.customer_note }}</div>
         {% endif %}
 
+        {# ═══════════ تواصل مع الزبون ═══════════
+           ⚠️ الرسائل مبنية فالنموذج (`Order.whatsapp_message`) ماشي هنا:
+           تحتاج بيانات الطلبية، وبناؤها فـJinja يخلّيها صعيبة تتصلّح
+           ومستحيلة تتختبر.
+
+           كل زر يفتح الواتساب برسالة **جاهزة قابلة للتعديل** — الأدمن
+           يقراها ويبدّل فيها قبل ما يبعث. #}
+        <h2 class="section-title">تواصل مع الزبون</h2>
+
+        {% if order.whatsapp_phone %}
+        {% set wa = 'https://wa.me/' ~ order.whatsapp_phone ~ '?text=' %}
+
+        <div class="wa-panel">
+            <p class="hint">
+                الرسالة تتفتح فالواتساب جاهزة — تقدر تبدّل فيها قبل ما تبعث.
+            </p>
+
+            <div class="wa-grid">
+                <a class="wa-btn wa-primary" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('confirm', store_name) | urlencode }}">
+                    ✅ <span>أكّد الطلبية</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('modify', store_name) | urlencode }}">
+                    ✏️ <span>تعديل أو زيادة</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('noreply', store_name) | urlencode }}">
+                    📞 <span>ما جاوبش</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('shipped', store_name) | urlencode }}">
+                    🚚 <span>خرجات للتوصيل</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('arrived', store_name) | urlencode }}">
+                    📍 <span>وصلات للمكتب</span>
+                </a>
+
+                <a class="wa-btn wa-warn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('missing', store_name) | urlencode }}">
+                    😔 <span>منتج ما بقاش</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('thanks', store_name) | urlencode }}">
+                    💜 <span>شكر بعد التسليم</span>
+                </a>
+
+                {# محادثة فاضية — للحالات اللي ماكانش ليها قالب #}
+                <a class="wa-btn wa-ghost" target="_blank" rel="noopener"
+                   href="https://wa.me/{{ order.whatsapp_phone }}">
+                    💬 <span>محادثة عادية</span>
+                </a>
+            </div>
+
+            <div class="wa-foot">
+                <a href="tel:{{ order.customer_phone }}" class="btn-admin btn-sm btn-ghost">
+                    📱 اتصل ({{ order.customer_phone }})
+                </a>
+                <button type="button" class="btn-admin btn-sm btn-ghost"
+                        data-copy="{{ order.customer_phone }}">
+                    نسخ الرقم
+                </button>
+            </div>
+        </div>
+        {% else %}
+        <p class="hint">⚠️ ماكانش رقم هاتف صالح لهاد الزبون.</p>
+        {% endif %}
+
         <h2 class="section-title">شركة التوصيل</h2>
         <div class="carrier-panel">
             {% if order.tracking_number %}

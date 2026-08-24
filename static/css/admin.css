@@ -1725,3 +1725,69 @@ img.thumb-sm:hover {
     transform: scale(1.08);
     box-shadow: 0 4px 14px rgba(46, 26, 71, 0.28);
 }
+
+/* ---------- تواصل الواتساب مع الزبون ---------- */
+.wa-panel {
+    padding: 14px;
+    border: 1px solid var(--a-border);
+    border-radius: 14px;
+    background: var(--a-surface);
+}
+
+.wa-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.wa-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--a-border);
+    border-radius: 10px;
+    background: var(--a-bg);
+    color: var(--a-primary);
+    font-size: 13px; font-weight: 700;
+    text-decoration: none;
+    transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.wa-btn:hover {
+    background: #fff;
+    border-color: #25D366;
+    transform: translateY(-1px);
+}
+.wa-btn span { flex: 1; }
+
+/* الزر الأهم — تأكيد الطلبية */
+.wa-btn.wa-primary {
+    background: #25D366; border-color: #25D366; color: #08331C;
+}
+.wa-btn.wa-primary:hover { background: #1FBA57; }
+
+/* رسالة حسّاسة — منتج ناقص */
+.wa-btn.wa-warn:hover { border-color: var(--a-danger); }
+
+.wa-btn.wa-ghost { opacity: 0.8; }
+
+.wa-foot {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--a-border);
+}
+
+@media (max-width: 700px) {
+    .wa-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* زر واتساب سريع فقائمة الطلبيات */
+.wa-quick {
+    display: inline-block;
+    margin-inline-end: 6px;
+    font-size: 15px;
+    text-decoration: none;
+    opacity: 0.7;
+    transition: opacity 0.12s, transform 0.12s;
+}
+.wa-quick:hover { opacity: 1; transform: scale(1.2); }
