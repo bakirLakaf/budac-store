@@ -1090,6 +1090,135 @@ class Order(db.Model):
     def item_count(self):
         return sum(item.quantity for item in self.items)
 
+    # ══════════════════════════════════════════════════════════
+    # التواصل مع الزبون عبر الواتساب
+    #
+    # ⚠️ علاش فالنموذج ماشي فالقالب؟
+    # الرسالة تحتاج بيانات الطلبية (المنتجات، المجموع، التتبّع).
+    # بناؤها فالقالب يخلّي Jinja معقّدًا وصعيب يتصلّح. وهنا كذلك
+    # نقدرو نختبروها.
+    # ══════════════════════════════════════════════════════════
+
+    @property
+    def whatsapp_phone(self):
+        """
+        رقم الزبون بالصيغة الدولية اللي يقبلها الواتساب.
+
+        الأرقام الجزائرية تتكتب `0555...` محليًا، والواتساب يحتاج
+        `213555...` بلا صفر ولا مسافات ولا رموز.
+        """
+        digits = "".join(ch for ch in (self.customer_phone or "") if ch.isdigit())
+
+        if not digits:
+            return ""
+
+        if digits.startswith("00213"):
+            return digits[2:]
+        if digits.startswith("213"):
+            return digits
+        if digits.startswith("0"):
+            return "213" + digits[1:]
+
+        return "213" + digits
+
+    def _items_lines(self):
+        """سطر لكل منتج فالطلبية — يستعملوه أكثر من قالب رسالة."""
+        lines = []
+        for item in self.items:
+            name = item.item_name
+            if item.variant_label:
+                name += f" ({item.variant_label})"
+            lines.append(f"• {name} × {item.quantity}")
+        return "\n".join(lines)
+
+    def whatsapp_message(self, kind, store_name="Budac"):
+        """
+        يبني نص رسالة جاهزة حسب الحاجة.
+
+        الأنواع:
+          confirm  — تأكيد الطلبية مع الزبون قبل الإرسال
+          shipped  — الطلبية مشات، مع رقم التتبّع
+          arrived  — وصلت لمكتب الاستلام
+          modify   — نبغيو نبدّلو شي فالطلبية
+          missing  — منتج ما بقاش موجود
+          noreply  — ما جاوبش على الهاتف
+          thanks   — شكر بعد التسليم
+        """
+        name = self.customer_name or "خويا"
+        num = self.order_number
+        items = self._items_lines()
+        total = self.total_display
+
+        greeting = f"سلام {name} 👋\nمعاك {store_name}"
+
+        if kind == "confirm":
+            return (
+                f"{greeting}\n\n"
+                f"وصلاتنا طلبيتك رقم *{num}*:\n\n"
+                f"{items}\n\n"
+                f"المجموع مع التوصيل: *{total}*\n"
+                f"{self.delivery_type_label} — {self.wilaya_name}\n\n"
+                f"نأكّدو الطلبية؟ 😊"
+            )
+
+        if kind == "shipped":
+            tracking = (f"\nرقم التتبّع: *{self.tracking_number}*"
+                        if self.tracking_number else "")
+            return (
+                f"{greeting}\n\n"
+                f"طلبيتك *{num}* خرجات مع {self.carrier_name or 'شركة التوصيل'} 🚚"
+                f"{tracking}\n\n"
+                f"تُوصلك فـ24/48 ساعة إن شاء الله.\n"
+                f"خلّي هاتفك مفتوح باش يتصل بيك الموزّع 📞"
+            )
+
+        if kind == "arrived":
+            where = self.pickup_point_name or self.wilaya_name
+            return (
+                f"{greeting}\n\n"
+                f"طلبيتك *{num}* وصلات لـ*{where}* ✅\n\n"
+                f"تقدر تروح تحوّزها. جيب معاك بطاقة التعريف.\n"
+                f"المبلغ: *{total}*"
+            )
+
+        if kind == "modify":
+            return (
+                f"{greeting}\n\n"
+                f"بخصوص طلبيتك *{num}*:\n\n"
+                f"{items}\n\n"
+                f"حبيت نسقسيك — تحب تزيد ولا تنقّص شي حاجة قبل ما نبعثوها؟"
+            )
+
+        if kind == "missing":
+            return (
+                f"{greeting}\n\n"
+                f"بخصوص طلبيتك *{num}* — نعتذرلك، كاين منتج ما بقاش "
+                f"موجود دابا 😔\n\n"
+                f"نقدرو نبدّلوه بحاجة أخرى، ولا نبعثو الباقي برك ونحيّدو "
+                f"ثمنو من المجموع.\n\n"
+                f"واش تفضّل؟"
+            )
+
+        if kind == "noreply":
+            return (
+                f"{greeting}\n\n"
+                f"حاولنا نتصلو بيك على طلبيتك *{num}* وما لقيناكش 📞\n\n"
+                f"قوللي وقتاش يريحك ونعاودو نتصلو، ولا جاوبني هنا "
+                f"ونأكّدوها مباشرة 😊"
+            )
+
+        if kind == "thanks":
+            return (
+                f"سلام {name} 👋\n\n"
+                f"يعطيك الصحة على ثقتك فينا 💜\n"
+                f"نتمنى المنتج عجبك.\n\n"
+                f"إذا عندك أي ملاحظة، قوللي — رأيك يهمنا.\n"
+                f"ونفرحو بيك مرة أخرى فـ{store_name} 🌟"
+            )
+
+        # نوع مجهول — رسالة عامة أحسن من خطأ
+        return f"{greeting}\n\nبخصوص طلبيتك *{num}*..."
+
     @property
     def is_open(self):
         """واش الطلبية مازالت نشطة (ماشي مسلّمة ولا ملغاة)."""
