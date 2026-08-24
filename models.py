@@ -1059,13 +1059,24 @@ class Order(db.Model):
 
     STATUS_PENDING = "pending"        # جديدة، تحتاج تأكيد
     STATUS_CONFIRMED = "confirmed"    # اتأكدت مع الزبون
+    STATUS_PREPARING = "preparing"    # قاعدين نجهّزوها
+    STATUS_PREPARED = "prepared"      # جاهزة، تستنى الشركة
     STATUS_SHIPPED = "shipped"        # اتسلّمت لشركة التوصيل
     STATUS_DELIVERED = "delivered"    # وصلت للزبون
     STATUS_CANCELLED = "cancelled"    # ملغاة
 
+    # ⚠️ الترتيب مهم — يستعملوه شريط التقدّم فصفحة «طلبياتي»
+    # وقائمة الحالات فاللوحة.
+    STATUS_FLOW = [
+        STATUS_PENDING, STATUS_CONFIRMED, STATUS_PREPARING,
+        STATUS_PREPARED, STATUS_SHIPPED, STATUS_DELIVERED,
+    ]
+
     STATUS_LABELS = {
         STATUS_PENDING: "جديدة",
         STATUS_CONFIRMED: "مؤكدة",
+        STATUS_PREPARING: "قيد التجهيز",
+        STATUS_PREPARED: "تم التجهيز",
         STATUS_SHIPPED: "فالطريق",
         STATUS_DELIVERED: "تم التسليم",
         STATUS_CANCELLED: "ملغاة",
@@ -1186,6 +1197,44 @@ class Order(db.Model):
         )
 
         return self.total
+
+    @property
+    def progress_steps(self):
+        """
+        مراحل الطلبية للشريط اللي يشوفو الزبون.
+
+        كل مرحلة: (المفتاح، الاسم، واش تعدّات، واش هي الحالية).
+        الطلبية الملغاة ما عندهاش تقدّم — نرجعو قائمة فارغة والقالب
+        يوري رسالة إلغاء بدلها.
+        """
+        if self.status == self.STATUS_CANCELLED:
+            return []
+
+        try:
+            current = self.STATUS_FLOW.index(self.status)
+        except ValueError:
+            current = 0
+
+        return [
+            {
+                "key": key,
+                "label": self.STATUS_LABELS[key],
+                "done": i < current,
+                "active": i == current,
+            }
+            for i, key in enumerate(self.STATUS_FLOW)
+        ]
+
+    @property
+    def customer_can_edit(self):
+        """
+        واش الزبون بنفسو يقدر يعدّل الطلبية؟
+
+        ⚠️ أضيق من `is_editable` تاع الأدمن: الزبون يوقف عند «فالطريق».
+        بعد ما تخرج للتوصيل، التعديل يحتاج اتصال — ما نخلّيوهش يبدّل
+        حاجة وحنا ما نقدروش نلحقو.
+        """
+        return self.status in (self.STATUS_PENDING, self.STATUS_CONFIRMED)
 
     @property
     def is_editable(self):
@@ -1458,16 +1507,23 @@ class AbandonedCart(db.Model):
 
 class Review(db.Model):
     """
-    تقييم زبون لمنتج.
+    تقييم زبون — لمنتج معيّن ولا للمتجر كامل.
 
     ⚠️ كل تقييم يمر على موافقة الأدمن قبل ما يبان (is_approved).
     السبب: بلا هذا، أي واحد يقدر يكتب سبام أو إساءة ويبان مباشرة فمتجرك.
+
+    ⚠️ `product_id = None` معناها **تقييم للمتجر** ماشي لمنتج.
+    علاش نفس الجدول بدل جدول ثانٍ؟ الحقول واحدة (اسم، نجوم، تعليق،
+    موافقة)، ولوحة المراجعة تبقى وحدة. جدول ثانٍ يعني تكرار الكود
+    والقوالب بلا فائدة.
     """
 
     __tablename__ = "reviews"
 
     id = db.Column(db.Integer, primary_key=True)
-    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    # فارغ = تقييم للمتجر كامل
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"),
+                           nullable=True)
 
     author_name = db.Column(db.String(120), nullable=False)
     rating = db.Column(db.Integer, nullable=False)   # من 1 لـ5
@@ -1482,6 +1538,35 @@ class Review(db.Model):
     def stars(self):
         """نجوم للعرض: ★★★★☆"""
         return "★" * self.rating + "☆" * (5 - self.rating)
+
+    @property
+    def is_store_review(self):
+        """واش تقييم للمتجر كامل ماشي لمنتج؟"""
+        return self.product_id is None
+
+    @property
+    def target_label(self):
+        """اسم اللي اتقيّم — للوحة المراجعة."""
+        if self.is_store_review:
+            return "المتجر"
+        return self.product.name if self.product else "منتج محذوف"
+
+    # ---------- إحصائيات المتجر ----------
+
+    @staticmethod
+    def store_stats():
+        """
+        (المعدّل، العدد) لتقييمات المتجر المقبولة.
+
+        نرجّعو (0, 0) إذا ماكانش — القالب يخفي القسم بدل ما يوري
+        «0 من 5» وهذا يضرّ أكثر ما ينفع.
+        """
+        rows = Review.query.filter(
+            Review.product_id.is_(None), Review.is_approved.is_(True)
+        ).all()
+        if not rows:
+            return 0, 0
+        return round(sum(r.rating for r in rows) / len(rows), 1), len(rows)
 
     def __repr__(self):
         return f"<Review {self.rating}★ product={self.product_id}>"

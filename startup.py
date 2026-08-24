@@ -47,6 +47,7 @@ def run():
         _repair_stale_communes(db)
         _add_missing_columns(db)
         _fix_null_flags(db)
+        _relax_review_product(db)
 
         # ---------- 1.7) البلديات ----------
         _seed_communes()
@@ -100,6 +101,67 @@ def run():
             print(f"   ⚠️ تنظيف الزوار ما خدمش: {e}")
 
         print("✅ التجهيز خلص — نشغّلو الموقع\n")
+
+
+def _relax_review_product(db):
+    """
+    يخلّي `reviews.product_id` يقبل NULL — باش تقييمات **المتجر** تخدم.
+
+    ⚠️ علاش دالة خاصة؟ `_add_missing_columns` تزيد أعمدة ناقصة برك،
+    ما تبدّلش قيود عمود موجود. والعمود كان `NOT NULL` من أول نسخة.
+
+    SQLite ما عندوش `ALTER COLUMN` — لازم إعادة بناء الجدول.
+    PostgreSQL عندو `ALTER ... DROP NOT NULL` مباشرة.
+
+    التشغيل المتكرر آمن: نتحققو أول واش القيد مازال موجودًا.
+    """
+    from sqlalchemy import text, inspect
+
+    inspector = inspect(db.engine)
+    if "reviews" not in set(inspector.get_table_names()):
+        return
+
+    columns = {c["name"]: c for c in inspector.get_columns("reviews")}
+    col = columns.get("product_id")
+    if col is None or col.get("nullable", True):
+        return   # مليح أصلاً
+
+    dialect = db.engine.dialect.name
+
+    try:
+        if dialect == "sqlite":
+            # إعادة بناء: جدول جديد → نسخ → تبديل
+            db.session.execute(text("""
+                CREATE TABLE reviews_new (
+                    id INTEGER PRIMARY KEY,
+                    product_id INTEGER REFERENCES products(id),
+                    author_name VARCHAR(120) NOT NULL,
+                    rating INTEGER NOT NULL,
+                    comment TEXT,
+                    is_approved BOOLEAN NOT NULL DEFAULT 0,
+                    created_at DATETIME
+                )
+            """))
+            db.session.execute(text("""
+                INSERT INTO reviews_new
+                    (id, product_id, author_name, rating, comment,
+                     is_approved, created_at)
+                SELECT id, product_id, author_name, rating, comment,
+                       is_approved, created_at
+                FROM reviews
+            """))
+            db.session.execute(text("DROP TABLE reviews"))
+            db.session.execute(text("ALTER TABLE reviews_new RENAME TO reviews"))
+        else:
+            db.session.execute(
+                text("ALTER TABLE reviews ALTER COLUMN product_id DROP NOT NULL")
+            )
+
+        db.session.commit()
+        print("   🔧 reviews.product_id ولّى يقبل NULL (تقييمات المتجر)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"   ⚠️ ما قدرناش نرخّيو reviews.product_id: {e}")
 
 
 def _fix_null_flags(db):
