@@ -144,6 +144,13 @@ class ProductVariant(db.Model):
     image_filename = db.Column(db.String(255), nullable=True)  # صورة خاصة بهاد التنويعة (اختياري)
     is_default = db.Column(db.Boolean, nullable=False, default=False)
 
+    # ⚠️ توفّر يدوي — منفصل تمامًا على المخزون.
+    # المتجر ما يتبّعش المخزون بالأرقام (`is_stock_tracked = False`)،
+    # لكن أحيانًا موديل معيّن يخلص من عند المورّد. هاد العلم يخلّي
+    # الأدمن يعطّلو بضغطة، بلا ما يمسحو ويخسر أسعارو وعروضو.
+    is_available = db.Column(db.Boolean, nullable=False, default=True,
+                             server_default="1")
+
     product = db.relationship("Product", back_populates="variants")
 
     price_tiers = db.relationship(
@@ -228,6 +235,10 @@ class ProductVariant(db.Model):
         ونحميو كذلك من الحالة اللي التنويعة ما عندهاش منتج (بيانات
         يتيمة) — نعتبروها متوفرة بدل ما نطيّحو الصفحة.
         """
+        # ⚠️ التعطيل اليدوي يغلب كلش — حتى إذا المخزون ماشي متتبّعًا
+        if not self.is_available:
+            return False
+
         product = self.product
         if product is None or not product.is_stock_tracked:
             return True
@@ -263,6 +274,11 @@ class Product(db.Model):
 
     price = db.Column(db.Integer, nullable=False)  # بالدينار الجزائري، رقم صحيح (بلا فواصل)
     compare_at_price = db.Column(db.Integer, nullable=True)  # السعر قبل التخفيض — يبين شارة "عرض"
+
+    # وحدة البيع: "piece" · "meter" · أي نص مخصّص («رولو»، «علبة»…)
+    # ⚠️ `server_default` باش المنتجات القديمة تولّي «حبة» بعد الهجرة
+    unit = db.Column(db.String(40), nullable=False, default="piece",
+                     server_default="piece")
 
     category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True, index=True)
     color_variant = db.Column(db.String(120), nullable=True)  # قديم — يبقى للتوافق، الأفضل نستعملو variants
@@ -328,6 +344,24 @@ class Product(db.Model):
 
     # بدّلها لـTrue إذا بغيت ترجّع تتبّع المخزون
     is_stock_tracked = False
+
+    # ══════════════════════════════════════════════════════════
+    # وحدة البيع
+    #
+    # ⚠️ ماشي كل شي ينباع بالحبة. الشريط والسفيفة ينباعو **بالمتر**،
+    # فـ«سعر الحبة» تولّي غالطة ومحيّرة للزبون.
+    #
+    # `unit` تقبل: "piece" (حبة) · "meter" (متر) · أي نص آخر = مخصّص
+    # (الأدمن يكتب «رولو»، «علبة»، «كيلو»...).
+    # ══════════════════════════════════════════════════════════
+
+    UNIT_PIECE = "piece"
+    UNIT_METER = "meter"
+
+    UNIT_LABELS = {
+        UNIT_PIECE: "الحبة",
+        UNIT_METER: "المتر",
+    }
 
     @property
     def available_quantity(self):
@@ -481,6 +515,20 @@ class Product(db.Model):
     # الموديلات بلا صورة يمشيو **فالآخر**، بترتيبهم الأصلي.
     # الصور بلا موديل تبقى كيما هي فالمعرض — ما تأثّر على والو.
     # ══════════════════════════════════════════════════════════
+
+    @property
+    def unit_label(self):
+        """اسم الوحدة معرّفًا: «الحبة» · «المتر» · «الرولو»…"""
+        raw = (self.unit or "").strip()
+        if not raw:
+            return self.UNIT_LABELS[self.UNIT_PIECE]
+        return self.UNIT_LABELS.get(raw, raw)
+
+    @property
+    def unit_short(self):
+        """اسم الوحدة بلا «ال» — للاستعمال بعد رقم: «12 متر»."""
+        label = self.unit_label
+        return label[2:] if label.startswith("ال") else label
 
     @property
     def main_images(self):

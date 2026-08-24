@@ -117,6 +117,7 @@ def _fix_null_flags(db):
 
     targets = [
         ("product_images", "is_extra", "0"),
+        ("product_variants", "is_available", "1"),
     ]
 
     inspector = inspect(db.engine)
@@ -235,6 +236,10 @@ def _add_missing_columns(db):
         # النتيجة: كل صور المنتجات القديمة تختفي من المعرض.
         ("product_images", "is_extra", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("product_images", "caption", "VARCHAR(200)"),
+        # وحدة البيع — المنتجات القديمة كلها «حبة»
+        ("products", "unit", "VARCHAR(40) NOT NULL DEFAULT 'piece'"),
+        # توفّر الموديل — القديمة كلها متوفرة
+        ("product_variants", "is_available", "BOOLEAN NOT NULL DEFAULT TRUE"),
     ]
 
     inspector = inspect(db.engine)
