@@ -1,4 +1,21 @@
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def utcnow():
+    """
+    الوقت الحالي بتوقيت UTC، بلا معلومة المنطقة.
+
+    ⚠️ علاش دالة خاصة؟ `datetime.utcnow()` **مهجورة** فـPython 3.12
+    وغادي تتمسح فإصدار جاي — ساعتها كل أعمدة التواريخ توقف.
+
+    البديل الرسمي `datetime.now(timezone.utc)` يرجّع وقتًا **بمنطقة**،
+    وأعمدة `db.DateTime` تاعنا بلا منطقة. خلط الاثنين يطيّح أي مقارنة
+    بـ«can't compare offset-naive and offset-aware datetimes».
+
+    فنحيّدو المنطقة بـ`.replace(tzinfo=None)` — نفس السلوك القديم
+    بالضبط، بلا إهمال.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -199,10 +216,22 @@ class ProductVariant(db.Model):
 
     @property
     def is_in_stock(self):
-        """فالنظام المفتوح، كل التنويعات متوفرة دائمًا."""
-        if not Product.is_stock_tracked:
+        """
+        فالنظام المفتوح، كل التنويعات متوفرة دائمًا.
+
+        ⚠️ كان مكتوبًا `Product.is_stock_tracked` (على الصنف مباشرة)
+        بينما باقي الكود يستعمل `self.product.is_stock_tracked`.
+        دابا ما يبانش الفرق لأن العلم `False` فكل مكان، لكن اليوم اللي
+        ترجّع فيه تتبّع المخزون، هاد السطر يخدم بمنطق مختلف عن الباقي
+        ويولّي مصدر بق صعيب يتلقى.
+
+        ونحميو كذلك من الحالة اللي التنويعة ما عندهاش منتج (بيانات
+        يتيمة) — نعتبروها متوفرة بدل ما نطيّحو الصفحة.
+        """
+        product = self.product
+        if product is None or not product.is_stock_tracked:
             return True
-        return self.stock_quantity > 0
+        return (self.stock_quantity or 0) > 0
 
     @property
     def has_discount(self):
@@ -265,7 +294,7 @@ class Product(db.Model):
     # للأرقام الحقيقية وهاد الخانة تولّي بلا مفعول (شوف _find_best_sellers).
     is_featured = db.Column(db.Boolean, nullable=False, default=False)
 
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     category = db.relationship("Category", back_populates="products")
     # ⚠️ لازم `id` كمفتاح ثانٍ: المنتجات القديمة كل `sort_order` فيها
@@ -550,7 +579,7 @@ class Offer(db.Model):
 
     starts_at = db.Column(db.DateTime, nullable=True)  # اختياري: بداية العرض
     ends_at = db.Column(db.DateTime, nullable=True)    # اختياري: نهاية العرض
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     items = db.relationship(
         "OfferItem",
@@ -594,7 +623,7 @@ class Offer(db.Model):
         """
         if not self.is_active:
             return False
-        now = datetime.utcnow()
+        now = utcnow()
         if self.starts_at and now < self.starts_at:
             return False
         if self.ends_at and now > self.ends_at:
@@ -839,7 +868,7 @@ class AdminUser(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), nullable=False, unique=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     last_login_at = db.Column(db.DateTime, nullable=True)
 
     def set_password(self, raw_password):
@@ -884,7 +913,7 @@ class Coupon(db.Model):
     starts_at = db.Column(db.DateTime, nullable=True)
     ends_at = db.Column(db.DateTime, nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     def __repr__(self):
         return f"<Coupon {self.code}>"
@@ -920,7 +949,7 @@ class Coupon(db.Model):
         if not self.is_active:
             return False, "هذا الكوبون غير مفعّل"
 
-        now = datetime.utcnow()
+        now = utcnow()
         if self.starts_at and now < self.starts_at:
             return False, "هذا الكوبون ما بدأش بعد"
         if self.ends_at and now > self.ends_at:
@@ -939,18 +968,34 @@ class Coupon(db.Model):
         """
         يحسب قيمة الخصم. يرجع (discount_on_products, discount_on_shipping).
         فصلناهم باش الفاتورة تبان واضحة للزبون.
+
+        🔴 **الخصم ما يكونش سالبًا أبدًا.**
+        فورم اللوحة يمنع القيم السالبة، لكن الكوبون يقدر يجي من
+        مكان آخر (استيراد، سكربت، تعديل مباشر فقاعدة البيانات). ساعتها
+        نسبة -20% كانت ترجّع خصمًا سالبًا — يعني **يزيد** فالفاتورة
+        بدل ما ينقّص، والزبون يخلّص أكثر. هاد الفحص يمنعها نهائيًا.
+
+        نفس الشي لـ`max_discount` السالب.
         """
+        # ⚠️ قيم سالبة ولا فارغة = بلا خصم، ماشي خصم عكسي
+        value = max(0, self.value or 0)
+        subtotal = max(0, subtotal or 0)
+        shipping_price = max(0, shipping_price or 0)
+
         if self.discount_type == self.TYPE_FREE_SHIPPING:
             return 0, shipping_price
 
         if self.discount_type == self.TYPE_FIXED:
-            return min(self.value, subtotal), 0  # ما يتعداش قيمة الطلبية
+            return min(value, subtotal), 0  # ما يتعداش قيمة الطلبية
 
         # نسبة مئوية
-        discount = int(subtotal * self.value / 100)
+        discount = int(subtotal * value / 100)
+
         if self.max_discount is not None:
-            discount = min(discount, self.max_discount)
-        return min(discount, subtotal), 0
+            discount = min(discount, max(0, self.max_discount))
+
+        # الحد النهائي: بين 0 وقيمة الطلبية
+        return max(0, min(discount, subtotal)), 0
 
 
 # ==================== الطلبيات ====================
@@ -1019,8 +1064,8 @@ class Order(db.Model):
     carrier_parcel_id = db.Column(db.String(80), nullable=True)  # معرّف الطرد عندهم
     carrier_state = db.Column(db.String(120), nullable=True)     # آخر حالة معروفة
 
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     items = db.relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
@@ -1133,8 +1178,8 @@ class AbandonedCart(db.Model):
     status = db.Column(db.String(20), nullable=False, default=STATUS_NEW)
     admin_note = db.Column(db.Text, nullable=True)
 
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     @property
     def status_label(self):
@@ -1199,7 +1244,7 @@ class Review(db.Model):
     comment = db.Column(db.Text, nullable=True)
 
     is_approved = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     product = db.relationship("Product", backref=db.backref("reviews", cascade="all, delete-orphan"))
 
@@ -1297,7 +1342,7 @@ class LandingPage(db.Model):
     view_count = db.Column(db.Integer, nullable=False, default=0)
     order_count = db.Column(db.Integer, nullable=False, default=0)
 
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     product = db.relationship("Product", foreign_keys=[product_id])
     variant = db.relationship("ProductVariant", foreign_keys=[variant_id])
@@ -1379,7 +1424,7 @@ class SiteVisit(db.Model):
     first_page = db.Column(db.String(300), nullable=True)   # من وين دخل
     referrer = db.Column(db.String(300), nullable=True)     # منين جا
 
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     __table_args__ = (
         db.UniqueConstraint("day", "visitor_key", name="uq_visit_day_key"),
