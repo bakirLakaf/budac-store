@@ -20,7 +20,10 @@
                     <td>
                         {% if item.image_filename %}
                         {% set folder = 'offers' if item.offer_id else 'products' %}
-                        <img class="thumb-sm" src="{{ url_for('static', filename='img/' + folder + '/' + (item.image_filename | thumb)) }}" alt="">
+                        <img class="thumb-sm"
+                             src="{{ url_for('static', filename='img/' + folder + '/' + (item.image_filename | thumb)) }}"
+                             data-full="{{ url_for('static', filename='img/' + folder + '/' + item.image_filename) }}"
+                             alt="{{ item.item_name }}" title="اضغط باش تكبّرها">
                         {% endif %}
                     </td>
                     <td>

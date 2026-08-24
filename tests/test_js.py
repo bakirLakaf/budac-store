@@ -268,6 +268,27 @@ def main():
         ok, out = run_block(pri[0], "")
         check("محرّر سعر الموديل يشتغل بلا خطأ", ok, out[:200])
 
+    # ---------- معاينة الصور فاللوحة ----------
+    base = os.path.join(TEMPLATES, "admin", "base_admin.html")
+    zoom = [b for b in blocks_of(base) if "adminZoomer" in b]
+    check("كتلة المعاينة فالقالب الأساسي", len(zoom) == 1, f"{len(zoom)}")
+
+    if zoom:
+        real = """
+            globalThis.__KNOWN__ = ['adminZoomer', 'adminZoomerImg'];
+        """
+        ok, out = run_block(real + zoom[0], """
+            if (!listeners['doc:click'])
+                { console.error('ما سجّلش click'); process.exit(1); }
+            if (!listeners['doc:keydown'])
+                { console.error('ما سجّلش keydown (Escape)'); process.exit(1); }
+        """)
+        check("المعاينة تسجّل click + Escape", ok, out[:200])
+
+        # ⚠️ لو العنصر ماكانش، لازم تخرج بهدوء بلا ما تطيّح الصفحة
+        ok2, out2 = run_block("globalThis.__KNOWN__ = ['nothing'];" + zoom[0], "")
+        check("ما تطيحش إذا العنصر ماكانش", ok2, out2[:150])
+
     # ---------- كل كتل كل القوالب تشتغل بلا استثناء ----------
     print("\n" + "=" * 60)
     print("كل كتل JS فكل القوالب")

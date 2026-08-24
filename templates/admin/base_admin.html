@@ -105,5 +105,69 @@
     {% block content %}{% endblock %}
 </main>
 
+{# ═══════════ معاينة الصور — يخدم فكل اللوحة ═══════════
+   ⚠️ كان موجودًا فصفحة تعديل المنتج برك. دابا هنا فالقالب الأساسي،
+   فأي صورة صغيرة فأي صفحة (طلبيات، منتجات، تصنيفات، عروض) تتكبّر
+   بضغطة — بلا ما نكرّرو الكود فكل قالب. #}
+<div class="zoomer" id="adminZoomer" hidden>
+    <button type="button" class="zoomer-x" data-zoom-close aria-label="سكّر">×</button>
+    <img id="adminZoomerImg" src="" alt="">
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var box = document.getElementById('adminZoomer');
+    var img = document.getElementById('adminZoomerImg');
+    if (!box || !img) return;
+
+    /**
+     * يرجّع رابط الصورة بالحجم الكامل.
+     *
+     * ⚠️ الصور الصغيرة فاللوحة مصغّرات اسمها ينتهي بـ`-thumb`.
+     * نحيّدوه باش نجيبو الأصل. إذا كان `data-full` موجودًا، نستعملوه
+     * مباشرة (أدق من التخمين على الاسم).
+     */
+    function fullUrl(el) {
+        if (el.dataset.full) return el.dataset.full;
+        return el.getAttribute('src').replace(/-thumb(\.[a-z0-9]+)$/i, '$1');
+    }
+
+    function open(src) {
+        img.src = src;
+        box.hidden = false;
+        document.body.style.overflow = 'hidden';
+    }
+
+    function close() {
+        box.hidden = true;
+        img.src = '';
+        document.body.style.overflow = '';
+    }
+
+    document.addEventListener('click', function (e) {
+        // سكّر
+        if (e.target.closest('[data-zoom-close]') || e.target === box) {
+            close();
+            return;
+        }
+
+        // ⚠️ ما نفتحوش المعاينة إذا الصورة داخل رابط ولا زر — الضغطة
+        // تخص الرابط، ماشي التكبير.
+        var thumb = e.target.closest('.thumb-sm');
+        if (!thumb || thumb.tagName !== 'IMG') return;
+        if (thumb.closest('a, button')) return;
+
+        e.preventDefault();
+        open(fullUrl(thumb));
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !box.hidden) close();
+    });
+})();
+</script>
+
 </body>
 </html>

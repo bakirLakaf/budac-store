@@ -71,7 +71,10 @@
         <tr>
             <td>
                 {% if p.image_filename %}
-                    <img class="thumb-sm" src="{{ url_for('static', filename='img/products/' + (p.image_filename | thumb)) }}" alt="">
+                    <img class="thumb-sm"
+                         src="{{ url_for('static', filename='img/products/' + (p.image_filename | thumb)) }}"
+                         data-full="{{ url_for('static', filename='img/products/' + p.image_filename) }}"
+                         alt="{{ p.name }}" title="اضغط باش تكبّرها">
                 {% else %}
                     <span class="thumb-sm thumb-empty">؟</span>
                 {% endif %}

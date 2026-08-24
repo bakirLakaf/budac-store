@@ -284,10 +284,36 @@ def main():
     # ───────── 7.6) كل getElementById لها عنصر موجود ─────────
     section("7.6 كل getElementById لها عنصر فالصفحة")
     import glob as _g
+    # ⚠️ القالب الوارث يقدر ينادي عنصرًا معرّفًا فالقالب الأساسي
+    # (مثلاً `adminZoomer` فـbase_admin.html). فنجمعو معرّفات القالب
+    # مع اللي يمدّد منو، وإلا الفحص يعطي إنذارات كاذبة.
+    all_ids = {}
+    for tpl in _g.glob("templates/**/*.html", recursive=True):
+        src = open(tpl, encoding="utf-8").read()
+        all_ids[os.path.basename(tpl)] = set(re.findall(r'\bid="([\w-]+)"', src))
+
     broken = []
     for tpl in _g.glob("templates/**/*.html", recursive=True):
         src = open(tpl, encoding="utf-8").read()
         ids = set(re.findall(r'\bid="([\w-]+)"', src))
+
+        # نزيدو معرّفات القوالب الأب (سلسلة extends)
+        parent = re.search(r'\{%\s*extends\s*["\']([^"\']+)["\']', src)
+        seen = set()
+        while parent:
+            name = os.path.basename(parent.group(1))
+            if name in seen or name not in all_ids:
+                break
+            seen.add(name)
+            ids |= all_ids[name]
+
+            hits = [f for f in _g.glob("templates/**/*.html", recursive=True)
+                    if os.path.basename(f) == name]
+            if not hits:
+                break
+            parent = re.search(r'\{%\s*extends\s*["\']([^"\']+)["\']',
+                               open(hits[0], encoding="utf-8").read())
+
         used = set(re.findall(r'getElementById\(\s*[\'"]([\w-]+)[\'"]', src))
         for miss in sorted(used - ids):
             broken.append(f"{tpl} → {miss}")
@@ -689,6 +715,52 @@ def main():
     anon = app.test_client()
     pub = anon.get("/").get_data(as_text=True)
     check("صفحات المتجر ما فيهاش أرقام اللوحة", "nav-count" not in pub)
+
+    # ───────── 7.16) معاينة الصور فكل اللوحة ─────────
+    section("7.16 تكبير الصور فاللوحة")
+
+    # ⚠️ نعيدو استعمال الطلبية اللي نشأت فوق بدل ما نزيدو وحدة —
+    # `order_number` فريد، فإدخال تاني بنفس الرقم يطيح.
+    from models import Order as _O2, OrderItem as _OI
+    with app.app_context():
+        prod5 = _P.query.filter_by(slug=slug).first()
+        order = _O2.query.first()
+        oid = order.id
+
+        # نزيدو سطرًا فيه صورة باش المعاينة يكون عندها واش تكبّر
+        if not any(i.image_filename for i in order.items):
+            db.session.add(_OI(
+                order_id=oid, product_id=prod5.id,
+                item_name=prod5.name, unit_price=250, quantity=2,
+                image_filename=prod5.image_filename,
+            ))
+            db.session.commit()
+
+    pages = [
+        (f"/admin/orders/{oid}", "تفاصيل الطلبية"),
+        ("/admin/products", "المنتجات"),
+        ("/admin/categories", "التصنيفات"),
+        ("/admin/offers", "العروض"),
+    ]
+    for path, label in pages:
+        r = client.get(path)
+        if r.status_code != 200:
+            check(f"{label} تتعرض", False, str(r.status_code))
+            continue
+        page = r.get_data(as_text=True)
+        check(f"{label}: المعاينة موجودة", 'id="adminZoomer"' in page)
+
+    order_page = client.get(f"/admin/orders/{oid}").get_data(as_text=True)
+    check("صورة الطلبية عندها data-full", 'data-full=' in order_page)
+    # ⚠️ data-full لازم يشير للصورة الأصلية ماشي للمصغّرة
+    m = re.search(r'data-full="([^"]+)"', order_page)
+    check("data-full يشير للأصل ماشي المصغّرة",
+          bool(m) and "-thumb" not in m.group(1),
+          m.group(1) if m else "ماكانش")
+
+    # ما يتكررش فأكثر من مكان
+    check("عنصر معاينة واحد فالصفحة",
+          order_page.count('id="adminZoomer"') == 1)
 
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")

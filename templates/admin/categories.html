@@ -15,7 +15,10 @@
                 <tr>
                     <td>
                         {% if c.image_filename %}
-                            <img class="thumb-sm" src="{{ url_for('static', filename='img/categories/' + (c.image_filename | thumb)) }}" alt="">
+                            <img class="thumb-sm"
+                                 src="{{ url_for('static', filename='img/categories/' + (c.image_filename | thumb)) }}"
+                                 data-full="{{ url_for('static', filename='img/categories/' + c.image_filename) }}"
+                                 alt="{{ c.name }}" title="اضغط باش تكبّرها">
                         {% else %}
                             <span class="thumb-sm thumb-empty">؟</span>
                         {% endif %}

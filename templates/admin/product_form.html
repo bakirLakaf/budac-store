@@ -827,11 +827,9 @@
 
 {% if product and product.images %}
 {# ═══════ معرض اختيار صورة الموديل ═══════ #}
-{# معاينة صورة بالحجم الكامل #}
-<div class="zoomer" id="imgZoomer" hidden>
-    <button type="button" class="zoomer-x" data-zoom-close aria-label="سكّر">×</button>
-    <img id="zoomerImg" src="" alt="">
-</div>
+{# ⚠️ اللايت-بوكس ولّى فـbase_admin.html — يخدم فكل اللوحة.
+   المحلي كان داخل `{% if product.images %}`، فلو المنتج عندو صور
+   توضيحية برك، زر التكبير كان يطيح بـnull. #}
 
 <div class="gal" id="imgGallery" hidden>
     <div class="gal-backdrop" data-close></div>
@@ -949,10 +947,9 @@ window.getCsrf = window.getCsrf || function () {
 
             // ---------- تكبير ----------
             if (e.target.closest('[data-zoom]')) {
-                var z = document.getElementById('imgZoomer');
-                document.getElementById('zoomerImg').src =
+                document.getElementById('adminZoomerImg').src =
                     item.querySelector('img').dataset.full;
-                z.hidden = false;
+                document.getElementById('adminZoomer').hidden = false;
                 return;
             }
 
@@ -1373,14 +1370,13 @@ window.getCsrf = window.getCsrf || function () {
         // ---------- معاينة كاملة ----------
         var zoomBtn = e.target.closest('.gal-zoom');
         if (zoomBtn) {
-            var z = document.getElementById('imgZoomer');
-            document.getElementById('zoomerImg').src = zoomBtn.dataset.full;
-            z.hidden = false;
+            document.getElementById('adminZoomerImg').src = zoomBtn.dataset.full;
+            document.getElementById('adminZoomer').hidden = false;
             return;   // ⚠️ ما نختاروش الصورة — المعاينة فقط
         }
         if (e.target.closest('[data-zoom-close]') ||
-            e.target.id === 'imgZoomer') {
-            document.getElementById('imgZoomer').hidden = true;
+            e.target.id === 'adminZoomer') {
+            document.getElementById('adminZoomer').hidden = true;
             return;
         }
 
