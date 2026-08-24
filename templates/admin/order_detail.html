@@ -11,7 +11,14 @@
 
 <div class="form-grid">
     <div class="form-col">
-        <h2 class="section-title">المنتجات</h2>
+        {# ⚠️ عدد القطع مهم عند التحضير: «5 أسطر» ماشي «14 قطعة».
+           الأدمن يحتاج الرقم الثاني باش يعرف واش يحضّر ويوزن. #}
+        <h2 class="section-title">
+            المنتجات
+            <span class="count-badge">
+                {{ order.items | length }} سطر · {{ order.item_count }} قطعة
+            </span>
+        </h2>
         <table class="admin-table">
             <thead><tr><th></th><th>المنتج</th><th>سعر الوحدة</th><th>الكمية</th><th>المجموع</th><th></th></tr></thead>
             <tbody>
@@ -189,29 +196,66 @@
     <div class="form-col">
         <h2 class="section-title">الزبون والتوصيل</h2>
         <div class="info-card">
-            <div class="info-row"><span>الاسم</span><strong>{{ order.customer_name }}</strong></div>
-            <div class="info-row"><span>الهاتف</span><strong dir="ltr">{{ order.customer_phone }}</strong></div>
-            <div class="info-row"><span>الولاية</span><strong>{{ order.wilaya_code }} ~ {{ order.wilaya_name }}</strong></div>
-            {% if order.commune %}<div class="info-row"><span>البلدية</span><strong>{{ order.commune }}</strong></div>{% endif %}
+            {# ⚠️ كل خانة قابلة للنسخ بضغطة — الأدمن ينسخ الاسم والهاتف
+               والبلدية باش يلصقهم فموقع شركة التوصيل. الكتابة باليد
+               تجيب أخطاء، خاصة فالأرقام. #}
+            <div class="info-row">
+                <span>الاسم</span>
+                <strong class="copyable" data-copy="{{ order.customer_name }}"
+                        title="اضغط باش تنسخو">{{ order.customer_name }}</strong>
+            </div>
+            <div class="info-row">
+                <span>الهاتف</span>
+                <strong dir="ltr" class="copyable" data-copy="{{ order.customer_phone }}"
+                        title="اضغط باش تنسخو">{{ order.customer_phone }}</strong>
+            </div>
+            <div class="info-row">
+                <span>الولاية</span>
+                <strong class="copyable" data-copy="{{ order.wilaya_name }}"
+                        title="اضغط باش تنسخو">{{ order.wilaya_code }} ~ {{ order.wilaya_name }}</strong>
+            </div>
+            {% if order.commune %}
+            <div class="info-row">
+                <span>البلدية</span>
+                <strong class="copyable" data-copy="{{ order.commune }}"
+                        title="اضغط باش تنسخو">{{ order.commune }}</strong>
+            </div>
+            {% endif %}
 
             {# مكتب الاستلام — ضروري تشوفو قبل ما تبعث الطلبية للشركة #}
             {% if order.pickup_point_name %}
             <div class="info-row info-row-highlight">
                 <span>مكتب الاستلام</span>
-                <strong>{{ order.pickup_point_name }}</strong>
+                <strong class="copyable" data-copy="{{ order.pickup_point_name }}"
+                        title="اضغط باش تنسخو">{{ order.pickup_point_name }}</strong>
             </div>
             {% endif %}
 
             {% if order.commune_external_id or order.pickup_point_id %}
             <div class="info-row info-row-muted">
                 <span>معرّف الشركة</span>
-                <code>{{ order.pickup_point_id or order.commune_external_id }}</code>
+                <code class="copyable" data-copy="{{ order.pickup_point_id or order.commune_external_id }}"
+                      title="اضغط باش تنسخو">{{ order.pickup_point_id or order.commune_external_id }}</code>
             </div>
             {% endif %}
             <div class="info-row"><span>نوع التوصيل</span><strong>{{ order.delivery_type_label }}</strong></div>
             <div class="info-row"><span>الشركة</span><strong>{{ order.carrier_name or '—' }}</strong></div>
-            {% if order.address_note %}<div class="info-row"><span>عنوان دقيق</span><strong>{{ order.address_note }}</strong></div>{% endif %}
+            {% if order.address_note %}
+            <div class="info-row">
+                <span>عنوان دقيق</span>
+                <strong class="copyable" data-copy="{{ order.address_note }}"
+                        title="اضغط باش تنسخو">{{ order.address_note }}</strong>
+            </div>
+            {% endif %}
             <div class="info-row"><span>تاريخ الطلب</span><strong>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</strong></div>
+
+            {# نسخة كاملة — للصق مرة وحدة فنموذج الشركة #}
+            <div class="info-row info-row-actions">
+                <button type="button" class="btn-admin btn-sm btn-ghost"
+                        data-copy="{{ order.customer_name }} | {{ order.customer_phone }} | {{ order.wilaya_code }} {{ order.wilaya_name }}{% if order.commune %} | {{ order.commune }}{% endif %}{% if order.pickup_point_name %} | {{ order.pickup_point_name }}{% endif %} | {{ order.total }} دج">
+                    📋 انسخ كل المعلومات
+                </button>
+            </div>
         </div>
 
         {% if order.customer_note %}

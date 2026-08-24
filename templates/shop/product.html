@@ -272,7 +272,7 @@
 
                     {# ═══════ أسعار حسب الكمية ═══════ #}
                     <div class="tiers-box" id="tiersBox" hidden>
-                        <p class="tiers-title">📦 كل ما تشري أكثر، ترخص الحبة</p>
+                        <p class="tiers-title">📦 كل ما تشري أكثر، يرخص {{ product.unit_label }}</p>
                         <div class="tiers-list" id="tiersList"></div>
                         <p class="tiers-hint" id="tiersHint"></p>
                     </div>
@@ -294,7 +294,7 @@
                        ويمنع مفاجأة السعر فالسلة. #}
                     <div class="live-total" id="liveTotal">
                         <div class="live-row">
-                            <span>سعر الحبة</span>
+                            <span>سعر {{ product.unit_label }}</span>
                             <strong id="liveUnit">{{ product.price_display }}</strong>
                         </div>
                         <div class="live-row live-row-sum">
@@ -811,6 +811,9 @@
     var currentTiers = [];
     var basePriceDisplay = priceValueEl ? priceValueEl.textContent : "";
 
+    // وحدة البيع — «حبة» ولا «متر» ولا نص مخصّص من لوحة التحكم
+    var UNIT_SHORT = {{ product.unit_short | tojson }};
+
     function readTiers(chip) {
         if (!chip) return [];
         try {
@@ -849,7 +852,8 @@
             var isOn = active && t.min === active.min;
             html += '<div class="tier-row' + (isOn ? " is-active" : "") + '">'
                   + '<span class="tier-range">' + t.range + "</span>"
-                  + '<span class="tier-price">' + formatDZD(t.price) + " / الحبة</span>"
+                  + '<span class="tier-price">' + formatDZD(t.price)
+                  + " / " + UNIT_SHORT + "</span>"
                   + "</div>";
         });
         tiersList.innerHTML = html;
@@ -866,8 +870,8 @@
         }
         if (next && tiersHint) {
             var need = next.min - qty;
-            tiersHint.textContent = "زيد " + need + " حبة وتشري بـ"
-                                  + formatDZD(next.price) + " للحبة";
+            tiersHint.textContent = "زيد " + need + " " + UNIT_SHORT + " وتشري بـ"
+                                  + formatDZD(next.price) + " لـ" + UNIT_SHORT;
             tiersHint.hidden = false;
         } else if (tiersHint) {
             tiersHint.hidden = true;

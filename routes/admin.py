@@ -346,6 +346,15 @@ def product_form(product_id=None):
         product.slug = slug
         product.price = request.form.get("price", type=int) or 0
         product.compare_at_price = request.form.get("compare_at_price", type=int) or None
+
+        # ⚠️ وحدة البيع: «حبة» ولا «متر» ولا نص مخصّص. إذا اختار
+        # «مخصّص» ونسا يكتب الاسم، نرجعو للحبة بدل ما نخزّنو فراغًا.
+        unit_choice = (request.form.get("unit") or "piece").strip()
+        if unit_choice == "custom":
+            custom = (request.form.get("unit_custom") or "").strip()
+            product.unit = custom[:40] if custom else Product.UNIT_PIECE
+        else:
+            product.unit = unit_choice[:40] or Product.UNIT_PIECE
         product.stock_quantity = request.form.get("stock_quantity", type=int) or 0
         product.category_id = request.form.get("category_id", type=int) or None
         product.is_active = bool(request.form.get("is_active"))
@@ -2902,6 +2911,47 @@ def variant_price(variant_id):
     variant.price = price
     db.session.commit()
     return reply(True, f"«{variant.label}» ولّى بـ{price:,} دج")
+
+
+@admin_bp.route("/variants/<int:variant_id>/available", methods=["POST"])
+@login_required
+def variant_toggle_available(variant_id):
+    """
+    يبدّل توفّر موديل (متوفر ↔ غير متوفر).
+
+    ⚠️ الموديل غير المتوفر يبقى موجودًا بأسعارو وعروضو — يبان للزبون
+    مشطوبًا وما يقدرش يختارو. أحسن من الحذف: كي يرجع من عند المورّد،
+    ضغطة وحدة ويولّي متوفرًا.
+    """
+    variant = ProductVariant.query.get_or_404(variant_id)
+    product = variant.product
+
+    variant.is_available = not variant.is_available
+
+    # ⚠️ إذا عطّلنا الافتراضي، لازم موديل آخر يولّي هو الافتراضي —
+    # وإلا صفحة المنتج تفتح على موديل ما يتباعش.
+    moved = None
+    if not variant.is_available and variant == product.default_variant:
+        for other in product.ordered_variants:
+            if other.id != variant.id and other.is_available:
+                product.image_filename = other.image_filename or product.image_filename
+                other.is_default = True
+                variant.is_default = False
+                moved = other.label
+                break
+
+    db.session.commit()
+
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({"ok": True, "is_available": variant.is_available,
+                        "moved": moved})
+
+    state = "متوفر" if variant.is_available else "غير متوفر"
+    msg = f"«{variant.label}» ولّى {state}"
+    if moved:
+        msg += f" — والافتراضي ولّى «{moved}»"
+    flash(msg, "success")
+    return redirect(url_for("admin.product_form", product_id=product.id))
 
 
 @admin_bp.route("/variants/<int:variant_id>/label", methods=["POST"])

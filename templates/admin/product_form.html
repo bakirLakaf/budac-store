@@ -34,6 +34,28 @@
             </label>
 
             <div class="field-row">
+                {# ═══════ وحدة البيع ═══════
+                   ⚠️ ماشي كل شي ينباع بالحبة — الشريط والسفيفة بالمتر.
+                   الاختيار هنا يبدّل كل النصوص فالموقع: «سعر الحبة»
+                   تولّي «سعر المتر»، والحاسبة والعروض معاها. #}
+                {% set u = product.unit if product else 'piece' %}
+                {% set is_custom = u not in ['piece', 'meter'] %}
+                <label class="field">
+                    <span>وحدة البيع</span>
+                    <select name="unit" id="unitPicker">
+                        <option value="piece" {{ 'selected' if u == 'piece' else '' }}>حبة</option>
+                        <option value="meter" {{ 'selected' if u == 'meter' else '' }}>متر</option>
+                        <option value="custom" {{ 'selected' if is_custom else '' }}>اختياري (اكتبها)</option>
+                    </select>
+                    <input type="text" name="unit_custom" id="unitCustom"
+                           value="{{ u if is_custom else '' }}"
+                           placeholder="مثلاً: رولو · علبة · كيلو"
+                           maxlength="40" {{ '' if is_custom else 'hidden' }}>
+                    <small class="hint">
+                        الزبون يشوف «سعر {{ product.unit_label if product else 'الحبة' }}» فصفحة المنتج.
+                    </small>
+                </label>
+
                 <label class="field">
                     <span>السعر (دج) *</span>
                     <input type="number" name="price" min="0" required value="{{ product.price if product else '' }}">
@@ -372,7 +394,7 @@
             </label>
 
             <label class="bulk-field">
-                <span>سعر الحبة (دج)</span>
+                <span>سعر {{ product.unit_label if product else 'الحبة' }} (دج)</span>
                 <input type="number" name="tier_bulk_price" min="0" placeholder="420" required>
             </label>
         </div>
@@ -546,7 +568,7 @@
 <p class="hint">
     الموديل = نوع من المنتج (لون، شكل، مقاس). لكل موديل:
     <strong>صورة</strong> يشوفها الزبون كي يختارو، و<strong>أسعار حسب الكمية</strong>
-    (كل ما زاد يشري، كل ما رخص سعر الحبة).
+    (كل ما زاد يشري، كل ما رخص سعر {{ product.unit_label if product else 'الحبة' }}).
 </p>
 
 {# ═══════ تشخيص الترتيب ═══════
@@ -567,7 +589,7 @@
 
 <div class="variants-manager">
     {% for v in product.ordered_variants %}
-    <div class="variant-card">
+    <div class="variant-card {{ '' if v.is_available else 'is-unavailable' }}">
 
         {# ---------- الرأس: الاسم والسعر والحذف ---------- #}
         <div class="variant-head">
@@ -617,6 +639,19 @@
                     {% if v == product.default_variant %}
                     <span class="tag-default" title="مربوط بالصورة الرئيسية ★">افتراضي</span>
                     {% endif %}
+
+                    {# ═══════ توفّر الموديل ═══════
+                       ⚠️ التعطيل أحسن من الحذف: الموديل يبقى بأسعارو
+                       وعروضو، ويرجع بضغطة كي يوصل من عند المورّد. #}
+                    <form method="post" class="avail-form"
+                          action="{{ url_for('admin.variant_toggle_available', variant_id=v.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit"
+                                class="avail-btn {{ 'is-on' if v.is_available else 'is-off' }}"
+                                title="{{ 'اضغط باش تعطّلو' if v.is_available else 'اضغط باش ترجّعو' }}">
+                            {{ '✓ متوفر' if v.is_available else '✕ غير متوفر' }}
+                        </button>
+                    </form>
                 </span>
             </div>
 
@@ -683,7 +718,7 @@
                         <tr>
                             <th>من (حبة)</th>
                             <th>إلى (حبة)</th>
-                            <th>سعر الحبة (دج)</th>
+                            <th>سعر {{ product.unit_label }} (دج)</th>
                             <th class="tiers-x-col"><span class="sr-only">مسح</span></th>
                         </tr>
                     </thead>
@@ -730,7 +765,7 @@
                 <p class="hint hint-sm">
                     وحدات بيع لها اسم وسعر ثابت — مثال:
                     <strong>1</strong> · «رولو (فيه 12 متر)» · <strong>700</strong> دج.
-                    الزبون يختار منها مباشرة بدل ما يحسب بالحبة.
+                    الزبون يختار منها مباشرة بدل ما يحسب بـ{{ product.unit_short }}.
                 </p>
 
                 <form method="post" action="{{ url_for('admin.variant_packs', variant_id=v.id) }}"
@@ -1614,6 +1649,22 @@ function initUploader(box) {
 
 // نشغّلو كل الرافعين الموجودين فالصفحة
 document.querySelectorAll('.uploader').forEach(initUploader);
+
+/* ---------- وحدة البيع ---------- */
+/* حقل النص المخصّص يبان غير كي يختار «اختياري». */
+(function () {
+    var picker = document.getElementById('unitPicker');
+    var custom = document.getElementById('unitCustom');
+    if (!picker || !custom) return;
+
+    function sync() {
+        var on = picker.value === 'custom';
+        custom.hidden = !on;
+        if (on) custom.focus();
+    }
+
+    picker.addEventListener('change', sync);
+})();
 
 /* ---------- وصف الصورة التوضيحية ---------- */
 /* يحفظ عند مغادرة الحقل، غير إذا تبدّلت القيمة فعلاً. */

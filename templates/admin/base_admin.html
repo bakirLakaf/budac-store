@@ -175,11 +175,22 @@ document.addEventListener('click', function (e) {
     if (!btn) return;
 
     var text = btn.dataset.copy || '';
+    if (!text) return;
+
+    // ⚠️ الأزرار نبدّلو نصها، لكن خانات المعلومات (الاسم، الهاتف)
+    // ما نمسّوش نصها — نستعملو صنفًا يوري تأكيدًا بالألوان بدلها،
+    // وإلا الاسم يختفي ويتبدّل بـ«تنسخ».
+    var isButton = btn.tagName === 'BUTTON';
     var original = btn.textContent;
 
     function done(ok) {
-        btn.textContent = ok ? '✅ تنسخ' : '🔴 ما تنسخش';
-        setTimeout(function () { btn.textContent = original; }, 1600);
+        if (isButton) {
+            btn.textContent = ok ? '✅ تنسخ' : '🔴 ما تنسخش';
+            setTimeout(function () { btn.textContent = original; }, 1600);
+            return;
+        }
+        btn.classList.toggle('is-copied', ok);
+        setTimeout(function () { btn.classList.remove('is-copied'); }, 1200);
     }
 
     // ⚠️ `navigator.clipboard` ما يخدمش غير فـHTTPS ولا localhost.

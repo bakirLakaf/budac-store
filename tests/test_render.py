@@ -977,6 +977,165 @@ def main():
     check("حقول تعديل الكمية تبان", "item-edit" in page_e)
     check("تعديل سعر التوصيل يبان", "ship-edit" in page_e)
 
+    # ───────── 7.19) وحدة البيع ─────────
+    section("7.19 وحدة البيع (حبة · متر · مخصّص)")
+    with app.app_context():
+        prod7 = _P.query.filter_by(slug=slug).first()
+
+        for raw, label, short in [
+            ("piece", "الحبة", "حبة"),
+            ("meter", "المتر", "متر"),
+            ("رولو", "رولو", "رولو"),
+            ("", "الحبة", "حبة"),          # فارغ = حبة
+        ]:
+            prod7.unit = raw
+            db.session.commit()
+            check(f"«{raw}» → {prod7.unit_label} / {prod7.unit_short}",
+                  prod7.unit_label == label and prod7.unit_short == short,
+                  f"{prod7.unit_label} / {prod7.unit_short}")
+
+        prod7.unit = "meter"
+        db.session.commit()
+
+    shop7 = client.get(f"/product/{slug}").get_data(as_text=True)
+    check("المتجر يقول «سعر المتر»", "سعر المتر" in shop7)
+
+    # ⚠️ «سعر الحبة» تبقى موجودة فتعليقات JS — ما تبانش للزبون.
+    # نفحصو النص المرئي برك (بلا تعليقات ولا كتل سكربت).
+    visible = re.sub(r"<script.*?</script>", "", shop7, flags=re.S)
+    visible = re.sub(r"\{#.*?#\}", "", visible, flags=re.S)
+    visible = re.sub(r"<!--.*?-->", "", visible, flags=re.S)
+    check("النص المرئي ما فيهش «سعر الحبة»",
+          "سعر الحبة" not in visible,
+          [l.strip() for l in visible.split("\n") if "سعر الحبة" in l][:2])
+
+    check("JS عندو اسم الوحدة", "var UNIT_SHORT" in shop7)
+    m_unit = re.search(r"var UNIT_SHORT = (.+);", shop7)
+    # ⚠️ `tojson` يهرّب العربية لـ\uXXXX — سليم فالمتصفح، فنفكّو
+    # الترميز قبل ما نقارنو بدل ما نبدّلو الفلتر (التهريب حماية من XSS).
+    import json as _json
+    check("قيمة UNIT_SHORT = متر",
+          bool(m_unit) and _json.loads(m_unit.group(1)) == "متر",
+          m_unit.group(1) if m_unit else "ماكانش")
+
+    adm7 = client.get(f"/admin/products/{pid}/edit").get_data(as_text=True)
+    check("منتقي الوحدة موجود", 'id="unitPicker"' in adm7)
+    check("حقل الوحدة المخصّصة موجود", 'id="unitCustom"' in adm7)
+
+    # الحفظ من الفورم
+    # ⚠️ لازم فورم **كامل**: المسار يقرا كل الحقول، واللي ناقص يولّي
+    # فارغًا. فورم بلا `is_active` يعطّل المنتج ويخفيه من المتجر —
+    # وهذا سمّم فحوصًا بعديه فنسخة سابقة من هاد الاختبار.
+    def full_form(**extra):
+        with app.app_context():
+            p_ = _P.query.filter_by(slug=slug).first()
+            base = {
+                "name": p_.name,
+                "slug": p_.slug,
+                "price": p_.price,
+                "category_id": p_.category_id or "",
+                "description": p_.description or "",
+                "is_active": "1",
+            }
+        base.update(extra)
+        return base
+
+    client.post(f"/admin/products/{pid}/edit",
+                data=full_form(unit="custom", unit_custom="علبة"))
+    with app.app_context():
+        check("حفظ وحدة مخصّصة",
+              _P.query.filter_by(slug=slug).first().unit == "علبة",
+              _P.query.filter_by(slug=slug).first().unit)
+
+    # «مخصّص» بلا نص → يرجع للحبة بدل ما يخزّن فراغًا
+    client.post(f"/admin/products/{pid}/edit",
+                data=full_form(unit="custom", unit_custom="   "))
+    with app.app_context():
+        check("مخصّص فارغ → حبة",
+              _P.query.filter_by(slug=slug).first().unit == "piece",
+              _P.query.filter_by(slug=slug).first().unit)
+
+    # نرجّعو المتر للفحوص اللي جاية
+    client.post(f"/admin/products/{pid}/edit", data=full_form(unit="meter"))
+    with app.app_context():
+        p_check = _P.query.filter_by(slug=slug).first()
+        check("⚠️ المنتج مازال مفعّلاً بعد الحفظ", p_check.is_active is True)
+        check("⚠️ التصنيف ما ضاعش", p_check.category_id is not None)
+        check("⚠️ الموديلات ما ضاعوش", len(p_check.variants) > 0,
+              len(p_check.variants))
+
+    # ───────── 7.20) توفّر الموديل ─────────
+    section("7.20 متوفر / غير متوفر")
+    with app.app_context():
+        prod8 = _P.query.filter_by(slug=slug).first()
+        # ⚠️ لازم موديل **من هاد المنتج** وماشي الافتراضي — وإلا نعطّلو
+        # موديلاً من منتج آخر ونستنّاو أثرًا فصفحة غالطة.
+        variants = [v for v in prod8.ordered_variants
+                    if v.id != prod8.default_variant.id]
+        check("عند المنتج موديل غير الافتراضي", bool(variants),
+              [v.label for v in prod8.ordered_variants])
+        target = variants[0]
+        tid = target.id
+        check("الموديل متوفر بالبداية", target.is_available is True)
+        check("is_in_stock = True", target.is_in_stock is True)
+
+    client.post(f"/admin/variants/{tid}/available")
+    with app.app_context():
+        v = db.session.get(_V, tid)
+        check("اتعطّل", v.is_available is False)
+        check("⚠️ is_in_stock ولّى False", v.is_in_stock is False)
+
+    shop8 = client.get(f"/product/{slug}").get_data(as_text=True)
+    with app.app_context():
+        off_label = db.session.get(_V, tid).label
+    # ⚠️ نتأكدو أن **هاد** الموديل بالضبط عندو is-out، ماشي أي واحد
+    # ⚠️ نجمعو **كل** الشرائح المشطوبة — المنتج عندو أكثر من موديل،
+    # و`re.search` يرجّع الأول برك. المهم أن موديلنا داخل فيهم.
+    out_labels = [
+        m.group(1).strip()
+        for m in re.finditer(
+            r'class="variant-chip[^"]*is-out[^"]*"[^>]*>\s*([^<]+?)\s*<', shop8)
+    ]
+    all_chips = re.findall(
+        r'class="variant-chip[^"]*"[^>]*>\s*([^<]+?)\s*<', shop8)
+    check(f"«{off_label}» يبان مشطوبًا",
+          off_label in out_labels,
+          f"المشطوبين: {out_labels} | كل الشرائح: {all_chips}")
+
+    client.post(f"/admin/variants/{tid}/available")
+    with app.app_context():
+        check("رجع متوفرًا", db.session.get(_V, tid).is_available is True)
+
+    # ⚠️ تعطيل الافتراضي ينقل الافتراضية لموديل آخر متوفر
+    with app.app_context():
+        prod8 = _P.query.filter_by(slug=slug).first()
+        default_id = prod8.default_variant.id
+    client.post(f"/admin/variants/{default_id}/available")
+    with app.app_context():
+        prod8 = _P.query.filter_by(slug=slug).first()
+        new_default = prod8.default_variant
+        check("⚠️ الافتراضي انتقل لموديل متوفر",
+              new_default.id != default_id and new_default.is_available,
+              f"{new_default.label} (available={new_default.is_available})")
+    client.post(f"/admin/variants/{default_id}/available")
+
+    adm8 = client.get(f"/admin/products/{pid}/edit").get_data(as_text=True)
+    check("زر التوفّر موجود فاللوحة", "avail-btn" in adm8)
+
+    # ───────── 7.21) عدّاد المنتجات والنسخ ─────────
+    section("7.21 عدّاد الطلبية والخانات القابلة للنسخ")
+    with app.app_context():
+        o9 = _O4.query.filter_by(order_number="BD-EDIT").first()
+        oid9 = o9.id
+        lines, pieces = len(o9.items), o9.item_count
+    page9 = client.get(f"/admin/orders/{oid9}").get_data(as_text=True)
+    check(f"عدد الأسطر ({lines}) يبان", f"{lines} سطر" in page9)
+    check(f"عدد القطع ({pieces}) يبان", f"{pieces} قطعة" in page9)
+    check("الاسم قابل للنسخ", 'class="copyable"' in page9)
+    check("زر نسخ كل المعلومات", "انسخ كل المعلومات" in page9)
+    check("عدد الخانات القابلة للنسخ ≥ 3",
+          page9.count("copyable") >= 3, page9.count("copyable"))
+
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")
     import glob

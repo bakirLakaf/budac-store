@@ -1850,3 +1850,60 @@ img.thumb-sm:hover {
     .add-item-form .field,
     .add-item-form .field-narrow { flex: 1 1 100%; }
 }
+
+/* ---------- توفّر الموديل ---------- */
+.avail-form { display: inline; margin: 0; }
+
+.avail-btn {
+    padding: 3px 10px;
+    border: 1px solid transparent;
+    border-radius: 99px;
+    font-family: inherit; font-size: 11px; font-weight: 800;
+    cursor: pointer;
+    transition: opacity 0.12s;
+}
+.avail-btn:hover { opacity: 0.82; }
+
+.avail-btn.is-on {
+    background: rgba(34, 139, 84, 0.12);
+    border-color: rgba(34, 139, 84, 0.35);
+    color: #14663A;
+}
+.avail-btn.is-off {
+    background: rgba(190, 46, 46, 0.12);
+    border-color: rgba(190, 46, 46, 0.35);
+    color: var(--a-danger);
+}
+
+/* البطاقة المعطّلة تبان باهتة */
+.variant-card.is-unavailable { opacity: 0.62; }
+.variant-card.is-unavailable .variant-name,
+.variant-card.is-unavailable .vlabel-input { text-decoration: line-through; }
+
+/* ---------- خانات قابلة للنسخ ---------- */
+.copyable {
+    cursor: pointer;
+    border-bottom: 1px dashed var(--a-border);
+    transition: background 0.12s, border-color 0.12s;
+}
+.copyable:hover {
+    background: rgba(201, 162, 39, 0.16);
+    border-bottom-color: var(--a-gold);
+}
+.copyable.is-copied {
+    background: rgba(34, 139, 84, 0.16);
+    border-bottom-color: transparent;
+}
+
+.info-row-actions { justify-content: center; padding-top: 10px; }
+
+/* عدّاد المنتجات فرأس القسم */
+.count-badge {
+    margin-inline-start: 8px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    background: var(--a-bg);
+    border: 1px solid var(--a-border);
+    font-size: 12px; font-weight: 700;
+    color: var(--a-primary-light);
+}
