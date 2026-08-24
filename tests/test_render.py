@@ -33,8 +33,14 @@ PASSED, FAILED = [], []
 
 
 def check(name, ok, detail=""):
+    """
+    ⚠️ `str(detail)` ضروري: كثير من الفحوص تمرّر رقمًا كتفصيل
+    (مثلاً `o.subtotal`). بلاه، الاختبار **الفاشل** يطيح بـTypeError
+    قبل ما يطبع سبب الفشل — فتشوف انهيارًا بدل رسالة واضحة.
+    """
     (PASSED if ok else FAILED).append(name)
-    print(("  ✅ " if ok else "  ❌ ") + name + ("  " + detail if not ok else ""))
+    print(("  ✅ " if ok else "  ❌ ") + name
+          + ("  → " + str(detail) if not ok and detail != "" else ""))
 
 
 def section(t):
@@ -845,6 +851,131 @@ def main():
     # قائمة الطلبيات
     lst = client.get("/admin/orders").get_data(as_text=True)
     check("زر واتساب سريع فالقائمة", "wa-quick" in lst)
+
+    # ───────── 7.18) تعديل الطلبية ─────────
+    section("7.18 تعديل الطلبية (زيادة · نقصان · حذف)")
+    from models import Order as _O4, OrderItem as _OI2, Coupon as _Cp
+
+    with app.app_context():
+        # طلبية نظيفة بكوبون 10% وتوصيل 500
+        db.session.add(_Cp(code="EDIT10", discount_type=_Cp.TYPE_PERCENT,
+                           value=10, is_active=True))
+        prod6 = _P.query.filter_by(slug=slug).first()
+        var6 = prod6.default_variant
+
+        o = _O4(order_number="BD-EDIT", customer_name="زبون",
+                customer_phone="0551000000", wilaya_code="16",
+                wilaya_name="الجزائر", delivery_type="home",
+                coupon_code="EDIT10", subtotal=0, discount_amount=0,
+                shipping_price=500, total=0)
+        db.session.add(o)
+        db.session.flush()
+        db.session.add(_OI2(order_id=o.id, product_id=prod6.id,
+                            variant_id=var6.id, item_name=prod6.name,
+                            variant_label=var6.label,
+                            unit_price=100, quantity=2))
+        db.session.commit()
+        o.recalculate()
+        db.session.commit()
+        eid, item_id = o.id, o.items[0].id
+        var_id = var6.id
+        check("الحالة الأولى: 200-20+500=680", o.total == 680, o.total)
+
+    # زيادة الكمية
+    client.post(f"/admin/orders/{eid}/items/{item_id}/update",
+                data={"quantity": 5, "unit_price": 100})
+    with app.app_context():
+        o = db.session.get(_O4, eid)
+        check("كمية 5 → subtotal 500", o.subtotal == 500, o.subtotal)
+        check("⚠️ الخصم يتحسب من الجديد (50)", o.discount_amount == 50,
+              o.discount_amount)
+        check("المجموع 500-50+500=950", o.total == 950, o.total)
+
+    # نقصان
+    client.post(f"/admin/orders/{eid}/items/{item_id}/update",
+                data={"quantity": 1, "unit_price": 100})
+    with app.app_context():
+        o = db.session.get(_O4, eid)
+        check("كمية 1 → المجموع 100-10+500=590", o.total == 590, o.total)
+
+    # كمية صفر مرفوضة
+    client.post(f"/admin/orders/{eid}/items/{item_id}/update",
+                data={"quantity": 0})
+    with app.app_context():
+        check("كمية 0 مرفوضة", db.session.get(_O4, eid).items[0].quantity == 1)
+
+    # سعر سالب مرفوض
+    client.post(f"/admin/orders/{eid}/items/{item_id}/update",
+                data={"unit_price": -50})
+    with app.app_context():
+        check("سعر سالب مرفوض",
+              db.session.get(_O4, eid).items[0].unit_price == 100)
+
+    # زيادة منتج
+    client.post(f"/admin/orders/{eid}/items/add",
+                data={"variant_id": var_id, "quantity": 3, "unit_price": 200})
+    with app.app_context():
+        o = db.session.get(_O4, eid)
+        check("اتزاد عنصر", len(o.items) == 2, len(o.items))
+        check("subtotal 100+600=700", o.subtotal == 700, o.subtotal)
+        check("المجموع 700-70+500=1130", o.total == 1130, o.total)
+
+    # 🔴 الحذف — هنا كان الخلل: العلاقة تبقى محمّلة فالذاكرة
+    client.post(f"/admin/orders/{eid}/items/{item_id}/delete")
+    with app.app_context():
+        o = db.session.get(_O4, eid)
+        check("بقى عنصر واحد", len(o.items) == 1, len(o.items))
+        check("⚠️ الحذف يعيد الحساب (600)", o.subtotal == 600, o.subtotal)
+        check("المجموع 600-60+500=1040", o.total == 1040, o.total)
+
+    # آخر عنصر محمي
+    with app.app_context():
+        last_id = db.session.get(_O4, eid).items[0].id
+    client.post(f"/admin/orders/{eid}/items/{last_id}/delete")
+    with app.app_context():
+        check("آخر عنصر ما ينمسحش",
+              len(db.session.get(_O4, eid).items) == 1)
+
+    # سعر التوصيل يدويًا
+    client.post(f"/admin/orders/{eid}/shipping", data={"shipping_price": 0})
+    with app.app_context():
+        o = db.session.get(_O4, eid)
+        check("توصيل 0 → المجموع 540", o.total == 540, o.total)
+    client.post(f"/admin/orders/{eid}/shipping", data={"shipping_price": -100})
+    with app.app_context():
+        check("توصيل سالب مرفوض",
+              db.session.get(_O4, eid).shipping_price == 0)
+
+    # ⚠️ بعد الإرسال لشركة التوصيل: التعديل ممنوع
+    with app.app_context():
+        o = db.session.get(_O4, eid)
+        o.tracking_number = "ZR-LOCK"
+        db.session.commit()
+        frozen = o.total
+        check("is_editable = False بعد الإرسال", o.is_editable is False)
+
+    client.post(f"/admin/orders/{eid}/items/{last_id}/update",
+                data={"quantity": 99})
+    client.post(f"/admin/orders/{eid}/items/add",
+                data={"variant_id": var_id, "quantity": 5})
+    client.post(f"/admin/orders/{eid}/shipping", data={"shipping_price": 9999})
+    with app.app_context():
+        o = db.session.get(_O4, eid)
+        check("⚠️ كل التعديلات مرفوضة بعد الإرسال",
+              o.total == frozen and len(o.items) == 1, o.total)
+
+    page_e = client.get(f"/admin/orders/{eid}").get_data(as_text=True)
+    check("الصفحة توري أنها مقفولة", "ما تتعدّلش" in page_e)
+
+    # طلبية قابلة للتعديل: الواجهة تبان
+    with app.app_context():
+        o = db.session.get(_O4, eid)
+        o.tracking_number = None
+        db.session.commit()
+    page_e = client.get(f"/admin/orders/{eid}").get_data(as_text=True)
+    check("فورم زيادة منتج يبان", "add-item-form" in page_e)
+    check("حقول تعديل الكمية تبان", "item-edit" in page_e)
+    check("تعديل سعر التوصيل يبان", "ship-edit" in page_e)
 
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")

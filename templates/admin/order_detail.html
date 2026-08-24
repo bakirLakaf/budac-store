@@ -13,7 +13,7 @@
     <div class="form-col">
         <h2 class="section-title">المنتجات</h2>
         <table class="admin-table">
-            <thead><tr><th></th><th>المنتج</th><th>سعر الوحدة</th><th>الكمية</th><th>المجموع</th></tr></thead>
+            <thead><tr><th></th><th>المنتج</th><th>سعر الوحدة</th><th>الكمية</th><th>المجموع</th><th></th></tr></thead>
             <tbody>
                 {% for item in order.items %}
                 <tr>
@@ -31,13 +31,132 @@
                         {% if item.variant_label %}<br><small class="muted-cell">{{ item.variant_label }}</small>{% endif %}
                         {% if item.offer_id %}<span class="tag tag-gold">باقة</span>{% endif %}
                     </td>
+                    {# ⚠️ السعر والكمية قابلين للتعديل فمكانهم — الزبون
+                       يتصل ويقول «زيدلي 2» ولا «نقّصلي وحدة»، ولازم
+                       تديرها بلا ما تلغي الطلبية كاملة. #}
+                    {% if order.is_editable %}
+                    <td colspan="3">
+                        <form method="post" class="item-edit"
+                              action="{{ url_for('admin.order_item_update', order_id=order.id, item_id=item.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="number" name="unit_price" min="0"
+                                   value="{{ item.unit_price }}"
+                                   aria-label="سعر الوحدة" title="سعر الوحدة">
+                            <span class="item-x">×</span>
+                            <input type="number" name="quantity" min="1" max="5000"
+                                   value="{{ item.quantity }}"
+                                   aria-label="الكمية" title="الكمية">
+                            <button type="submit" class="btn-admin btn-sm"
+                                    title="احفظ">✓</button>
+                            <strong class="item-total">{{ item.line_total_display }}</strong>
+                        </form>
+                    </td>
+                    <td>
+                        <form method="post"
+                              onsubmit="return confirm('تحيّد «{{ item.item_name }}» من الطلبية؟')"
+                              action="{{ url_for('admin.order_item_delete', order_id=order.id, item_id=item.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn-admin btn-sm btn-danger"
+                                    title="حيّدو">×</button>
+                        </form>
+                    </td>
+                    {% else %}
                     <td>{{ "{:,}".format(item.unit_price) }} دج</td>
                     <td>{{ item.quantity }}</td>
                     <td><strong>{{ item.line_total_display }}</strong></td>
+                    <td></td>
+                    {% endif %}
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+
+        {# ═══════ زيادة منتج ═══════ #}
+        {% if order.is_editable %}
+        <details class="add-item">
+            <summary>➕ زيد منتج للطلبية</summary>
+
+            <form method="post" class="add-item-form"
+                  action="{{ url_for('admin.order_item_add', order_id=order.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <label class="field">
+                    <span>المنتج / الموديل</span>
+                    <select name="variant_id" id="addVariant" required>
+                        <option value="">— اختار —</option>
+                        {% for p in products %}
+                            {% if p.ordered_variants %}
+                            <optgroup label="{{ p.name }}">
+                                {% for v in p.ordered_variants %}
+                                <option value="{{ v.id }}">
+                                    {{ v.label }} — {{ v.price_display }}
+                                </option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="field field-narrow">
+                    <span>الكمية</span>
+                    <input type="number" name="quantity" min="1" max="5000" value="1">
+                </label>
+
+                <label class="field field-narrow">
+                    <span>سعر خاص (اختياري)</span>
+                    <input type="number" name="unit_price" min="0"
+                           placeholder="حسب الكمية">
+                </label>
+
+                <button type="submit" class="btn-admin">زيدو</button>
+            </form>
+
+            <p class="hint">
+                إذا خلّيت السعر فارغ، يتحسب أوتوماتيكيًا حسب أسعار الجملة.
+            </p>
+        </details>
+
+        {# منتجات بلا موديلات — قائمة منفصلة #}
+        {% set bare = products | rejectattr('ordered_variants') | list %}
+        {% if bare %}
+        <details class="add-item">
+            <summary>➕ زيد منتج بلا موديلات</summary>
+            <form method="post" class="add-item-form"
+                  action="{{ url_for('admin.order_item_add', order_id=order.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="field">
+                    <span>المنتج</span>
+                    <select name="product_id" required>
+                        <option value="">— اختار —</option>
+                        {% for p in bare %}
+                        <option value="{{ p.id }}">{{ p.name }} — {{ p.price_display }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="field field-narrow">
+                    <span>الكمية</span>
+                    <input type="number" name="quantity" min="1" max="5000" value="1">
+                </label>
+                <label class="field field-narrow">
+                    <span>سعر خاص</span>
+                    <input type="number" name="unit_price" min="0" placeholder="اختياري">
+                </label>
+                <button type="submit" class="btn-admin">زيدو</button>
+            </form>
+        </details>
+        {% endif %}
+        {% else %}
+        <p class="hint">
+            🔒 الطلبية ما تتعدّلش —
+            {% if order.tracking_number %}
+                اتبعثات لـ{{ order.carrier_name or 'شركة التوصيل' }}،
+                والتعديل عندنا ما يوصلهمش.
+            {% else %}
+                حالتها «{{ order.status_label }}».
+            {% endif %}
+        </p>
+        {% endif %}
 
         <div class="order-totals">
             <div class="summary-row"><span>المنتجات</span><span>{{ "{:,}".format(order.subtotal) }} دج</span></div>
@@ -46,7 +165,22 @@
             {% endif %}
             <div class="summary-row">
                 <span>التوصيل ({{ order.carrier_name or '—' }})</span>
-                <span>{% if order.shipping_discount %}<s>{{ "{:,}".format(order.shipping_price) }}</s> مجاني{% else %}{{ "{:,}".format(order.shipping_price) }} دج{% endif %}</span>
+                <span>
+                    {% if order.is_editable %}
+                    {# تسوية يدوية — أحيانًا تتفق مع الزبون على سعر آخر #}
+                    <form method="post" class="ship-edit"
+                          action="{{ url_for('admin.order_update_shipping', order_id=order.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="number" name="shipping_price" min="0"
+                               value="{{ order.shipping_price }}" aria-label="سعر التوصيل">
+                        <button type="submit" class="btn-admin btn-sm" title="احفظ">✓</button>
+                    </form>
+                    {% elif order.shipping_discount %}
+                        <s>{{ "{:,}".format(order.shipping_price) }}</s> مجاني
+                    {% else %}
+                        {{ "{:,}".format(order.shipping_price) }} دج
+                    {% endif %}
+                </span>
             </div>
             <div class="summary-row summary-total"><span>المجموع</span><span>{{ order.total_display }}</span></div>
         </div>

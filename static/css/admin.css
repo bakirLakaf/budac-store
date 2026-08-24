@@ -1791,3 +1791,62 @@ img.thumb-sm:hover {
     transition: opacity 0.12s, transform 0.12s;
 }
 .wa-quick:hover { opacity: 1; transform: scale(1.2); }
+
+/* ---------- تعديل الطلبية ---------- */
+.item-edit {
+    display: flex; align-items: center; gap: 6px;
+    margin: 0;
+}
+.item-edit input[type="number"] {
+    width: 78px;
+    padding: 5px 7px;
+    border: 1px solid var(--a-border);
+    border-radius: 7px;
+    background: var(--a-surface);
+    font-family: inherit; font-size: 13px;
+    text-align: center;
+}
+.item-edit input:focus {
+    outline: none; border-color: var(--a-primary);
+}
+.item-x { color: var(--a-primary-light); font-weight: 800; }
+.item-total { margin-inline-start: 6px; white-space: nowrap; }
+
+.ship-edit {
+    display: inline-flex; align-items: center; gap: 5px; margin: 0;
+}
+.ship-edit input[type="number"] {
+    width: 86px;
+    padding: 4px 7px;
+    border: 1px solid var(--a-border);
+    border-radius: 7px;
+    background: var(--a-surface);
+    font-family: inherit; font-size: 13px;
+    text-align: center;
+}
+
+.add-item {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px dashed var(--a-border);
+    border-radius: 12px;
+    background: var(--a-bg);
+}
+.add-item summary {
+    cursor: pointer;
+    font-size: 14px; font-weight: 800;
+    color: var(--a-primary);
+}
+.add-item[open] summary { margin-bottom: 12px; }
+
+.add-item-form {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px;
+}
+.add-item-form .field { flex: 1 1 200px; margin: 0; }
+.add-item-form .field-narrow { flex: 0 0 120px; }
+
+@media (max-width: 700px) {
+    .item-edit { flex-wrap: wrap; }
+    .add-item-form .field,
+    .add-item-form .field-narrow { flex: 1 1 100%; }
+}

@@ -23,7 +23,7 @@ import os
 
 from models import (
     db, Product, Category, ProductImage, ProductVariant,
-    Offer, OfferItem, Carrier, ShippingRate, AdminUser, Coupon, Order,
+    Offer, OfferItem, Carrier, ShippingRate, AdminUser, Coupon, Order, OrderItem,
     AbandonedCart, Review, UpsellRule, LandingPage, StoreSetting,
     VariantPack,
 )
@@ -367,7 +367,7 @@ def product_form(product_id=None):
 
         # رفع صور جديدة (متعددة)
         #
-        # ⚠️ المسار الأساسي دابا هو `/images/upload` — صورة بصورة عبر
+        # ⚠️ المسار الأساسي درك هو `/images/upload` — صورة بصورة عبر
         # المتصفح. هاد الكود يبقى كاحتياط: إذا JavaScript معطّل ولا
         # قالب قديم مخبّأ فالمتصفح، الصور مازال تتقبل بدل ما تضيع.
         uploaded_files = request.files.getlist("images")
@@ -418,7 +418,7 @@ def _apply_image_decisions(product):
 
     ⚠️ ليش هكذا وماشي مسار لكل عملية؟
     قبل، كل تحريك صورة كان يعيد تحميل الصفحة ويرجّع الأدمن لفوق.
-    دابا يرتّب ويحذف براحتو فالمتصفح، ويضغط «حفظ» مرة وحدة.
+    درك يرتّب ويحذف براحتو فالمتصفح، ويضغط «حفظ» مرة وحدة.
 
     نقرا المعرّفات من حقول مخفية. أي معرّف ماشي من صور هاد المنتج
     يتجاهل — حماية من تعديل الحقول من أدوات المطوّر.
@@ -504,7 +504,7 @@ def product_image_upload(product_id):
     ميغا. يعني 3 صور × 3 ميغا = 9 ميغا → السيرفر يقطع الاتصال فوسط
     الرفع (`ERR_HTTP2_PROTOCOL_ERROR`) ويضيع معاه كل التعديلات.
 
-    دابا كل صورة طلب مستقل صغير. المتصفح يرفعهم واحدة بوحدة ويوري
+    درك كل صورة طلب مستقل صغير. المتصفح يرفعهم واحدة بوحدة ويوري
     شريط تقدّم، وزر الحفظ يبقى مقفولاً حتى يكملو.
     """
     product = Product.query.get_or_404(product_id)
@@ -826,7 +826,7 @@ def variant_delete(variant_id):
     was_default = variant.is_default
 
     # 🔴 كان هنا `delete_image(variant.image_filename)` — يمحي الملف من
-    # القرص. كان صحيحًا كي كل موديل يرفع صورتو الخاصة، لكن دابا صور
+    # القرص. كان صحيحًا كي كل موديل يرفع صورتو الخاصة، لكن درك صور
     # الموديلات **مختارة من صور المنتج**، فحذف موديل كان يمحي صورة
     # مشتركة ويخلّي خانة فارغة فالمعرض (وحتى الصورة الرئيسية).
     #
@@ -1220,9 +1220,212 @@ def orders_list():
 @login_required
 def order_detail(order_id):
     order = Order.query.get_or_404(order_id)
-    return render_template(
-        "admin/order_detail.html", order=order, status_labels=Order.STATUS_LABELS
+
+    # ⚠️ كل المنتجات وموديلاتهم — باش الأدمن يزيد حاجة للطلبية بلا ما
+    # يخرج من الصفحة. نجيبوهم مرة وحدة هنا بدل ما القالب يسقسي
+    # قاعدة البيانات فكل دورة.
+    products = (
+        Product.query.filter_by(is_active=True)
+        .order_by(Product.name)
+        .all()
     )
+
+    return render_template(
+        "admin/order_detail.html",
+        order=order,
+        status_labels=Order.STATUS_LABELS,
+        products=products,
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+# تعديل الطلبية بعد ما تدخل
+#
+# ⚠️ علاش هاد الميزة موجودة؟
+# الزبون يتصل ويقول «زيدلي حاجة» ولا «بدّلي الموديل» ولا منتج ما بقاش
+# فالمخزن. قبل، كان لازم تلغي الطلبية وتعاود تديرها من الصفر.
+#
+# ⚠️ قاعدة مهمة: كل تعديل يستدعي `order.recalculate()`. بلاها، المجاميع
+# تبقى قديمة والفاتورة تولّي غالطة — والزبون يخلّص مبلغًا ماشي هو.
+# ══════════════════════════════════════════════════════════════
+
+def _guard_editable(order):
+    """يرجّع رسالة خطأ إذا الطلبية ما تتعدّلش، ولا None إذا مليح."""
+    if not order.is_editable:
+        if order.tracking_number:
+            return ("الطلبية اتبعثات لشركة التوصيل — التعديل عندنا "
+                    "ما يوصلهمش. اتصل بيهم أول.")
+        return f"الطلبية «{order.status_label}» ما تتعدّلش."
+    return None
+
+
+@admin_bp.route("/orders/<int:order_id>/items/<int:item_id>/update",
+                methods=["POST"])
+@login_required
+def order_item_update(order_id, item_id):
+    """يبدّل كمية ولا سعر وحدة لعنصر فالطلبية."""
+    order = Order.query.get_or_404(order_id)
+    item = OrderItem.query.filter_by(id=item_id, order_id=order_id).first_or_404()
+
+    blocked = _guard_editable(order)
+    if blocked:
+        flash(blocked, "error")
+        return redirect(url_for("admin.order_detail", order_id=order_id))
+
+    quantity = request.form.get("quantity", type=int)
+    unit_price = request.form.get("unit_price", type=int)
+
+    if quantity is not None:
+        if quantity < 1:
+            flash("الكمية لازم تكون 1 على الأقل — استعمل «حذف» باش تحيّدو",
+                  "error")
+            return redirect(url_for("admin.order_detail", order_id=order_id))
+        item.quantity = min(quantity, 5000)
+
+    if unit_price is not None:
+        if unit_price < 0:
+            flash("السعر ما يقدرش يكون سالبًا", "error")
+            return redirect(url_for("admin.order_detail", order_id=order_id))
+        item.unit_price = unit_price
+
+    order.recalculate()
+    db.session.commit()
+
+    flash(f"تعدّل «{item.item_name}» — المجموع الجديد {order.total_display}",
+          "success")
+    return redirect(url_for("admin.order_detail", order_id=order_id))
+
+
+@admin_bp.route("/orders/<int:order_id>/items/<int:item_id>/delete",
+                methods=["POST"])
+@login_required
+def order_item_delete(order_id, item_id):
+    """يحيّد عنصرًا من الطلبية."""
+    order = Order.query.get_or_404(order_id)
+    item = OrderItem.query.filter_by(id=item_id, order_id=order_id).first_or_404()
+
+    blocked = _guard_editable(order)
+    if blocked:
+        flash(blocked, "error")
+        return redirect(url_for("admin.order_detail", order_id=order_id))
+
+    # ⚠️ طلبية بلا منتجات ما عندهاش معنى — إذا بغى يلغي كلش، يبدّل
+    # الحالة لـ«ملغاة» بدل ما يمسح آخر عنصر.
+    if len(order.items) <= 1:
+        flash("ما تقدرش تحيّد آخر منتج. إذا بغيت تلغي، بدّل الحالة "
+              "لـ«ملغاة».", "error")
+        return redirect(url_for("admin.order_detail", order_id=order_id))
+
+    name = item.item_name
+    db.session.delete(item)
+    db.session.flush()
+
+    # 🔴 خلل كان هنا: `flush()` وحدو ما يكفيش. علاقة `order.items` تبقى
+    # محمّلة فالذاكرة بالعنصر المحذوف، فـ`recalculate()` يحسب بيه
+    # ويخرج بمجموع قديم — فاتورة غالطة والزبون يخلّص أكثر.
+    #
+    # `expire()` يجبر SQLAlchemy يعاود يقرا العلاقة من قاعدة البيانات.
+    db.session.expire(order, ["items"])
+
+    order.recalculate()
+    db.session.commit()
+
+    flash(f"اتحيّد «{name}» — المجموع الجديد {order.total_display}", "success")
+    return redirect(url_for("admin.order_detail", order_id=order_id))
+
+
+@admin_bp.route("/orders/<int:order_id>/items/add", methods=["POST"])
+@login_required
+def order_item_add(order_id):
+    """يزيد منتجًا للطلبية."""
+    order = Order.query.get_or_404(order_id)
+
+    blocked = _guard_editable(order)
+    if blocked:
+        flash(blocked, "error")
+        return redirect(url_for("admin.order_detail", order_id=order_id))
+
+    variant_id = request.form.get("variant_id", type=int)
+    product_id = request.form.get("product_id", type=int)
+    quantity = request.form.get("quantity", type=int) or 1
+    quantity = max(1, min(quantity, 5000))
+
+    variant = None
+    if variant_id:
+        variant = ProductVariant.query.get(variant_id)
+        if variant is None:
+            flash("الموديل ما بقاش موجود", "error")
+            return redirect(url_for("admin.order_detail", order_id=order_id))
+        product = variant.product
+    else:
+        product = Product.query.get(product_id) if product_id else None
+
+    if product is None:
+        flash("اختار منتجًا أول", "error")
+        return redirect(url_for("admin.order_detail", order_id=order_id))
+
+    # ⚠️ السعر: نستعملو سعر الجملة حسب الكمية إذا كان الموديل عندو
+    # مجالات — نفس المنطق اللي يشوفو الزبون فالموقع.
+    if variant is not None:
+        unit_price = variant.price_for_quantity(quantity)
+    else:
+        unit_price = product.display_price
+
+    # سعر يدوي يغلب كلش (تسوية مع الزبون)
+    manual = request.form.get("unit_price", type=int)
+    if manual is not None and manual >= 0:
+        unit_price = manual
+
+    image = (variant.image_filename if variant and variant.image_filename
+             else product.image_filename)
+
+    db.session.add(OrderItem(
+        order_id=order.id,
+        product_id=product.id,
+        variant_id=variant.id if variant else None,
+        item_name=product.name,
+        variant_label=variant.label if variant else None,
+        unit_price=unit_price,
+        quantity=quantity,
+        image_filename=image,
+    ))
+    db.session.flush()
+
+    # ⚠️ نفس السبب: العلاقة لازم تتحدّث قبل إعادة الحساب
+    db.session.expire(order, ["items"])
+
+    order.recalculate()
+    db.session.commit()
+
+    label = f"{product.name}" + (f" ({variant.label})" if variant else "")
+    flash(f"اتزاد «{label}» × {quantity} — المجموع الجديد {order.total_display}",
+          "success")
+    return redirect(url_for("admin.order_detail", order_id=order_id))
+
+
+@admin_bp.route("/orders/<int:order_id>/shipping", methods=["POST"])
+@login_required
+def order_update_shipping(order_id):
+    """يبدّل سعر التوصيل يدويًا (تسوية مع الزبون)."""
+    order = Order.query.get_or_404(order_id)
+
+    blocked = _guard_editable(order)
+    if blocked:
+        flash(blocked, "error")
+        return redirect(url_for("admin.order_detail", order_id=order_id))
+
+    price = request.form.get("shipping_price", type=int)
+    if price is None or price < 0:
+        flash("سعر التوصيل ما يقدرش يكون سالبًا", "error")
+        return redirect(url_for("admin.order_detail", order_id=order_id))
+
+    order.shipping_price = price
+    order.recalculate()
+    db.session.commit()
+
+    flash(f"تبدّل سعر التوصيل — المجموع الجديد {order.total_display}",
+          "success")
+    return redirect(url_for("admin.order_detail", order_id=order_id))
 
 
 @admin_bp.route("/orders/<int:order_id>/status", methods=["POST"])
@@ -1442,7 +1645,7 @@ def review_approve(review_id):
     review = db.session.get(Review, review_id) or abort(404)
     review.is_approved = True
     db.session.commit()
-    flash("تمت الموافقة — التقييم يبان دابا فالمتجر", "success")
+    flash("تمت الموافقة — التقييم يبان درك فالمتجر", "success")
     return redirect(request.referrer or url_for("admin.reviews_list"))
 
 
@@ -1530,12 +1733,12 @@ def order_send_to_carrier(order_id):
 
     # ⚠️ معرّف البلدية عند ZR (territoryId) يسهّل الأمور، لكن **ماشي إجباري**:
     # ZR يقبل الطرد بالاسم كذلك. قبل، كنّا نمنعو الإرسال بلا معرّف — وهذا
-    # كان يحبس طلبيات صحيحة بلا سبب. دابا نبعثو ونخلّيو ZR يقرّر.
+    # كان يحبس طلبيات صحيحة بلا سبب. درك نبعثو ونخلّيو ZR يقرّر.
     territory_id = order.commune_external_id or None
 
     # ⚠️ ZR يحدّد الوجهة بـterritoryId، ماشي بأسماء الولاية والبلدية.
     # بلاه يرد بـ400 بلا رسالة. إذا الطلبية ما عندهاش معرّف محفوظ
-    # (قديمة، ولا الزبون كتب البلدية بيدو)، ندوّرو عليه دابا ونحفظوه.
+    # (قديمة، ولا الزبون كتب البلدية بيدو)، ندوّرو عليه درك ونحفظوه.
     if not territory_id and order.delivery_type != "office" and order.commune:
         try:
             territory_id = lookup_territory_id(order.wilaya_code, order.commune)
@@ -1636,7 +1839,7 @@ def integrations():
             except ZRError as e:
                 zr_result = {"ok": False, "message": str(e)}
 
-    # كم بلدية محفوظة دابا — نعرضوها للأدمن باش يعرف واش لازم يزامن
+    # كم بلدية محفوظة درك — نعرضوها للأدمن باش يعرف واش لازم يزامن
     linked = 0
     wilayas_covered = 0
     office_wilayas = 0
