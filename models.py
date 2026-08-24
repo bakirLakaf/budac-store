@@ -221,7 +221,7 @@ class ProductVariant(db.Model):
 
         ⚠️ كان مكتوبًا `Product.is_stock_tracked` (على الصنف مباشرة)
         بينما باقي الكود يستعمل `self.product.is_stock_tracked`.
-        دابا ما يبانش الفرق لأن العلم `False` فكل مكان، لكن اليوم اللي
+        درك ما يبانش الفرق لأن العلم `False` فكل مكان، لكن اليوم اللي
         ترجّع فيه تتبّع المخزون، هاد السطر يخدم بمنطق مختلف عن الباقي
         ويولّي مصدر بق صعيب يتلقى.
 
@@ -316,7 +316,7 @@ class Product(db.Model):
         return f"<Product {self.id} {self.name}>"
 
     # ═══════════════════════════════════════════════════════════════
-    # المخزون: النظام دابا "مفتوح" — ما نتبعوش الكميات.
+    # المخزون: النظام درك "مفتوح" — ما نتبعوش الكميات.
     #
     # القرار: متجرك يشتغل على الطلب، والكميات تتبدّل بسرعة فالمحل الحقيقي.
     # تتبّع مخزون غير دقيق أسوأ من بلا تتبّع: يمنع بيعة موجودة فعلاً.
@@ -618,7 +618,7 @@ class Offer(db.Model):
     @property
     def is_running(self):
         """
-        واش العرض شغال دابا: مفعّل + داخل المدة الزمنية (إذا محددة).
+        واش العرض شغال درك: مفعّل + داخل المدة الزمنية (إذا محددة).
         التواريخ اختيارية — عرض بلا تواريخ يعتبر شغال دائمًا ما دام مفعّل.
         """
         if not self.is_active:
@@ -648,7 +648,7 @@ class Offer(db.Model):
 
     @property
     def max_orderable(self):
-        """أقصى عدد باقات نقدرو نبيعو دابا — مفيد باش نمنعو طلب أكثر من المتاح."""
+        """أقصى عدد باقات نقدرو نبيعو درك — مفيد باش نمنعو طلب أكثر من المتاح."""
         if not self.items:
             return 0
         if not Product.is_stock_tracked:
@@ -1099,6 +1099,59 @@ class Order(db.Model):
     # نقدرو نختبروها.
     # ══════════════════════════════════════════════════════════
 
+    def recalculate(self):
+        """
+        يعيد حساب المجاميع من العناصر الحالية.
+
+        ⚠️ لازم تتنادى بعد **أي** تعديل على عناصر الطلبية (زيادة، حذف،
+        تبديل كمية). بلاها، `subtotal` و`total` يبقاو على القيم القديمة
+        والفاتورة تولّي غالطة.
+
+        الخصم: إذا كان بنسبة مئوية، نعيدو حسابو على المجموع الجديد —
+        وإلا زبون يزيد منتجًا ويبقى الخصم محسوبًا على المجموع القديم.
+        الخصم الثابت يبقى كيما هو، لكن ما يتعدّاش المجموع الجديد.
+        """
+        self.subtotal = sum(item.line_total for item in self.items)
+
+        # نعيدو حساب الخصم إذا كاين كوبون
+        if self.coupon_code:
+            coupon = Coupon.query.filter_by(code=self.coupon_code).first()
+            if coupon:
+                discount, ship_discount = coupon.compute_discount(
+                    self.subtotal, self.shipping_price or 0
+                )
+                self.discount_amount = discount
+                self.shipping_discount = ship_discount
+
+        # الخصم ما يتعدّاش المجموع مهما كان
+        self.discount_amount = max(0, min(self.discount_amount or 0, self.subtotal))
+        self.shipping_discount = max(
+            0, min(self.shipping_discount or 0, self.shipping_price or 0)
+        )
+
+        self.total = max(
+            0,
+            self.subtotal
+            - (self.discount_amount or 0)
+            + (self.shipping_price or 0)
+            - (self.shipping_discount or 0),
+        )
+
+        return self.total
+
+    @property
+    def is_editable(self):
+        """
+        واش نقدرو نعدّلو الطلبية؟
+
+        ⚠️ بعد ما تتبعث لشركة التوصيل، التعديل عندنا ما يوصلهمش —
+        المبلغ اللي يحوّزو من الزبون يبقى القديم. نمنعو التعديل باش
+        ما يبانش المتجر وZR بمبلغين مختلفين.
+        """
+        if self.status in (self.STATUS_DELIVERED, self.STATUS_CANCELLED):
+            return False
+        return not self.tracking_number
+
     @property
     def whatsapp_phone(self):
         """
@@ -1193,7 +1246,7 @@ class Order(db.Model):
             return (
                 f"{greeting}\n\n"
                 f"بخصوص طلبيتك *{num}* — نعتذرلك، كاين منتج ما بقاش "
-                f"موجود دابا 😔\n\n"
+                f"موجود درك 😔\n\n"
                 f"نقدرو نبدّلوه بحاجة أخرى، ولا نبعثو الباقي برك ونحيّدو "
                 f"ثمنو من المجموع.\n\n"
                 f"واش تفضّل؟"
