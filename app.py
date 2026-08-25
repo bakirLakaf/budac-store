@@ -31,7 +31,7 @@ def create_app():
     csrf = CSRFProtect()
     csrf.init_app(app)
 
-    # نستثنيو الـAPI ديال سعر التوصيل — هو GET فقط وما يبدّل والو
+    # نستثنيو الـAPI تاع سعر التوصيل — هو GET فقط وما يبدّل والو
     csrf.exempt("routes.cart.api_shipping_price")
 
     # ⚠️ حفظ التقدم: يبعثو JavaScript كـJSON، والتوكن يتبعث فهيدر X-CSRFToken.

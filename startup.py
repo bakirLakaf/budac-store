@@ -238,7 +238,7 @@ def _repair_stale_communes(db):
     الحل: نكشفو الأعمدة الغريبة، وإذا لقيناهم نمسحو الجدول ونعاودو نبنيوه.
 
     ✅ آمن: البلديات بيانات مرجعية، تتعمّر من ملف JSON فكل مرة.
-       ما فيها حتى معلومة ديال زبون.
+       ما فيها حتى معلومة تاع زبون.
     """
     from sqlalchemy import inspect, text
     from models import Commune
@@ -401,7 +401,7 @@ if __name__ == "__main__":
             print(f"   {message}", file=sys.stderr)
             print("", file=sys.stderr)
             print("   تحقق من هاذي:", file=sys.stderr)
-            print("   • DATABASE_URL موجود فمتغيرات البيئة ديال خدمة web؟", file=sys.stderr)
+            print("   • DATABASE_URL موجود فمتغيرات البيئة تاع خدمة web؟", file=sys.stderr)
             print("   • psycopg2-binary فـrequirements.txt متوافق مع إصدار Python؟", file=sys.stderr)
             print("=" * 60, file=sys.stderr)
             sys.exit(1)

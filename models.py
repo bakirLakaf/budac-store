@@ -796,7 +796,7 @@ class Commune(db.Model):
     بلدية جزائرية — القائمة الرسمية الكاملة (1541 بلدية × 58 ولاية).
 
     ⚠️ ليش مستقلة عن شركة التوصيل؟
-    البلديات ديال الجزائر ثابتة، ماشي ملك شركة. لو ربطناها بـZR، كنا:
+    البلديات تاع الجزائر ثابتة، ماشي ملك شركة. لو ربطناها بـZR، كنا:
       • نخسرو البلديات اللي ZR ما يوصلش ليها (والزبون ما يلقاش بلديتو)
       • نعاودو نجيبوها من الصفر لكل شركة جديدة
 
@@ -1062,15 +1062,25 @@ class Order(db.Model):
     STATUS_PREPARING = "preparing"    # قاعدين نجهّزوها
     STATUS_PREPARED = "prepared"      # جاهزة، تستنى الشركة
     STATUS_SHIPPED = "shipped"        # اتسلّمت لشركة التوصيل
+    STATUS_AT_OFFICE = "at_office"    # وصلت لمكتب الاستلام، تستنى الزبون
     STATUS_DELIVERED = "delivered"    # وصلت للزبون
+    STATUS_RETURNED = "returned"      # رجعات لينا (ما تسلّمتش)
     STATUS_CANCELLED = "cancelled"    # ملغاة
 
     # ⚠️ الترتيب مهم — يستعملوه شريط التقدّم فصفحة «طلبياتي»
     # وقائمة الحالات فاللوحة.
     STATUS_FLOW = [
         STATUS_PENDING, STATUS_CONFIRMED, STATUS_PREPARING,
-        STATUS_PREPARED, STATUS_SHIPPED, STATUS_DELIVERED,
+        STATUS_PREPARED, STATUS_SHIPPED, STATUS_AT_OFFICE, STATUS_DELIVERED,
     ]
+
+    # ⚠️ «فالمكتب» تخص غير التوصيل للمكتب. فتوصيل الدار، الطرد يمشي
+    # من «فالطريق» لـ«تم التسليم» مباشرة — فما نوريوش للزبون مرحلة
+    # ما تجيش عمرها.
+    STATUS_OFFICE_ONLY = {STATUS_AT_OFFICE}
+
+    # حالات نهائية برّا المسار — الطلبية واقفة، ماشي قدّامة
+    STATUS_TERMINAL = {STATUS_CANCELLED, STATUS_RETURNED}
 
     STATUS_LABELS = {
         STATUS_PENDING: "جديدة",
@@ -1078,7 +1088,9 @@ class Order(db.Model):
         STATUS_PREPARING: "قيد التجهيز",
         STATUS_PREPARED: "تم التجهيز",
         STATUS_SHIPPED: "فالطريق",
+        STATUS_AT_OFFICE: "فالمكتب",
         STATUS_DELIVERED: "تم التسليم",
+        STATUS_RETURNED: "راجعة",
         STATUS_CANCELLED: "ملغاة",
     }
 
@@ -1207,11 +1219,17 @@ class Order(db.Model):
         الطلبية الملغاة ما عندهاش تقدّم — نرجعو قائمة فارغة والقالب
         يوري رسالة إلغاء بدلها.
         """
-        if self.status == self.STATUS_CANCELLED:
+        if self.status in self.STATUS_TERMINAL:
             return []
 
+        # نحيّدو المراحل اللي ما تخصّش نوع التوصيل تاع هاد الطلبية
+        flow = [
+            key for key in self.STATUS_FLOW
+            if key not in self.STATUS_OFFICE_ONLY or self.delivery_type == "office"
+        ]
+
         try:
-            current = self.STATUS_FLOW.index(self.status)
+            current = flow.index(self.status)
         except ValueError:
             current = 0
 
@@ -1222,7 +1240,7 @@ class Order(db.Model):
                 "done": i < current,
                 "active": i == current,
             }
-            for i, key in enumerate(self.STATUS_FLOW)
+            for i, key in enumerate(flow)
         ]
 
     @property
@@ -1245,7 +1263,7 @@ class Order(db.Model):
         المبلغ اللي يحوّزو من الزبون يبقى القديم. نمنعو التعديل باش
         ما يبانش المتجر وZR بمبلغين مختلفين.
         """
-        if self.status in (self.STATUS_DELIVERED, self.STATUS_CANCELLED):
+        if self.status == self.STATUS_DELIVERED or self.status in self.STATUS_TERMINAL:
             return False
         return not self.tracking_number
 
@@ -1306,26 +1324,32 @@ class Order(db.Model):
     # الهروب ASCII يخلّي الملف نظيفًا مهما مرّ عليه، وPython يفكّو
     # للحرف الصحيح عند التشغيل.
     # ══════════════════════════════════════════════════════════
+    # ⚠️ كل إيموجي هنا من النطاق الأساسي (BMP) = **3 بايت** فـUTF-8،
+    # نفس حجم الحرف العربي اللي يوصل مليح.
+    #
+    # 🔴 علاش؟ الإيموجي المعروف (\U0001F44B وإخوانو) ياخذ **4 بايت**،
+    # والطريق بين رابط wa.me والواتساب يقطعو ويوريه «\u25C6». جرّبناه
+    # بالحرف المباشر وبهروب ASCII وتخرّب فالجوج — المشكل فالحجم ماشي
+    # فطريقة الكتابة. العربية (بايتين) توصل، فالـ3 بايت تعدّي معاها.
+    #
+    # ⚠️ قبل ما تزيد أي إيموجي هنا: تأكد أنو 3 بايت.
+    #     len("X".encode("utf-8")) == 3
     EMOJI = {
-        "wave": "\U0001F44B",       # 👋
-        "box": "\U0001F4E6",        # 📦
-        "truck": "\U0001F69A",      # 🚚
-        "pin": "\U0001F4CD",        # 📍
-        "phone": "\U0001F4DE",      # 📞
-        "check": "\u2705",          # ✅
-        "money": "\U0001F4B0",      # 💰
-        "heart": "\U0001F49C",      # 💜
-        "smile": "\U0001F60A",      # 😊
-        "sad": "\U0001F622",        # 😢
-        "star": "\U0001F31F",       # 🌟
-        "gift": "\U0001F381",       # 🎁
-        "clock": "\u23F0",          # ⏰
-        "home": "\U0001F3E0",       # 🏠
-        "shop": "\U0001F3EA",       # 🏪
-        "id": "\U0001F194",         # 🆔
-        "pray": "\U0001F64F",       # 🙏
-        "sparkles": "\u2728",       # ✨
+        "check": "\u2705",         # ✅ تأكيد / وصلت
+        "box": "\u2611",           # ☑ طلبية
+        "truck": "\u27A1",         # ➡ فالطريق
+        "pin": "\u2691",           # ⚑ العنوان
+        "phone": "\u260E",         # ☎ اتصال
+        "clock": "\u23F0",         # ⏰ وقت
+        "money": "\u2714",         # ✔ مبلغ
+        "heart": "\u2764",         # ❤ شكر
+        "star": "\u2B50",          # ⭐ تقييم
+        "warn": "\u26A0",          # ⚠ تنبيه
+        "back": "\u21A9",          # ↩ رجوع
+        "sparkles": "\u2728",      # ✨
+        "write": "\u270D",         # ✍ كتابة
     }
+
 
     def whatsapp_message(self, kind, store_name="Budac", base_url=""):
         """
@@ -1335,10 +1359,16 @@ class Order(db.Model):
           confirm  — تأكيد الطلبية مع الزبون قبل الإرسال
           shipped  — الطلبية مشات، مع رقم التتبّع
           arrived  — وصلت لمكتب الاستلام
+          returned — الطرد رجع لينا، نتفاهمو على إعادة الإرسال
           modify   — نبغيو نبدّلو شي فالطلبية
           missing  — منتج ما بقاش موجود
           noreply  — ما جاوبش على الهاتف
           thanks   — شكر بعد التسليم
+          review   — طلب رأي/تقييم للمتجر (يحتاج base_url باش يبني الرابط)
+
+        ⚠️ الإيموجي كلو من `EMOJI` (3 بايت) — شوف الشرح فوق القائمة.
+        وعمدًا قليل: إيموجي واحد ولا زوج فالرسالة. الرسالة المزيّنة
+        بزاف تبان إعلانًا آليًا والزبون ما يردّش عليها.
         """
         e = self.EMOJI
         name = self.customer_name or "خويا"
@@ -1349,7 +1379,7 @@ class Order(db.Model):
         # يحتاج يشوف واش طلب. فرسالة الشحن يزيدو ضجيجًا برك.
         items = self._items_lines(with_links=bool(base_url), base_url=base_url)
 
-        greeting = f"سلام {name} {e['wave']}\nمعاك {store_name}"
+        greeting = f"سلام {name}،\nمعاك {store_name}."
 
         if kind == "confirm":
             return (
@@ -1357,13 +1387,13 @@ class Order(db.Model):
                 f"{e['box']} وصلاتنا طلبيتك رقم *{num}*:\n\n"
                 f"{items}\n\n"
                 f"{e['money']} المجموع مع التوصيل: *{total}*\n"
-                f"{e['pin']} {self.delivery_type_label} — {self.wilaya_name}\n\n"
-                f"نأكّدو الطلبية؟ {e['smile']}"
+                f"{e['pin']} {self.delivery_type_label} - {self.wilaya_name}\n\n"
+                f"نأكّدو الطلبية؟"
             )
 
         if kind == "shipped":
             tracking = (
-                f"\n{e['id']} رقم التتبّع: *{self.tracking_number}*"
+                f"\nرقم التتبّع: *{self.tracking_number}*"
                 if self.tracking_number else ""
             )
             return (
@@ -1371,8 +1401,8 @@ class Order(db.Model):
                 f"{e['truck']} طلبيتك *{num}* خرجات اليوم مع "
                 f"{self.carrier_name or 'شركة التوصيل'}، بإذن الله."
                 f"{tracking}\n\n"
-                f"{e['clock']} توصلك فحدود 24 إلى 48 ساعة.\n"
-                f"{e['phone']} خلّي هاتفك مفتوح باش يتصل بيك الموزّع.\n\n"
+                f"{e['clock']} توصلك فحدود 24 إلى 48 ساعة، خلّي هاتفك "
+                f"مفتوح باش يتصل بيك الموزّع.\n\n"
                 f"{e['money']} المبلغ عند الاستلام: *{total}*"
             )
 
@@ -1380,10 +1410,21 @@ class Order(db.Model):
             where = self.pickup_point_name or self.wilaya_name
             return (
                 f"{greeting}\n\n"
-                f"{e['check']} طلبيتك *{num}* وصلات لـ*{where}*\n\n"
-                f"{e['home']} تقدر تروح تحوّزها — جيب معاك بطاقة التعريف.\n"
+                f"{e['check']} طلبيتك *{num}* وصلات لـ*{where}*.\n\n"
+                f"تقدر تروح تحوّزها - جيب معاك بطاقة التعريف.\n"
                 f"{e['money']} المبلغ: *{total}*\n\n"
-                f"نستنّاوك {e['smile']}"
+                f"نستنّاوك."
+            )
+
+        if kind == "returned":
+            # ⚠️ رسالة حسّاسة — الزبون ما حوّزش الطرد. النبرة تبقى
+            # محايدة بلا لوم، والهدف نعرفو واش راح ونعاودو نبعثو.
+            return (
+                f"{greeting}\n\n"
+                f"{e['back']} طلبيتك *{num}* رجعات لينا بلا ما تتسلّم.\n\n"
+                f"إذا مازال تحبها، قوللي ونعاودو نبعثوها - نتأكدو غير "
+                f"من العنوان والوقت المناسب.\n\n"
+                f"وإذا بدّلت رأيك، ما كاين والو، غير عرّفني."
             )
 
         if kind == "modify":
@@ -1392,19 +1433,18 @@ class Order(db.Model):
                 f"{e['box']} بخصوص طلبيتك *{num}*:\n\n"
                 f"{items}\n\n"
                 f"{e['money']} المجموع: *{total}*\n\n"
-                f"حبيت نسقسيك — تحب تزيد ولا تنقّص شي حاجة قبل ما نبعثوها؟ "
-                f"{e['smile']}"
+                f"حبيت نسقسيك - تحب تزيد ولا تنقّص شي حاجة قبل ما نبعثوها؟"
             )
 
         if kind == "missing":
             return (
                 f"{greeting}\n\n"
-                f"{e['sad']} بخصوص طلبيتك *{num}* — نعتذرلك، كاين منتج "
+                f"{e['warn']} بخصوص طلبيتك *{num}* - نعتذرلك، كاين منتج "
                 f"ما بقاش موجود درك.\n\n"
-                f"نقدرو:\n"
+                f"عندك خيارين:\n"
                 f"1. نبدّلوه بحاجة أخرى تعجبك\n"
                 f"2. نبعثو الباقي ونحيّدو ثمنو من المجموع\n\n"
-                f"واش تفضّل؟ {e['pray']}"
+                f"واش تفضّل؟"
             )
 
         if kind == "noreply":
@@ -1412,17 +1452,32 @@ class Order(db.Model):
                 f"{greeting}\n\n"
                 f"{e['phone']} حاولنا نتصلو بيك على طلبيتك *{num}* "
                 f"وما لقيناكش.\n\n"
-                f"{e['clock']} قوللي وقتاش يريحك ونعاودو نتصلو، ولا جاوبني "
-                f"هنا ونأكّدوها مباشرة {e['smile']}"
+                f"قوللي وقتاش يريحك ونعاودو نتصلو، ولا جاوبني هنا "
+                f"ونأكّدوها مباشرة."
             )
 
         if kind == "thanks":
             return (
-                f"سلام {name} {e['wave']}\n\n"
-                f"{e['heart']} يعطيك الصحة على ثقتك فينا.\n"
-                f"{e['sparkles']} نتمنى المنتج عجبك.\n\n"
-                f"إذا عندك أي ملاحظة، قوللي — رأيك يهمنا {e['pray']}\n\n"
-                f"{e['star']} ونفرحو بيك مرة أخرى فـ{store_name}"
+                f"سلام {name}،\n\n"
+                f"{e['heart']} يعطيك الصحة على ثقتك فينا، ونتمنى المنتج "
+                f"عجبك.\n\n"
+                f"إذا عندك أي ملاحظة، قوللي - رأيك يهمّنا.\n\n"
+                f"ونفرحو بيك مرة أخرى فـ{store_name}."
+            )
+
+        if kind == "review":
+            # ⚠️ الرابط لازم يكون كاملاً — الواتساب ما يخدمش رابطًا نسبيًا،
+            # وإذا ما وصلش base_url نستعملو الدومين الرسمي بدل رابط مكسور.
+            link = f"{base_url.rstrip('/')}/reviews" if base_url else "https://budacdz.com/reviews"
+            return (
+                f"{greeting}\n\n"
+                f"{e['check']} طلبيتك رقم *{num}* وصلاتك، ونتمنى تكون "
+                f"كيما تستنّى.\n\n"
+                f"{e['star']} إذا عندك دقيقة، رأيك على المنتج والخدمة "
+                f"يهمّنا - يفيد الزبائن الجدد ويعاوننا نتحسّنو:\n"
+                f"{link}\n\n"
+                f"وإذا كاينة شي ملاحظة، ابعثهالي هنا مباشرة ونتكفّلو بيها.\n\n"
+                f"{e['heart']} شكرًا على ثقتك."
             )
 
         # نوع مجهول — رسالة عامة أحسن من خطأ
@@ -1431,7 +1486,8 @@ class Order(db.Model):
     @property
     def is_open(self):
         """واش الطلبية مازالت نشطة (ماشي مسلّمة ولا ملغاة)."""
-        return self.status not in (self.STATUS_DELIVERED, self.STATUS_CANCELLED)
+        return (self.status != self.STATUS_DELIVERED
+                and self.status not in self.STATUS_TERMINAL)
 
     @property
     def is_sent_to_carrier(self):
@@ -1780,7 +1836,7 @@ class SiteVisit(db.Model):
     سطر لكل زيارة يعمّر قاعدة البيانات بسرعة (100 زائر × 10 صفحات =
     1000 سطر فاليوم). هنا **سطر واحد لكل زائر فاليوم**، وعدد صفحاتو
     يتزاد فنفس السطر. يعني:
-        عدد الزوار الفريدين = عدد الأسطر ديال هاد اليوم
+        عدد الزوار الفريدين = عدد الأسطر تاع هاد اليوم
         عدد الزيارات        = مجموع views
 
     ⚠️ الخصوصية: ما نخزّنوش IP ولا أي شي يعرّف الزائر. نخزّنو بصمة
