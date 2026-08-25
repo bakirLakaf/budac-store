@@ -421,6 +421,45 @@ def product_form(product_id=None):
     )
 
 
+def purge_unused_image_files(filenames):
+    """
+    يمسح من القرص **غير** الصور اللي ما بقاش حتى سطر فقاعدة البيانات يستعملها.
+
+    🔴 علاش هاد الدالة موجودة؟
+    من ملّي ولّى «زر نسخة» ينسخ المنتج بلا ما ينسخ الملفات، ولّى نفس
+    الملف مشتركًا بين منتجين ولا أكثر. حذف واحد منهم كان يمحي الملف
+    من القرص، والمنتج الأصلي يبقى يشير لملف ماكانش → صور مكسورة.
+
+    ⚠️ لازم تتنادى **بعد** db.session.flush() ديال الحذف — باش الاستعلام
+    يشوف الوضع الجديد ماشي القديم.
+
+    نفحصو التلاتة اللي يقدرو يشيرو لملف:
+      - ProductImage.image_filename  (معرض أي منتج)
+      - Product.image_filename       (الصورة الرئيسية)
+      - ProductVariant.image_filename(صورة الموديل)
+    """
+    for filename in {f for f in filenames if f}:
+        still_used = (
+            db.session.query(ProductImage.id)
+            .filter(ProductImage.image_filename == filename).first()
+            or db.session.query(Product.id)
+            .filter(Product.image_filename == filename).first()
+            or db.session.query(ProductVariant.id)
+            .filter(ProductVariant.image_filename == filename).first()
+        )
+
+        if still_used:
+            # مشتركة مع منتج آخر — نخليو الملف فبلاصتو
+            current_app.logger.info("🖼️ ملف مشترك، ما تمسحش: %s", filename)
+            continue
+
+        try:
+            delete_image(filename, "products")
+        except Exception:
+            # ⚠️ ما نبلعوهش بصمت: إذا تكرر، معناها ثمة خلل فالتخزين.
+            current_app.logger.warning("🖼️ ما قدرناش نمسحو الملف: %s", filename)
+
+
 def _apply_image_decisions(product):
     """
     يطبّق ترتيب الصور والصورة الرئيسية والحذف — كلهم مرة وحدة.
@@ -447,6 +486,7 @@ def _apply_image_decisions(product):
 
     # ---------- 1) الحذف ----------
     deleted = set(parse("image_deleted"))
+    orphan_candidates = []   # أسماء ملفات نفحصوهم فالآخر قبل ما نمسحوهم
     for image in list(product.images):
         if image.id not in deleted:
             continue
@@ -456,21 +496,10 @@ def _apply_image_decisions(product):
             product_id=product.id, image_filename=image.image_filename
         ).update({"image_filename": None}, synchronize_session=False)
 
-        # ⚠️ ما نمسحوش الملف من القرص إذا صورة أخرى تستعملو
-        still_used = ProductImage.query.filter(
-            ProductImage.image_filename == image.image_filename,
-            ProductImage.id != image.id,
-        ).first()
-
-        if not still_used:
-            try:
-                delete_image(image.image_filename)
-            except Exception:
-                # الملف ماكانش فالقرص — ما يمنعش حذف السطر، لكن
-                # ⚠️ ما نبلعوهش بصمت: إذا تكرر، معناها ثمة خلل فالتخزين.
-                current_app.logger.warning(
-                    "🖼️ ما قدرناش نمسحو الملف: %s", image.image_filename
-                )
+        # ⚠️ ما نمسحوش الملف درك. نجمعو الأسماء ونمسحو من القرص فالآخر،
+        # بعد ما نكونو مسحنا السطور فعلاً — باش الفحص يشوف الحقيقة.
+        # (القديم كان ينادي delete_image بوسيط ناقص، والخطأ يتبلع.)
+        orphan_candidates.append(image.image_filename)
 
         db.session.delete(image)
 
@@ -499,6 +528,10 @@ def _apply_image_decisions(product):
         )[0].image_filename
     elif not remaining:
         product.image_filename = None
+
+    # ---------- 4) تنظيف القرص ----------
+    # فالآخر، بعد ما تحدّدت الصورة الرئيسية — وإلا نحسبو مرجعًا لصورة محذوفة.
+    purge_unused_image_files(orphan_candidates)
 
 
 @admin_bp.route("/products/<int:product_id>/images/upload", methods=["POST"])
@@ -714,11 +747,19 @@ def product_delete(product_id):
         )
         return redirect(url_for("admin.products_list"))
 
-    for img in product.images:
-        delete_image(img.image_filename, "products")
+    # 🔴 كان هنا `delete_image(...)` مباشرة — وهاد الشي كان يمحي صور
+    # المنتج الأصلي كي تمسح نسخة منو (الملفات مشتركة بين النسخ).
+    # درك نجمعو الأسماء، نمسحو المنتج، ومن بعد نمسحو غير الملفات
+    # اللي ما بقاش حتى منتج آخر يستعملها.
+    candidates = [img.image_filename for img in product.images]
+    candidates.append(product.image_filename)
 
     name = product.name
     db.session.delete(product)
+    db.session.flush()
+
+    purge_unused_image_files(candidates)
+
     db.session.commit()
     flash(f"تم حذف «{name}»", "success")
     return redirect(url_for("admin.products_list"))
@@ -754,8 +795,10 @@ def product_image_delete(product_id, image_id):
     image = ProductImage.query.filter_by(id=image_id, product_id=product_id).first_or_404()
     product = image.product
 
-    delete_image(image.image_filename, "products")
-    was_main = product.image_filename == image.image_filename
+    # 🔴 ما نمسحوش الملف درك — يمكن يكون مشتركًا مع منتج منسوخ.
+    # نمسحو السطر أولاً، ونصفّيو القرص فالآخر بعد ما نتأكدو.
+    filename = image.image_filename
+    was_main = product.image_filename == filename
     db.session.delete(image)
     db.session.flush()
 
@@ -773,9 +816,12 @@ def product_image_delete(product_id, image_id):
     # نفكّو الربط تلقائيًا: الأدمن يشوف «بلا صورة» ويختار وحدة أخرى.
     cleared = (
         ProductVariant.query
-        .filter_by(product_id=product.id, image_filename=image.image_filename)
+        .filter_by(product_id=product.id, image_filename=filename)
         .update({"image_filename": None}, synchronize_session=False)
     )
+    db.session.flush()
+
+    purge_unused_image_files([filename])
 
     db.session.commit()
 
