@@ -27,16 +27,25 @@
             </div>
 
             <div class="track-timeline">
-                {% set steps = [('pending','استلمنا الطلبية'), ('confirmed','أكّدناها معاك'), ('shipped','فالطريق إليك'), ('delivered','تم التسليم')] %}
-                {% set order_index = {'pending':0,'confirmed':1,'shipped':2,'delivered':3}.get(order.status, -1) %}
+                {# 🔴 كانت هنا قائمة مراحل مكتوبة بيدها (4 مراحل) — تختلف
+                   على المراحل الحقيقية فالنموذج. كي زدنا «قيد التجهيز»
+                   و«فالمكتب»، الزبون كان يشوف شريطًا غالطًا.
+                   درك المصدر واحد: `Order.progress_steps`. #}
+                {% set steps = order.progress_steps %}
 
-                {% if order.status == 'cancelled' %}
-                    <p class="track-cancelled">هذه الطلبية ملغاة.</p>
+                {% if not steps %}
+                    <p class="track-cancelled">
+                        {% if order.status == 'returned' %}
+                            هاد الطلبية رجعات لينا. تواصل معانا باش نعاودو نبعثوها.
+                        {% else %}
+                            هذه الطلبية ملغاة.
+                        {% endif %}
+                    </p>
                 {% else %}
-                    {% for code, label in steps %}
-                    <div class="track-step {{ 'is-done' if loop.index0 <= order_index }}">
+                    {% for step in steps %}
+                    <div class="track-step {{ 'is-done' if step.done or step.active }}">
                         <span class="track-dot"></span>
-                        <span class="track-label">{{ label }}</span>
+                        <span class="track-label">{{ step.label }}</span>
                     </div>
                     {% endfor %}
                 {% endif %}

@@ -495,7 +495,10 @@ body {
 .status-preparing { background: #FDF1D8; color: #8A6300; }
 .status-prepared { background: #E4F3E9; color: #1E6B44; }
 .status-shipped { background: #EFE9F7; color: #5B3E8E; }
+.status-at_office { background: #E7F1FA; color: #1B5FA8; }
 .status-delivered { background: #DFF3E7; color: var(--a-ok); }
+/* «راجعة» ماشي «ملغاة» — لون مختلف باش الأدمن يفرّق بينهم بنظرة */
+.status-returned { background: #FDEBDA; color: #9A5B12; }
 .status-cancelled { background: #FBE3E0; color: var(--a-danger); }
 
 /* ⚠️ «طلبية جديدة» هي الرقم اللي يحتاج فعلاً — لازم تشدّ العين

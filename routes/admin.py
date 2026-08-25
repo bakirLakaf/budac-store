@@ -221,7 +221,8 @@ def dashboard():
     # ---- الطلبيات ----
     pending_orders = Order.query.filter_by(status=Order.STATUS_PENDING).count()
     open_orders = Order.query.filter(
-        Order.status.notin_([Order.STATUS_DELIVERED, Order.STATUS_CANCELLED])
+        Order.status.notin_([Order.STATUS_DELIVERED, Order.STATUS_CANCELLED,
+                             Order.STATUS_RETURNED])
     ).count()
     recent_orders = Order.query.order_by(Order.created_at.desc()).limit(6).all()
 
@@ -430,7 +431,7 @@ def purge_unused_image_files(filenames):
     الملف مشتركًا بين منتجين ولا أكثر. حذف واحد منهم كان يمحي الملف
     من القرص، والمنتج الأصلي يبقى يشير لملف ماكانش → صور مكسورة.
 
-    ⚠️ لازم تتنادى **بعد** db.session.flush() ديال الحذف — باش الاستعلام
+    ⚠️ لازم تتنادى **بعد** db.session.flush() تاع الحذف — باش الاستعلام
     يشوف الوضع الجديد ماشي القديم.
 
     نفحصو التلاتة اللي يقدرو يشيرو لملف:
@@ -772,7 +773,7 @@ def product_image_make_main(product_id, image_id):
     يخلي صورة معينة هي الرئيسية (اللي تبان فبطاقة المنتج وفالسلة).
 
     ⚠️ نتأكدو أن الصورة تخص هاد المنتج بالضبط — باش حد ما يقدرش يبعث id
-    ديال صورة منتج آخر ويخلط الصور بين المنتجات.
+    تاع صورة منتج آخر ويخلط الصور بين المنتجات.
     """
     image = ProductImage.query.filter_by(id=image_id, product_id=product_id).first_or_404()
 
@@ -1615,13 +1616,18 @@ def order_update_status(order_id):
 
     old_status = order.status
 
-    # إلغاء طلبية كانت نشطة → نرجّعو المخزون
-    if new_status == Order.STATUS_CANCELLED and old_status != Order.STATUS_CANCELLED:
+    # ⚠️ «راجعة» كيما «ملغاة» فحساب المخزون: السلعة رجعات لينا فعليًا،
+    # فلازم ترجع للرفوف. بلا هذا نبيعو حاجة وحنا نحسبوها ناقصة.
+    was_off = old_status in Order.STATUS_TERMINAL
+    now_off = new_status in Order.STATUS_TERMINAL
+
+    # طلبية نشطة ولّات ملغاة/راجعة → نرجّعو المخزون
+    if now_off and not was_off:
         restore_stock(order)
         flash("تم إرجاع المخزون للمنتجات", "success")
 
-    # إرجاع طلبية ملغاة للنشاط → نعاودو نخصمو المخزون
-    elif old_status == Order.STATUS_CANCELLED and new_status != Order.STATUS_CANCELLED:
+    # طلبية ملغاة/راجعة رجعات للنشاط → نعاودو نخصمو المخزون
+    elif was_off and not now_off:
         lines = [
             CartLine(
                 key="", kind="offer" if item.offer_id else "product",
@@ -2642,7 +2648,7 @@ def variant_packs(variant_id):
     if unique:
         flash(f"تحفظو {len(unique)} عرض لـ«{variant.label}»", "success")
     else:
-        flash(f"تمسحو العروض الجاهزة ديال «{variant.label}»", "success")
+        flash(f"تمسحو العروض الجاهزة تاع «{variant.label}»", "success")
 
     return redirect(url_for("admin.product_form", product_id=product.id))
 
@@ -2955,7 +2961,7 @@ def product_variant_price_bulk(product_id):
         old = variant.effective_price
 
         if kind == "percent":
-            # ⚠️ نحسبو من السعر الحالي ديال كل موديل — الموديلات ممكن
+            # ⚠️ نحسبو من السعر الحالي تاع كل موديل — الموديلات ممكن
             # تكون بأسعار مختلفة، فالنسبة تنطبق على كل واحد بسعرو.
             new_price = round(old * (100 + value) / 100)
         else:
@@ -3034,7 +3040,7 @@ def variant_price(variant_id):
     """
     يبدّل سعر موديل واحد — تعديل سريع من رأس البطاقة.
 
-    ⚠️ ليش مسار مستقل؟ الفورم الرئيسي ديال المنتج طويل ويحفظ كلش.
+    ⚠️ ليش مسار مستقل؟ الفورم الرئيسي تاع المنتج طويل ويحفظ كلش.
     تبديل سعر موديل واحد ما يستاهلش حفظ الصفحة كاملة.
 
     القيمة الفارغة = الموديل يرث سعر المنتج (ماشي صفر).

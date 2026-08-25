@@ -22,7 +22,7 @@ def _build_line(page, quantity):
     """
     يبني سطر السلة من صفحة الهبوط — بلا مرور بالـsession.
 
-    ⚠️ نستعملو نفس CartLine ديال السلة العادية باش create_order يخدم
+    ⚠️ نستعملو نفس CartLine تاع السلة العادية باش create_order يخدم
     بلا تعديل، والطلبية تبان طبيعية فلوحة التحكم.
     """
     product = page.product

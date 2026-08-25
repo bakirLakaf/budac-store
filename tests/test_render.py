@@ -3,7 +3,7 @@
 اختبار عرض حقيقي: يشغّل التطبيق، يفتح كل الصفحات، ويفحص HTML المُخرَج.
 
 ⚠️ الفرق عن `test_full.py`: هذا ما يختبرش المنطق — يختبر أن القوالب
-تتعرض بلا خطأ، وأن JSON-LD صالح فعلاً، وأن الترتيب الجديد ديال
+تتعرض بلا خطأ، وأن JSON-LD صالح فعلاً، وأن الترتيب الجديد تاع
 العروض/الأسعار/الكمية موجود، وأن ماكانش سكربت برّا كتل Jinja.
 
 التشغيل: python tests/test_render.py
@@ -512,7 +512,7 @@ def main():
     check("يقفل الحفظ أثناء الرفع", "b.disabled = on" in up_html)
     check("ينبّه قبل مغادرة الصفحة", "beforeunload" in up_html)
 
-    # 🔴 الخلل اللي ضيّع 3 جولات: كود الرفع كان محشورًا داخل IIFE ديال
+    # 🔴 الخلل اللي ضيّع 3 جولات: كود الرفع كان محشورًا داخل IIFE تاع
     # «أسعار الكمية»، وذاك يخرج بـ`return` مبكّر إذا ماكانش موديلات —
     # فالرافع ما يشتغلش أبدًا. نتأكدو أنه فكتلة <script> وحدو.
     section("7.12 كود الرفع فكتلة مستقلة")
@@ -800,7 +800,8 @@ def main():
 
         # كل قالب رسالة يبني نصًا صالحًا
         for kind in ["confirm", "shipped", "arrived", "modify",
-                     "missing", "noreply", "thanks", "unknown-kind"]:
+                     "missing", "noreply", "thanks", "review", "returned",
+                     "unknown-kind"]:
             msg = o.whatsapp_message(kind, "Budac")
             check(f"رسالة «{kind}» مبنية", isinstance(msg, str) and len(msg) > 20,
                   repr(msg)[:60])
@@ -826,14 +827,24 @@ def main():
         check("ماكانش إيموجي مباشر فبناء الرسائل",
               not raw_emoji, set(raw_emoji))
 
+        # ⚠️ القائمة نفسها: كل إيموجي فيها لازم يكون 3 بايت بالضبط.
+        # هاد الفحص هو اللي يمنع رجوع الخلل كي نزيدو إيموجي جديدًا.
+        heavy_map = {k: v for k, v in _O3.EMOJI.items()
+                     if any(len(c.encode("utf-8")) > 3 for c in v)}
+        check("قائمة EMOJI كلها 3 بايت", not heavy_map, heavy_map)
+
         for kind in ["confirm", "shipped", "arrived", "modify",
-                     "missing", "noreply", "thanks"]:
+                     "missing", "noreply", "thanks", "review", "returned"]:
             msg = o.whatsapp_message(kind, "BUDAC")
             check(f"«{kind}»: ماكانش محرف تالف",
                   "\ufffd" not in msg, msg[:60])
-            found = re.findall(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]", msg)
-            check(f"«{kind}»: فيها إيموجي ({len(found)})", len(found) >= 2,
-                  found)
+            # 🔴 الفحص الحقيقي: ماكانش حرف فوق **3 بايت**.
+            # الإيموجي المعروف (\U0001F300+) ياخذ 4 بايت ويوصل للزبون
+            # كمعيّنة «\u25C6». العربية بايتين والإيموجي المسموح 3 —
+            # فأي حرف 4 بايت هو خلل مؤكّد، ماشي مسألة ذوق.
+            heavy = [c for c in msg if len(c.encode("utf-8")) > 3]
+            check(f"«{kind}»: ماكانش حرف 4 بايت", not heavy,
+                  [f"{c} U+{ord(c):04X}" for c in heavy])
             # ⚠️ ترميز URL ثم فكّو لازم يرجّع نفس النص بالضبط
             import urllib.parse as _up
             enc = _up.quote(msg)
@@ -872,6 +883,21 @@ def main():
         check("بلا base_url: ماكانش روابط", "https://" not in plain)
         check("مع base_url: فيها روابط منتجات",
               "https://budacdz.com/product/" in linked, linked[:80])
+
+    # ⚠️ رسالة «اطلب رأيه» — الرابط لازم يكون **كاملاً** وإلا الواتساب
+    # ما يخدمهش، ولازم يمشي لصفحة تقييمات المتجر ماشي لصفحة منتج.
+    with app.app_context():
+        o = _O3.query.first()
+        rev = o.whatsapp_message("review", "BUDAC", "https://budacdz.com")
+        check("رأي: فيها رابط /reviews كامل",
+              "https://budacdz.com/reviews" in rev, rev[:80])
+        fallback = o.whatsapp_message("review", "BUDAC")
+        check("رأي بلا base_url: رابط احتياطي ماشي مكسور",
+              "https://budacdz.com/reviews" in fallback, fallback[:80])
+        check("رأي: فيها اسم الزبون", "علي" in rev)
+
+    check("زر «اطلب رأيه» فالصفحة", "اطلب رأيه" in page)
+    check("زر الرأي يمرّر رابط الموقع", "/reviews" in page or "%2Freviews" in page)
 
     # ⚠️ النص لازم يكون مرمّزًا للرابط، ماشي خامًا
     m = re.search(r'href="https://wa\.me/\d+\?text=([^"]+)"', page)
@@ -1191,7 +1217,37 @@ def main():
           _O5.STATUS_LABELS.get("preparing") == "قيد التجهيز")
     check("«تم التجهيز» فالتسميات",
           _O5.STATUS_LABELS.get("prepared") == "تم التجهيز")
-    check("الترتيب فيه 6 مراحل", len(_O5.STATUS_FLOW) == 6, _O5.STATUS_FLOW)
+    check("الترتيب فيه 7 مراحل", len(_O5.STATUS_FLOW) == 7, _O5.STATUS_FLOW)
+    check("«فالمكتب» فالتسميات",
+          _O5.STATUS_LABELS.get("at_office") == "فالمكتب")
+    check("«راجعة» فالتسميات",
+          _O5.STATUS_LABELS.get("returned") == "راجعة")
+    check("«فالمكتب» بين الشحن والتسليم",
+          _O5.STATUS_FLOW.index("shipped")
+          < _O5.STATUS_FLOW.index("at_office")
+          < _O5.STATUS_FLOW.index("delivered"))
+    # ⚠️ «فالمكتب» ما تخصّش توصيل الدار — الزبون ما يلزموش يشوف
+    # مرحلة ما تجيش عمرها.
+    o_home = _O5(order_number="X-1", customer_name="ن", customer_phone="0555",
+                 wilaya_code="16", wilaya_name="الجزائر", total=0,
+                 delivery_type="home", status="shipped")
+    o_off = _O5(order_number="X-2", customer_name="ن", customer_phone="0555",
+                wilaya_code="16", wilaya_name="الجزائر", total=0,
+                delivery_type="office", status="shipped")
+    keys_home = [s["key"] for s in o_home.progress_steps]
+    keys_off = [s["key"] for s in o_off.progress_steps]
+    check("توصيل الدار: بلا مرحلة «فالمكتب»", "at_office" not in keys_home, keys_home)
+    check("توصيل المكتب: فيه مرحلة «فالمكتب»", "at_office" in keys_off, keys_off)
+
+    o_ret = _O5(order_number="X-3", customer_name="ن", customer_phone="0555",
+                wilaya_code="16", wilaya_name="الجزائر", total=0,
+                status="returned")
+    check("«راجعة»: ماكانش شريط تقدّم", o_ret.progress_steps == [])
+    check("«راجعة»: الطلبية ماشي مفتوحة", not o_ret.is_open)
+
+    check("«راجعة» حالة نهائية برّا المسار",
+          "returned" in _O5.STATUS_TERMINAL
+          and "returned" not in _O5.STATUS_FLOW)
     check("الترتيب منطقي: تجهيز قبل الشحن",
           _O5.STATUS_FLOW.index("preparing") < _O5.STATUS_FLOW.index("shipped"))
 

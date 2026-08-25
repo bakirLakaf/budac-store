@@ -67,7 +67,7 @@ def reserve_stock(lines):
         if line.variant_id:
             variant = db.session.get(ProductVariant, line.variant_id)
             if not variant:
-                raise OrderError(f"التنويعة ديال «{line.name}» ما بقاتش موجودة")
+                raise OrderError(f"التنويعة تاع «{line.name}» ما بقاتش موجودة")
 
             # 🔴 إصلاح حرج: فالنظام المفتوح (is_stock_tracked = False) ما
             # نتبعوش الكميات أصلاً. هاد السطر كان يقارن مع stock_quantity

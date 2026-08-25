@@ -141,7 +141,11 @@
 
         var progress = steps
             ? '<ul class="mo-steps">' + steps + '</ul>'
-            : '<p class="mo-cancelled">هاد الطلبية اتلغات.</p>';
+            : '<p class="mo-cancelled">'
+              + (o.status === 'returned'
+                 ? 'هاد الطلبية رجعات لينا. تواصل معانا باش نعاودو نبعثوها.'
+                 : 'هاد الطلبية اتلغات.')
+              + '</p>';
 
         var actions = o.can_edit
             ? '<div class="mo-actions">'

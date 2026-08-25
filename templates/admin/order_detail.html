@@ -315,6 +315,12 @@
                 </a>
 
                 <a class="wa-btn wa-warn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('returned', store_name) | urlencode }}"
+                   title="الطرد رجع بلا ما يتسلّم — نسقسيو الزبون واش راح">
+                    ↩️ <span>رجعات لينا</span>
+                </a>
+
+                <a class="wa-btn wa-warn" target="_blank" rel="noopener"
                    href="{{ wa }}{{ order.whatsapp_message('missing', store_name) | urlencode }}">
                     😔 <span>منتج ما بقاش</span>
                 </a>
@@ -322,6 +328,14 @@
                 <a class="wa-btn" target="_blank" rel="noopener"
                    href="{{ wa }}{{ order.whatsapp_message('thanks', store_name) | urlencode }}">
                     💜 <span>شكر بعد التسليم</span>
+                </a>
+
+                {# ⚠️ نمرّرو `site` باش الرابط يخرج كاملاً — الواتساب ما
+                   يخدمش رابطًا نسبيًا، ويوري معاينة للرابط الكامل. #}
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('review', store_name, site) | urlencode }}"
+                   title="طلب رأي — الرابط يودّي لصفحة تقييمات المتجر">
+                    ⭐ <span>اطلب رأيه</span>
                 </a>
 
                 {# محادثة فاضية — للحالات اللي ماكانش ليها قالب #}
