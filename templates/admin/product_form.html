@@ -3,7 +3,20 @@
 
 <div class="page-head">
     <h1 class="page-title">{{ 'تعديل: ' + product.name if product else 'منتج جديد' }}</h1>
-    <a href="{{ url_for('admin.products_list') }}" class="btn-admin btn-ghost">← رجوع للقائمة</a>
+    <div class="page-head-actions">
+        {% if product %}
+        {# نسخة من هنا كذلك — كي تكون قاعد تعدّل وتلاحظ أنك تحتاج
+           منتجًا مشابهًا، ما تخرجش للقائمة. #}
+        <form method="post" class="inline-form"
+              action="{{ url_for('admin.product_duplicate', product_id=product.id) }}"
+              onsubmit="return confirm('تنسخ هاد المنتج بكل موديلاتو وأسعارو؟')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-admin btn-ghost"
+                    title="نسخة كاملة بالموديلات والأسعار">⧉ نسخة</button>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('admin.products_list') }}" class="btn-admin btn-ghost">← رجوع للقائمة</a>
+    </div>
 </div>
 
 <form method="post" enctype="multipart/form-data" class="admin-form" id="productForm">

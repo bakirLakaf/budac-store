@@ -1990,3 +1990,7 @@ img.thumb-sm:hover {
         opacity: 0.7;
     }
 }
+
+/* أزرار رأس الصفحة */
+.page-head-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.inline-form { display: inline; margin: 0; }

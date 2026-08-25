@@ -93,6 +93,16 @@
             </td>
             <td class="row-actions">
                 <a href="{{ url_for('admin.product_form', product_id=p.id) }}" class="btn-admin btn-sm btn-ghost">تعديل</a>
+
+                {# ⚠️ نسخة كاملة: الصور، الموديلات، أسعار الجملة، العروض.
+                   النسخة تجي **معطّلة** — ما تبانش للزبون حتى تراجعها. #}
+                <form method="post" action="{{ url_for('admin.product_duplicate', product_id=p.id) }}"
+                      onsubmit="return confirm('تنسخ «{{ p.name }}» بكل موديلاتو وأسعارو؟')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-admin btn-sm btn-ghost"
+                            title="نسخة كاملة بالموديلات والأسعار">⧉ نسخة</button>
+                </form>
+
                 <form method="post" action="{{ url_for('admin.product_delete', product_id=p.id) }}"
                       onsubmit="return confirm('متأكد باغي تمسح «{{ p.name }}»؟ هاد العملية ما ترجعش.')">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

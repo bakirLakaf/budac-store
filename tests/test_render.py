@@ -1386,6 +1386,126 @@ def main():
     home2 = client.get("/").get_data(as_text=True)
     check("رابط «طلبياتي» فالموقع", "طلبياتي" in home2)
 
+    # ───────── 7.26) نسخ المنتج ─────────
+    section("7.26 نسخة كاملة للمنتج")
+    from models import VariantPriceTier as _T, VariantPack as _Pk
+
+    with app.app_context():
+        src = _P.query.filter_by(slug=slug).first()
+        # نضمنو أن فيه أسعار جملة وعرض جاهز باش النسخة تتفحص كامل
+        v_src = src.default_variant
+        if not v_src.price_tiers:
+            db.session.add(_T(variant_id=v_src.id, min_quantity=10,
+                              max_quantity=None, unit_price=90))
+        if not v_src.packs:
+            db.session.add(_Pk(variant_id=v_src.id, quantity=12,
+                               label="رولو", price=700, sort_order=0))
+        src.unit = "meter"
+        db.session.commit()
+
+        before = {
+            "products": _P.query.count(),
+            "name": src.name,
+            "slug": src.slug,
+            "variants": len(src.variants),
+            "images": len(src.images),
+            "tiers": sum(len(v.price_tiers) for v in src.variants),
+            "packs": sum(len(v.packs) for v in src.variants),
+            "unit": src.unit,
+        }
+        src_id = src.id
+
+    r = client.post(f"/admin/products/{src_id}/duplicate")
+    check(f"النسخ نجح ({r.status_code})", r.status_code in (200, 302))
+
+    with app.app_context():
+        check("اتزاد منتج واحد", _P.query.count() == before["products"] + 1,
+              _P.query.count())
+
+        copy = _P.query.filter(_P.slug.like(before["slug"] + "-%")).first()
+        check("النسخة موجودة", copy is not None)
+
+    if copy is None:
+        check("باقي فحوص النسخ", False, "ماكانش نسخة")
+    else:
+        with app.app_context():
+            copy = _P.query.filter(_P.slug.like(before["slug"] + "-%")).first()
+            src = _P.query.filter_by(slug=before["slug"]).first()
+
+            check("⚠️ النسخة معطّلة", copy.is_active is False)
+            check("الاسم فيه «(نسخة)»", "(نسخة)" in copy.name, copy.name)
+            check("الـslug فريد", copy.slug != before["slug"], copy.slug)
+            check("السعر اتنسخ", copy.price == src.price)
+            check("الوحدة اتنسخت", copy.unit == before["unit"], copy.unit)
+            check("التصنيف اتنسخ", copy.category_id == src.category_id)
+
+            check(f"الصور اتنسخو ({len(copy.images)})",
+                  len(copy.images) == before["images"],
+                  f"{len(copy.images)} بدل {before['images']}")
+            check(f"الموديلات اتنسخو ({len(copy.variants)})",
+                  len(copy.variants) == before["variants"],
+                  f"{len(copy.variants)} بدل {before['variants']}")
+            check("أسعار الجملة اتنسخو",
+                  sum(len(v.price_tiers) for v in copy.variants) == before["tiers"],
+                  sum(len(v.price_tiers) for v in copy.variants))
+            check("العروض الجاهزة اتنسخو",
+                  sum(len(v.packs) for v in copy.variants) == before["packs"],
+                  sum(len(v.packs) for v in copy.variants))
+            check("فيها موديل افتراضي", copy.default_variant is not None)
+
+            # ⚠️ SKU ما يتنسخش — لازم يبقى فريدًا
+            check("SKU ما اتنسخش",
+                  all(v.sku is None for v in copy.variants),
+                  [v.sku for v in copy.variants])
+
+            # 🔴 الأهم: النسخة مستقلة — تعديلها ما يمسّش الأصل
+            copy.name = "اسم مبدّل"
+            copy.price = 9999
+            copy.variants[0].label = "موديل مبدّل"
+            copy.variants[0].price = 8888
+            db.session.commit()
+
+            src = _P.query.filter_by(slug=before["slug"]).first()
+            check("🔴 الأصل ما تبدّلش اسمو", src.name == before["name"], src.name)
+            check("🔴 الأصل ما تبدّلش سعرو", src.price != 9999, src.price)
+            check("🔴 موديلات الأصل ما تبدّلوش",
+                  all(v.label != "موديل مبدّل" for v in src.variants),
+                  [v.label for v in src.variants])
+
+            copy_id = copy.id
+
+        # ⚠️ حذف النسخة ما يمسّش الأصل ولا صورو
+        with app.app_context():
+            src_images = [i.image_filename
+                          for i in _P.query.filter_by(slug=before["slug"]).first().images]
+
+        client.post(f"/admin/products/{copy_id}/delete")
+
+        with app.app_context():
+            src = _P.query.filter_by(slug=before["slug"]).first()
+            check("🔴 الأصل باقٍ بعد حذف النسخة", src is not None)
+            check("🔴 صور الأصل باقية",
+                  [i.image_filename for i in src.images] == src_images,
+                  [i.image_filename for i in src.images])
+            check("🔴 موديلات الأصل باقية",
+                  len(src.variants) == before["variants"], len(src.variants))
+
+    # نسخة من نسخة → slug مازال فريد
+    client.post(f"/admin/products/{src_id}/duplicate")
+    client.post(f"/admin/products/{src_id}/duplicate")
+    with app.app_context():
+        slugs = [p_.slug for p_ in
+                 _P.query.filter(_P.slug.like(before["slug"] + "-%")).all()]
+        check("نسخ متعددة بـslug فريد",
+              len(slugs) == len(set(slugs)) and len(slugs) >= 2, slugs)
+
+    # الأزرار فالواجهة
+    lst3 = client.get("/admin/products").get_data(as_text=True)
+    check("زر النسخة فقائمة المنتجات", "product_duplicate" in lst3
+          or "⧉ نسخة" in lst3)
+    frm = client.get(f"/admin/products/{src_id}/edit").get_data(as_text=True)
+    check("زر النسخة فصفحة التعديل", "⧉ نسخة" in frm)
+
     # ───────── 8) ماكانش محتوى برّا كتل Jinja ─────────
     section("8. سلامة القوالب")
     import glob

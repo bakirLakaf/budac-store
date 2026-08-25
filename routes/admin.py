@@ -25,7 +25,7 @@ from models import (
     db, Product, Category, ProductImage, ProductVariant,
     Offer, OfferItem, Carrier, ShippingRate, AdminUser, Coupon, Order, OrderItem,
     AbandonedCart, Review, UpsellRule, LandingPage, StoreSetting,
-    VariantPack,
+    VariantPack, VariantPriceTier,
 )
 from services.cart import CartLine
 from services.orders import restore_stock, reserve_stock, OrderError
@@ -584,6 +584,118 @@ def product_image_caption(product_id, image_id):
 
     return jsonify({"ok": True, "caption": image.caption or "",
                     "message": "انحفظ الوصف"})
+
+
+@admin_bp.route("/products/<int:product_id>/duplicate", methods=["POST"])
+@login_required
+def product_duplicate(product_id):
+    """
+    ينسخ منتجًا كامل: المعلومات، الصور، الموديلات، أسعار الجملة،
+    والعروض الجاهزة.
+
+    ⚠️ علاش الميزة؟ منتجاتك متشابهة (نفس الموديلات بألوان مختلفة).
+    بناء منتج جديد من الصفر = إعادة كتابة 7 موديلات وأسعارهم. النسخة
+    توفّر الوقت كامل.
+
+    قرارات مقصودة:
+
+    1. **النسخة معطّلة** (`is_active = False`) — ما تبانش للزبون حتى
+       تراجعها وتفعّلها. بلا هذا، منتج نصف جاهز يبان فالمتجر.
+
+    2. **الصور تتشارك، ما تتنسخش على القرص.** نعملو سجلات جديدة تشير
+       لنفس الملفات. علاش؟ نسخ 20 صورة = 20 ميغا زايدة، والغالب أنك
+       غادي تبدّلهم على كل حال.
+
+       ⚠️ النتيجة المهمة: حذف صورة من **النسخة** ما يمحيش الملف —
+       الأصل مازال يستعملو. الكود تاع الحذف يمسح السجل برك (من v80).
+
+    3. **الـslug يتولّد فريدًا** بزيادة رقم: `pieds-fer-2`، `-3`…
+    """
+    original = Product.query.get_or_404(product_id)
+
+    # ---------- slug فريد ----------
+    base = original.slug
+    index = 2
+    while Product.query.filter_by(slug=f"{base}-{index}").first():
+        index += 1
+        if index > 200:      # حارس: ما نلفّوش للأبد
+            flash("بزاف نسخ من هاد المنتج — بدّل الرابط يدويًا", "error")
+            return redirect(url_for("admin.products_list"))
+    new_slug = f"{base}-{index}"
+
+    # ---------- المنتج ----------
+    copy = Product(
+        name=f"{original.name} (نسخة)",
+        slug=new_slug,
+        description=original.description,
+        description_html=original.description_html,
+        price=original.price,
+        compare_at_price=original.compare_at_price,
+        unit=original.unit,
+        category_id=original.category_id,
+        color_variant=original.color_variant,
+        calculator_type=original.calculator_type,
+        roll_length_m=original.roll_length_m,
+        roll_width_m=original.roll_width_m,
+        calculator_margin=original.calculator_margin,
+        stock_quantity=original.stock_quantity,
+        image_filename=original.image_filename,
+        is_active=False,          # ⚠️ معطّلة حتى تراجعها
+        is_featured=False,
+    )
+    db.session.add(copy)
+    db.session.flush()            # باش ياخذ id
+
+    # ---------- الصور ----------
+    for img in original.images:
+        db.session.add(ProductImage(
+            product_id=copy.id,
+            image_filename=img.image_filename,   # نفس الملف
+            sort_order=img.sort_order,
+            is_extra=img.is_extra,
+            caption=img.caption,
+        ))
+
+    # ---------- الموديلات وأسعارهم ----------
+    for variant in original.variants:
+        new_variant = ProductVariant(
+            product_id=copy.id,
+            label=variant.label,
+            price=variant.price,
+            compare_at_price=variant.compare_at_price,
+            stock_quantity=variant.stock_quantity,
+            sku=None,                 # ⚠️ SKU لازم يبقى فريدًا
+            image_filename=variant.image_filename,
+            is_default=variant.is_default,
+            is_available=variant.is_available,
+        )
+        db.session.add(new_variant)
+        db.session.flush()
+
+        for tier in variant.price_tiers:
+            db.session.add(VariantPriceTier(
+                variant_id=new_variant.id,
+                min_quantity=tier.min_quantity,
+                max_quantity=tier.max_quantity,
+                unit_price=tier.unit_price,
+            ))
+
+        for pack in variant.packs:
+            db.session.add(VariantPack(
+                variant_id=new_variant.id,
+                quantity=pack.quantity,
+                label=pack.label,
+                price=pack.price,
+                sort_order=pack.sort_order,
+            ))
+
+    db.session.commit()
+
+    flash(
+        f"اتنسخ «{original.name}» — النسخة **معطّلة**، عدّلها وفعّلها.",
+        "success",
+    )
+    return redirect(url_for("admin.product_form", product_id=copy.id))
 
 
 @admin_bp.route("/products/<int:product_id>/delete", methods=["POST"])
