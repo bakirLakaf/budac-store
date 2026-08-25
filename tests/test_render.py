@@ -32,6 +32,76 @@ from models import (db, Product, ProductVariant, Category, ProductImage,
 PASSED, FAILED = [], []
 
 
+def _has_emoji_form(ch):
+    """
+    واش هاد الرمز عندو نسخة إيموجي ملوّنة؟
+
+    🔴 هاد الدالة هي خلاصة 3 جولات تاع تصليح غالط. الواتساب يبدّل
+    أي رمز عندو صورة إيموجي بتلك الصورة، وكي ما تتحمّلش يبان
+    «\u25C6» عند الزبون. الرموز النصّية (★ ♥ ✓ ⚑ ✆) ما عندهاش صورة،
+    فتتكتب بالخط العادي وما عمرها تطيح.
+
+    ما نعتمدوش على مكتبة خارجية — القائمة صريحة وقابلة للقراءة.
+    """
+    cp = ord(ch)
+
+    # كل ما فوق U+1F000 تقريبًا إيموجي
+    if cp >= 0x1F000:
+        return True
+
+    # رموز عندها Emoji_Presentation افتراضيًا (تبان ملوّنة بلا VS16)
+    if 0x231A <= cp <= 0x231B: return True   # ⌚⌛
+    if 0x23E9 <= cp <= 0x23F3: return True   # ⏩..⏳ (فيها ⏰)
+    if 0x25FD <= cp <= 0x25FE: return True
+    if 0x2614 <= cp <= 0x2615: return True
+    if 0x2648 <= cp <= 0x2653: return True
+    if 0x267F == cp or 0x2693 == cp: return True
+    if 0x26A1 == cp: return True
+    if 0x26AA <= cp <= 0x26AB: return True
+    if 0x26BD <= cp <= 0x26BE: return True
+    if 0x26C4 <= cp <= 0x26C5: return True
+    if 0x26CE == cp or 0x26D4 == cp or 0x26EA == cp: return True
+    if 0x26F2 <= cp <= 0x26F3: return True
+    if 0x26F5 == cp or 0x26FA == cp or 0x26FD == cp: return True
+    if 0x2705 == cp: return True             # ✅
+    if 0x270A <= cp <= 0x270B: return True   # ✊✋
+    if 0x2728 == cp: return True             # ✨
+    if 0x274C == cp or 0x274E == cp: return True
+    if 0x2753 <= cp <= 0x2755: return True
+    if 0x2757 == cp: return True             # ❗
+    if 0x2795 <= cp <= 0x2797: return True
+    if 0x27B0 == cp or 0x27BF == cp: return True
+    if 0x2B1B <= cp <= 0x2B1C: return True
+    if 0x2B50 == cp or 0x2B55 == cp: return True   # ⭐ ⭕
+
+    # رموز عندها نسخة إيموجي معروفة (حتى بلا VS16 التطبيقات تلوّنها)
+    KNOWN_COLORED = {
+        0x2611,  # ☑
+        0x2714,  # ✔
+        0x2716,  # ✖
+        0x2764,  # ❤
+        0x26A0,  # ⚠
+        0x21A9, 0x21AA,  # ↩ ↪
+        0x2934, 0x2935,
+        0x2B05, 0x2B06, 0x2B07,
+        0x2600, 0x2601, 0x2602, 0x2603,
+        0x260E,  # ☎
+        0x2620, 0x2622, 0x2623, 0x262E, 0x262F,
+        0x2665, 0x2666, 0x2663, 0x2660,  # ♥♦♣♠ — الواتساب يلوّنهم أحيانًا
+        0x270F, 0x2712, 0x2733, 0x2734, 0x2744, 0x2747,
+        0x203C, 0x2049, 0x2122, 0x2139,
+        0x3030, 0x303D,
+    }
+    if cp in KNOWN_COLORED:
+        return True
+
+    # منتقي العرض الإيموجي — يفرض النسخة الملوّنة
+    if cp == 0xFE0F:
+        return True
+
+    return False
+
+
 def check(name, ok, detail=""):
     """
     ⚠️ `str(detail)` ضروري: كثير من الفحوص تمرّر رقمًا كتفصيل
@@ -829,22 +899,26 @@ def main():
 
         # ⚠️ القائمة نفسها: كل إيموجي فيها لازم يكون 3 بايت بالضبط.
         # هاد الفحص هو اللي يمنع رجوع الخلل كي نزيدو إيموجي جديدًا.
-        heavy_map = {k: v for k, v in _O3.EMOJI.items()
-                     if any(len(c.encode("utf-8")) > 3 for c in v)}
-        check("قائمة EMOJI كلها 3 بايت", not heavy_map, heavy_map)
+        bad_map = {k: f"{v} U+{ord(v[0]):04X}" for k, v in _O3.EMOJI.items()
+                   if any(_has_emoji_form(c) for c in v)}
+        check("قائمة EMOJI كلها رموز نصّية", not bad_map, bad_map)
 
         for kind in ["confirm", "shipped", "arrived", "modify",
                      "missing", "noreply", "thanks", "review", "returned"]:
             msg = o.whatsapp_message(kind, "BUDAC")
             check(f"«{kind}»: ماكانش محرف تالف",
                   "\ufffd" not in msg, msg[:60])
-            # 🔴 الفحص الحقيقي: ماكانش حرف فوق **3 بايت**.
-            # الإيموجي المعروف (\U0001F300+) ياخذ 4 بايت ويوصل للزبون
-            # كمعيّنة «\u25C6». العربية بايتين والإيموجي المسموح 3 —
-            # فأي حرف 4 بايت هو خلل مؤكّد، ماشي مسألة ذوق.
-            heavy = [c for c in msg if len(c.encode("utf-8")) > 3]
-            check(f"«{kind}»: ماكانش حرف 4 بايت", not heavy,
-                  [f"{c} U+{ord(c):04X}" for c in heavy])
+            # 🔴 الفحص الصحيح: ماكانش رمز عندو **نسخة إيموجي**.
+            #
+            # فحص البايت اللي كان هنا قبل كان غالطًا: ⚑ و☑ بجوج
+            # 3 بايت، الأولى واصلة والثانية طايحة. المعيار الحقيقي هو
+            # واش الواتساب يبدّل الرمز بصورة، ماشي حجمو.
+            #
+            # القائمة تحت مبنية على رموز اليونيكود اللي عندها
+            # Emoji_Presentation ولا نسخة ملوّنة معروفة.
+            banned = [c for c in msg if _has_emoji_form(c)]
+            check(f"«{kind}»: ماكانش رمز إيموجي", not banned,
+                  [f"{c} U+{ord(c):04X}" for c in banned])
             # ⚠️ ترميز URL ثم فكّو لازم يرجّع نفس النص بالضبط
             import urllib.parse as _up
             enc = _up.quote(msg)
