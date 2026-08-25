@@ -1271,17 +1271,63 @@ class Order(db.Model):
 
         return "213" + digits
 
-    def _items_lines(self):
-        """سطر لكل منتج فالطلبية — يستعملوه أكثر من قالب رسالة."""
+    def _items_lines(self, with_links=False, base_url=""):
+        """
+        سطر لكل منتج فالطلبية — يستعملوه أكثر من قالب رسالة.
+
+        ⚠️ `with_links`: نزيدو رابط صفحة المنتج تحت كل سطر.
+
+        علاش روابط ماشي صور؟ رابط `wa.me` يبعث **نصًا برك** — ما
+        يقدرش يرفق صورًا، هذا حد فالواتساب ماشي فينا. لكن الواتساب
+        يوري **معاينة** لأول رابط فالرسالة (صورة + عنوان)، فالزبون
+        يشوف المنتج بلا ما يخرج.
+        """
         lines = []
         for item in self.items:
             name = item.item_name
             if item.variant_label:
                 name += f" ({item.variant_label})"
             lines.append(f"• {name} × {item.quantity}")
+
+            # ⚠️ `OrderItem` ما عندوش علاقة `product` — نجيبو المنتج
+            # بالـid. وممكن يكون انمحى، فنتحققو قبل.
+            if with_links and base_url and item.product_id:
+                product = db.session.get(Product, item.product_id)
+                if product is not None and product.slug:
+                    lines.append(f"  {base_url}/product/{product.slug}")
+
         return "\n".join(lines)
 
-    def whatsapp_message(self, kind, store_name="Budac"):
+    # ══════════════════════════════════════════════════════════
+    # الإيموجي بترميز ASCII (\U0001F44B) ماشي بالحرف المباشر.
+    #
+    # 🔴 علاش؟ الإيموجي المكتوب مباشرة يتخرّب بسهولة: محرّر يحفظ
+    # بترميز غالط، رفع لـGitHub، نسخ ولصق… والنتيجة «�» عند الزبون.
+    # الهروب ASCII يخلّي الملف نظيفًا مهما مرّ عليه، وPython يفكّو
+    # للحرف الصحيح عند التشغيل.
+    # ══════════════════════════════════════════════════════════
+    EMOJI = {
+        "wave": "\U0001F44B",       # 👋
+        "box": "\U0001F4E6",        # 📦
+        "truck": "\U0001F69A",      # 🚚
+        "pin": "\U0001F4CD",        # 📍
+        "phone": "\U0001F4DE",      # 📞
+        "check": "\u2705",          # ✅
+        "money": "\U0001F4B0",      # 💰
+        "heart": "\U0001F49C",      # 💜
+        "smile": "\U0001F60A",      # 😊
+        "sad": "\U0001F622",        # 😢
+        "star": "\U0001F31F",       # 🌟
+        "gift": "\U0001F381",       # 🎁
+        "clock": "\u23F0",          # ⏰
+        "home": "\U0001F3E0",       # 🏠
+        "shop": "\U0001F3EA",       # 🏪
+        "id": "\U0001F194",         # 🆔
+        "pray": "\U0001F64F",       # 🙏
+        "sparkles": "\u2728",       # ✨
+    }
+
+    def whatsapp_message(self, kind, store_name="Budac", base_url=""):
         """
         يبني نص رسالة جاهزة حسب الحاجة.
 
@@ -1294,76 +1340,89 @@ class Order(db.Model):
           noreply  — ما جاوبش على الهاتف
           thanks   — شكر بعد التسليم
         """
+        e = self.EMOJI
         name = self.customer_name or "خويا"
         num = self.order_number
-        items = self._items_lines()
         total = self.total_display
 
-        greeting = f"سلام {name} 👋\nمعاك {store_name}"
+        # ⚠️ الروابط غير فرسائل المراجعة (تأكيد/تعديل) — فيهم الزبون
+        # يحتاج يشوف واش طلب. فرسالة الشحن يزيدو ضجيجًا برك.
+        items = self._items_lines(with_links=bool(base_url), base_url=base_url)
+
+        greeting = f"سلام {name} {e['wave']}\nمعاك {store_name}"
 
         if kind == "confirm":
             return (
                 f"{greeting}\n\n"
-                f"وصلاتنا طلبيتك رقم *{num}*:\n\n"
+                f"{e['box']} وصلاتنا طلبيتك رقم *{num}*:\n\n"
                 f"{items}\n\n"
-                f"المجموع مع التوصيل: *{total}*\n"
-                f"{self.delivery_type_label} — {self.wilaya_name}\n\n"
-                f"نأكّدو الطلبية؟ 😊"
+                f"{e['money']} المجموع مع التوصيل: *{total}*\n"
+                f"{e['pin']} {self.delivery_type_label} — {self.wilaya_name}\n\n"
+                f"نأكّدو الطلبية؟ {e['smile']}"
             )
 
         if kind == "shipped":
-            tracking = (f"\nرقم التتبّع: *{self.tracking_number}*"
-                        if self.tracking_number else "")
+            tracking = (
+                f"\n{e['id']} رقم التتبّع: *{self.tracking_number}*"
+                if self.tracking_number else ""
+            )
             return (
                 f"{greeting}\n\n"
-                f"طلبيتك *{num}* خرجات مع {self.carrier_name or 'شركة التوصيل'} 🚚"
+                f"{e['truck']} طلبيتك *{num}* خرجات اليوم مع "
+                f"{self.carrier_name or 'شركة التوصيل'}، بإذن الله."
                 f"{tracking}\n\n"
-                f"تُوصلك فـ24/48 ساعة إن شاء الله.\n"
-                f"خلّي هاتفك مفتوح باش يتصل بيك الموزّع 📞"
+                f"{e['clock']} توصلك فحدود 24 إلى 48 ساعة.\n"
+                f"{e['phone']} خلّي هاتفك مفتوح باش يتصل بيك الموزّع.\n\n"
+                f"{e['money']} المبلغ عند الاستلام: *{total}*"
             )
 
         if kind == "arrived":
             where = self.pickup_point_name or self.wilaya_name
             return (
                 f"{greeting}\n\n"
-                f"طلبيتك *{num}* وصلات لـ*{where}* ✅\n\n"
-                f"تقدر تروح تحوّزها. جيب معاك بطاقة التعريف.\n"
-                f"المبلغ: *{total}*"
+                f"{e['check']} طلبيتك *{num}* وصلات لـ*{where}*\n\n"
+                f"{e['home']} تقدر تروح تحوّزها — جيب معاك بطاقة التعريف.\n"
+                f"{e['money']} المبلغ: *{total}*\n\n"
+                f"نستنّاوك {e['smile']}"
             )
 
         if kind == "modify":
             return (
                 f"{greeting}\n\n"
-                f"بخصوص طلبيتك *{num}*:\n\n"
+                f"{e['box']} بخصوص طلبيتك *{num}*:\n\n"
                 f"{items}\n\n"
-                f"حبيت نسقسيك — تحب تزيد ولا تنقّص شي حاجة قبل ما نبعثوها؟"
+                f"{e['money']} المجموع: *{total}*\n\n"
+                f"حبيت نسقسيك — تحب تزيد ولا تنقّص شي حاجة قبل ما نبعثوها؟ "
+                f"{e['smile']}"
             )
 
         if kind == "missing":
             return (
                 f"{greeting}\n\n"
-                f"بخصوص طلبيتك *{num}* — نعتذرلك، كاين منتج ما بقاش "
-                f"موجود درك 😔\n\n"
-                f"نقدرو نبدّلوه بحاجة أخرى، ولا نبعثو الباقي برك ونحيّدو "
-                f"ثمنو من المجموع.\n\n"
-                f"واش تفضّل؟"
+                f"{e['sad']} بخصوص طلبيتك *{num}* — نعتذرلك، كاين منتج "
+                f"ما بقاش موجود درك.\n\n"
+                f"نقدرو:\n"
+                f"1. نبدّلوه بحاجة أخرى تعجبك\n"
+                f"2. نبعثو الباقي ونحيّدو ثمنو من المجموع\n\n"
+                f"واش تفضّل؟ {e['pray']}"
             )
 
         if kind == "noreply":
             return (
                 f"{greeting}\n\n"
-                f"حاولنا نتصلو بيك على طلبيتك *{num}* وما لقيناكش 📞\n\n"
-                f"قوللي وقتاش يريحك ونعاودو نتصلو، ولا جاوبني هنا "
-                f"ونأكّدوها مباشرة 😊"
+                f"{e['phone']} حاولنا نتصلو بيك على طلبيتك *{num}* "
+                f"وما لقيناكش.\n\n"
+                f"{e['clock']} قوللي وقتاش يريحك ونعاودو نتصلو، ولا جاوبني "
+                f"هنا ونأكّدوها مباشرة {e['smile']}"
             )
 
         if kind == "thanks":
             return (
-                f"سلام {name} 👋\n\n"
-                f"يعطيك الصحة على ثقتك فينا 💜\n"
-                f"نتمنى المنتج عجبك.\n\n"
-                f"إذا عندك أي ملاحظة، قوللي — رأيك يهمنا.\n"
-                f"ونفرحو بيك مرة أخرى فـ{store_name} 🌟"
+                f"سلام {name} {e['wave']}\n\n"
+                f"{e['heart']} يعطيك الصحة على ثقتك فينا.\n"
+                f"{e['sparkles']} نتمنى المنتج عجبك.\n\n"
+                f"إذا عندك أي ملاحظة، قوللي — رأيك يهمنا {e['pray']}\n\n"
+                f"{e['star']} ونفرحو بيك مرة أخرى فـ{store_name}"
             )
 
         # نوع مجهول — رسالة عامة أحسن من خطأ
