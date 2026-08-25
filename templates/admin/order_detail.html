@@ -273,6 +273,9 @@
 
         {% if order.whatsapp_phone %}
         {% set wa = 'https://wa.me/' ~ order.whatsapp_phone ~ '?text=' %}
+        {# ⚠️ رابط الموقع الكامل — الواتساب يوري معاينة (صورة + اسم)
+           لأول رابط فالرسالة. أقرب حاجة لإرسال صور. #}
+        {% set site = request.url_root.rstrip('/') %}
 
         <div class="wa-panel">
             <p class="hint">
@@ -283,6 +286,12 @@
                 <a class="wa-btn wa-primary" target="_blank" rel="noopener"
                    href="{{ wa }}{{ order.whatsapp_message('confirm', store_name) | urlencode }}">
                     ✅ <span>أكّد الطلبية</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('confirm', store_name, site) | urlencode }}"
+                   title="نفس الرسالة مع رابط كل منتج — الواتساب يوري معاينة بالصورة">
+                    🖼️ <span>أكّد + روابط المنتجات</span>
                 </a>
 
                 <a class="wa-btn" target="_blank" rel="noopener"

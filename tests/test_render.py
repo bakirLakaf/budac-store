@@ -805,7 +805,42 @@ def main():
             check(f"رسالة «{kind}» مبنية", isinstance(msg, str) and len(msg) > 20,
                   repr(msg)[:60])
 
-        # ⚠️ الرسالة لازم تكون فيها معلومات الطلبية الحقيقية
+        # ═══ الإيموجي ═══
+    # 🔴 الإيموجي المكتوب مباشرة فالكود يتخرّب (محرّر بترميز غالط،
+    # رفع، نسخ/لصق) ويوصل للزبون «\ufffd». نكتبوه بهروب ASCII —
+    # هاد الفحوص تتأكد أنو باقٍ صحيحًا.
+    with app.app_context():
+        o = _O3.query.first()
+        src_models = open("models.py", encoding="utf-8").read()
+        i0 = src_models.index("def whatsapp_message")
+        i1 = src_models.index("# نوع مجهول", i0)
+        body = src_models[i0:i1]
+        # ⚠️ التعليقات فيها إيموجي للتوضيح (🔴 ⚠️) — المهم أن **نصوص
+        # الرسائل** ماكانش فيها إيموجي مباشر. نشيلو التعليقات أول.
+        # ⚠️ التعليقات ونصوص التوثيق فيها إيموجي للتوضيح (🔴 ⚠️).
+        # المهم أن **نصوص الرسائل** ماكانش فيها إيموجي مباشر، فنشيلو
+        # التعليقات والـdocstrings قبل الفحص.
+        body = re.sub(r"#[^\n]*", "", body)
+        body = re.sub(r'\"\"\".*?\"\"\"', "", body, flags=re.S)
+        raw_emoji = re.findall(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]", body)
+        check("ماكانش إيموجي مباشر فبناء الرسائل",
+              not raw_emoji, set(raw_emoji))
+
+        for kind in ["confirm", "shipped", "arrived", "modify",
+                     "missing", "noreply", "thanks"]:
+            msg = o.whatsapp_message(kind, "BUDAC")
+            check(f"«{kind}»: ماكانش محرف تالف",
+                  "\ufffd" not in msg, msg[:60])
+            found = re.findall(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]", msg)
+            check(f"«{kind}»: فيها إيموجي ({len(found)})", len(found) >= 2,
+                  found)
+            # ⚠️ ترميز URL ثم فكّو لازم يرجّع نفس النص بالضبط
+            import urllib.parse as _up
+            enc = _up.quote(msg)
+            check(f"«{kind}»: الترميز ذهابًا وإيابًا سليم",
+                  _up.unquote(enc) == msg)
+
+    # ⚠️ الرسالة لازم تكون فيها معلومات الطلبية الحقيقية
         confirm = o.whatsapp_message("confirm", "Budac")
         check("التأكيد فيه رقم الطلبية", o.order_number in confirm)
         check("التأكيد فيه المجموع", o.total_display in confirm)
@@ -827,6 +862,16 @@ def main():
     check("زر تأكيد الطلبية", "wa-primary" in page)
     check("الروابط تمشي لـwa.me", "https://wa.me/213551486151" in page)
     check("زر نسخ الرقم", "data-copy=" in page)
+    check("زر «أكّد + روابط المنتجات»", "أكّد + روابط المنتجات" in page)
+
+    # ⚠️ روابط المنتجات: الواتساب يوري معاينة بالصورة لأول رابط
+    with app.app_context():
+        o = _O3.query.first()
+        plain = o.whatsapp_message("confirm", "BUDAC")
+        linked = o.whatsapp_message("confirm", "BUDAC", "https://budacdz.com")
+        check("بلا base_url: ماكانش روابط", "https://" not in plain)
+        check("مع base_url: فيها روابط منتجات",
+              "https://budacdz.com/product/" in linked, linked[:80])
 
     # ⚠️ النص لازم يكون مرمّزًا للرابط، ماشي خامًا
     m = re.search(r'href="https://wa\.me/\d+\?text=([^"]+)"', page)
