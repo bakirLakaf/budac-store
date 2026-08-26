@@ -77,7 +77,7 @@ def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not session.get("admin_id"):
-            flash("خاصك تسجل الدخول باش تدخل للوحة التحكم", "warning")
+            flash("لازمك تسجل الدخول باش تدخل للوحة التحكم", "warning")
             return redirect(url_for("admin.login", next=request.path))
         return view(*args, **kwargs)
 
@@ -314,7 +314,7 @@ def products_list():
 @login_required
 def product_form(product_id=None):
     """
-    نموذج واحد للإضافة والتعديل — أبسط من ملفين منفصلين فيهم نفس الكود مكرر.
+    نموذج واحد للإضافة والتعديل — أبسط من ملوين منفصلين فيهم نفس الكود مكرر.
     """
     product = Product.query.get_or_404(product_id) if product_id else None
     categories = Category.query.order_by(Category.name).all()
@@ -638,7 +638,7 @@ def product_duplicate(product_id):
 
     2. **الصور تتشارك، ما تتنسخش على القرص.** نعملو سجلات جديدة تشير
        لنفس الملفات. علاش؟ نسخ 20 صورة = 20 ميغا زايدة، والغالب أنك
-       غادي تبدّلهم على كل حال.
+       راح تبدّلهم على كل حال.
 
        ⚠️ النتيجة المهمة: حذف صورة من **النسخة** ما يمحيش الملف —
        الأصل مازال يستعملو. الكود تاع الحذف يمسح السجل برك (من v80).
@@ -1477,10 +1477,10 @@ def order_item_delete(order_id, item_id):
         flash(blocked, "error")
         return redirect(url_for("admin.order_detail", order_id=order_id))
 
-    # ⚠️ طلبية بلا منتجات ما عندهاش معنى — إذا بغى يلغي كلش، يبدّل
+    # ⚠️ طلبية بلا منتجات ما عندهاش معنى — إذا حاب يلغي كلش، يبدّل
     # الحالة لـ«ملغاة» بدل ما يمسح آخر عنصر.
     if len(order.items) <= 1:
-        flash("ما تقدرش تحيّد آخر منتج. إذا بغيت تلغي، بدّل الحالة "
+        flash("ما تقدرش تحيّد آخر منتج. إذا حبيت تلغي، بدّل الحالة "
               "لـ«ملغاة».", "error")
         return redirect(url_for("admin.order_detail", order_id=order_id))
 
@@ -2211,7 +2211,7 @@ def landing_delete(page_id):
 @login_required
 def order_zr_debug(order_id):
     """
-    تشخيص الإرسال لـZR — يعرض بالضبط شنو نبعثو وشنو يرد.
+    تشخيص الإرسال لـZR — يعرض بالضبط واش نبعثو وواش يرد.
 
     ⚠️ ليش هاد الصفحة؟
     ZR يرد بـ400 «One or more validation errors» بلا تفاصيل فبعض الحالات.
@@ -2221,7 +2221,7 @@ def order_zr_debug(order_id):
 
     order = Order.query.get_or_404(order_id)
 
-    # نبنيو نفس الـpayload اللي غادي يتبعث — بلا ما نبعثوه
+    # نبنيو نفس الـpayload اللي راح يتبعث — بلا ما نبعثوه
     preview, build_error = None, None
     try:
         import json as _json

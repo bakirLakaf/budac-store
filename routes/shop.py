@@ -267,7 +267,7 @@ def add_store_review():
             is_approved=False,
         ))
         db.session.commit()
-        flash("شكرًا على رأيك! غادي يبان بعد المراجعة.", "success")
+        flash("شكرًا على رأيك! راح يبان بعد المراجعة.", "success")
 
     return redirect(url_for("shop.store_reviews") + "#form")
 
@@ -299,7 +299,7 @@ def add_review(slug):
             is_approved=False,
         ))
         db.session.commit()
-        flash("شكرًا على تقييمك! غادي يبان بعد المراجعة.", "success")
+        flash("شكرًا على تقييمك! راح يبان بعد المراجعة.", "success")
 
     return redirect(url_for("shop.product_detail", slug=slug) + "#reviews")
 

@@ -13,7 +13,7 @@
     </div>
 
     <form method="post" action="{{ url_for('admin.shipping_sync_zr') }}"
-          onsubmit="return confirm('تحدّث أسعار ZR من موقعهم؟ الأسعار الحالية غادي تتبدّل.')">
+          onsubmit="return confirm('تحدّث أسعار ZR من موقعهم؟ الأسعار الحالية راح تتبدّل.')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn-admin">🔄 زامن أسعار ZR</button>
     </form>

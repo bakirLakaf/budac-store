@@ -69,7 +69,7 @@ def add():
     else:
         flash(error, "error")
 
-    # لو الزبون بغا يكمل تسوق، نرجعوه لفين كان
+    # لو الزبون حب يكمل تسوق، نرجعوه لوين كان
     if request.form.get("go_to_cart"):
         return redirect(url_for("cart.view_cart"))
     return redirect(request.referrer or url_for("shop.home"))

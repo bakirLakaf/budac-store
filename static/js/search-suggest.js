@@ -126,7 +126,7 @@
         fetch(API + '?q=' + encodeURIComponent(query), { signal: controller.signal })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                // نتأكد أن الرد ديال آخر كتابة، ماشي واحد قديم وصل متأخر
+                // نتأكد أن الرد تاع آخر كتابة، ماشي واحد قديم وصل متأخر
                 if (data.query && data.query !== input.value.trim()) return;
                 render(data.results, query);
             })

@@ -415,7 +415,7 @@
  *   • بلا مكتبة خارجية — الصفحة الرئيسية لازم تحمّل بسرعة
  *   • يوقف عند المرور بالفأرة ولا التركيز — الزائر يقرا براحتو
  *   • يوقف كي التبويب مخفي — ما نضيّعوش بطارية الموبايل
- *   • السحب بالإصبع يخدم طبيعي (scroll-snap ديال CSS)
+ *   • السحب بالإصبع يخدم طبيعي (scroll-snap تاع CSS)
  *   • يحترم prefers-reduced-motion
  */
 (function () {
@@ -434,7 +434,7 @@
     var timer = null;
     var paused = false;
 
-    /** كم بطاقة تبان فالشاشة دابا */
+    /** كم بطاقة تبان فالشاشة درك */
     function perView() {
         var cardWidth = cards[0].getBoundingClientRect().width;
         if (!cardWidth) return 1;

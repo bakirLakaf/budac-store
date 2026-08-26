@@ -263,7 +263,7 @@
 
         var cancelBtn = e.target.closest('[data-cancel]');
         if (cancelBtn) {
-            if (!confirm('متأكد بغيت تلغي الطلبية ' + number + '؟')) return;
+            if (!confirm('متأكد حبيت تلغي الطلبية ' + number + '؟')) return;
             out.textContent = '...';
             post('/my-orders/' + encodeURIComponent(number) + '/cancel',
                  { phone: phone })

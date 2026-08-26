@@ -808,7 +808,7 @@ a:focus-visible, button:focus-visible {
 .checkout-form-col { background: #fff; border: 1px solid #EDE9E2; border-radius: var(--radius-lg); padding: 26px; }
 
 .field { display: block; margin-bottom: 16px; }
-/* ⚠️ .field { display:block } يغلب خاصية hidden ديال المتصفح، فالحقل
+/* ⚠️ .field { display:block } يغلب خاصية hidden تاع المتصفح، فالحقل
    المخفي (البلدية عند التوصيل للمكتب) يبقى ظاهر. هاد السطر يصلّحها. */
 .field[hidden] { display: none !important; }
 .field > span { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--color-primary); }
@@ -1320,7 +1320,7 @@ a:focus-visible, button:focus-visible {
     margin: 0;
 }
 
-/* نص "من نحن" فالفوتر: كان باهت وبخط رفيع — دابا أوضح */
+/* نص "من نحن" فالفوتر: كان باهت وبخط رفيع — درك أوضح */
 .footer-about {
     font-family: var(--font-tagline);
     font-size: 13.5px;
