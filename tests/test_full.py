@@ -346,6 +346,40 @@ def run():
         v0 = ProductVariant.query.filter_by(label="دوري كبير").first()
         check("تنويعة بلا سعر ترث سعر المنتج", v0.effective_price == 500)
 
+    # ══════════ 9. تنظيف سجل الزيارات ══════════
+    section("9. سجل الزيارات — خلّي غير هاد الأسبوع")
+    from datetime import date, timedelta
+    from services.analytics import week_start, keep_current_week
+    from models import SiteVisit
+
+    # ⚠️ الأسبوع فالجزائر يبدا **السبت** ماشي الاثنين ولا الأحد
+    check("السبت يرجّع نفسو", week_start(date(2026, 8, 22)) == date(2026, 8, 22))
+    check("الأحد يرجّع لسبت أمس", week_start(date(2026, 8, 23)) == date(2026, 8, 22))
+    check("الأربعاء يرجّع لسبت الأسبوع", week_start(date(2026, 8, 26)) == date(2026, 8, 22))
+    check("الجمعة (آخر يوم) يرجّع لنفس السبت",
+          week_start(date(2026, 8, 28)) == date(2026, 8, 22))
+
+    with app.app_context():
+        today = date.today()
+        start = week_start(today)
+        # سطور: وحد قديم بزاف، وحد قبل السبت بيوم، وحد اليوم
+        for i, d in enumerate([start - timedelta(days=40),
+                               start - timedelta(days=1),
+                               start,
+                               today]):
+            db.session.add(SiteVisit(day=d, visitor_key=f"k{i}", views=1))
+        db.session.commit()
+        before = SiteVisit.query.count()
+
+        removed, got_start = keep_current_week()
+        after = SiteVisit.query.count()
+        oldest = db.session.query(db.func.min(SiteVisit.day)).scalar()
+
+        check("مسح الأسطر القديمة برك", removed == 2, f"مسح {removed} من {before}")
+        check("🔴 ما بقاش سطر قبل السبت", oldest >= start, oldest)
+        check("أسطر الأسبوع الجاري باقية", after >= 1, after)
+        check("يرجّع تاريخ بداية الأسبوع", got_start == start)
+
     # ══════════ النتيجة ══════════
     section("النتيجة")
     total = len(PASSED) + len(FAILED)

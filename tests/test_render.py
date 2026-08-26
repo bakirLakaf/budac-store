@@ -958,6 +958,33 @@ def main():
         check("مع base_url: فيها روابط منتجات",
               "https://budacdz.com/product/" in linked, linked[:80])
 
+    # ═══════ مشاركة رابط الموديل ═══════
+    # 🔴 قبل، رابط المشاركة كان دايمًا الصفحة العامة — الزبون يشارك
+    # موديلاً معيّنًا وصاحبو يلقى الموديل الافتراضي بسعر آخر.
+    prod_html = open("templates/shop/product.html", encoding="utf-8").read()
+    check("رابط المشاركة يبنى بـ«?v=»", '"?v=" + encodeURIComponent(vid)' in prod_html)
+    check("الواتساب والفيسبوك والنسخ كلهم يتحدّثو",
+          'id="shareWa"' in prod_html and 'id="shareFb"' in prod_html
+          and 'copy.setAttribute("data-link", link)' in prod_html)
+    check("الصفحة تختار الموديل من الرابط",
+          "selectVariantFromUrl" in prod_html)
+    check("«?v» ماشي «#» — الشبكات تقرا الرابط فالسيرفر",
+          "window.location.hash" not in prod_html)
+    check("قراءة الرابط محميّة (متصفح قديم)",
+          "search.match(/[?&]v=([^&]+)/)" in prod_html)
+
+    # ═══════ شعار وأيقونة اللوحة ═══════
+    admin_base = open("templates/admin/base_admin.html", encoding="utf-8").read()
+    check("اللوحة عندها favicon", 'rel="icon"' in admin_base)
+    check("اللوحة عندها apple-touch-icon", "apple-touch-icon" in admin_base)
+    check("شعار اللوحة صورة ماشي نص",
+          "admin-brand-logo" in admin_base and "logo.png" in admin_base)
+    check("الشعار يودّي للمتجر", "shop.home" in admin_base)
+
+    admin_css = open("static/css/admin.css", encoding="utf-8").read()
+    check("الشعار محدود الارتفاع (ما ياكلش الشريط)",
+          ".admin-brand-logo img" in admin_css and "height: 38px" in admin_css)
+
     # ⚠️ رسالة «اطلب رأيه» — الرابط لازم يكون **كاملاً** وإلا الواتساب
     # ما يخدمهش، ولازم يمشي لصفحة تقييمات المتجر ماشي لصفحة منتج.
     with app.app_context():

@@ -34,7 +34,7 @@ def run():
 
         password = getpass.getpass("كلمة السر: ")
         if len(password) < MIN_PASSWORD_LENGTH:
-            print(f"❌ كلمة السر قصيرة — خاصها على الأقل {MIN_PASSWORD_LENGTH} حروف")
+            print(f"❌ كلمة السر قصيرة — لازمها على الأقل {MIN_PASSWORD_LENGTH} حروف")
             sys.exit(1)
 
         confirm = getpass.getpass("أعد كتابة كلمة السر: ")
