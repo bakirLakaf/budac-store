@@ -129,6 +129,70 @@ def main():
           "zr.office_commune(order)" in src)
 
     print("\n" + "=" * 60)
+    print("مختبر الإرسال")
+    print("=" * 60)
+
+    # ⚠️ نفحصو بناء الأشكال بلا أي اتصال بـZR — نستبدلو requests.post
+    with app.app_context():
+        o = make(delivery_type="office",
+                 pickup_point_id="Hub Setif 19 مكتب سطيف",
+                 pickup_point_name="Hub Setif 19 مكتب سطيف — Cité Dallas")
+
+        # ⚠️ المختبر يفحص المفاتيح قبل أي طلب — نحطّو وهميات
+        os.environ["ZR_TENANT_ID"] = "test"
+        os.environ["ZR_API_KEY"] = "test"
+
+        calls = []
+
+        class FakeResp:
+            status_code = 400
+            text = ""
+            content = b""
+
+        real_post = zr.requests.post
+        zr.requests.post = lambda url, **kw: (
+            calls.append(kw.get("json")) or FakeResp()
+        )
+        try:
+            attempts = zr.send_variants(o, "tid-1")
+        finally:
+            zr.requests.post = real_post
+
+        check("يجرّب 4 أشكال للمكتب", len(attempts) == 4, len(attempts))
+        check("الشكل الأول بلا pickupPointId",
+              "pickupPointId" not in calls[0], calls[0].keys())
+        check("شكل بالبلدية معمّرة موجود",
+              any(c.get("commune") == "Setif" for c in calls),
+              [c.get("commune") for c in calls])
+        check("كل الأشكال فيها territoryId",
+              all(c.get("territoryId") == "tid-1" for c in calls))
+        check("كل الأشكال deliveryType = pickup-point",
+              all(c["deliveryType"] == "pickup-point" for c in calls))
+
+        # 🔴 الأهم: يوقف عند أول نجاح باش ما ينشئش طرودًا مكررة
+        calls.clear()
+        state = {"n": 0}
+
+        class OkResp:
+            status_code = 200
+            text = '{"trackingNumber":"ZR-1"}'
+            content = b"x"
+
+        def post_second_ok(url, **kw):
+            calls.append(kw.get("json"))
+            state["n"] += 1
+            return OkResp() if state["n"] == 2 else FakeResp()
+
+        zr.requests.post = post_second_ok
+        try:
+            attempts = zr.send_variants(o, "tid-1")
+        finally:
+            zr.requests.post = real_post
+
+        check("🔴 يوقف عند أول نجاح (ماشي طرود مكررة)",
+              len(calls) == 2 and attempts[-1]["ok"], len(calls))
+
+    print("\n" + "=" * 60)
     print(f"نجح: {len(PASSED)}  ·  فشل: {len(FAILED)}")
     print("=" * 60)
     if FAILED:
