@@ -1164,3 +1164,150 @@ def sync_shipping_rates():
         "missing": missing,
         "details": changes[:60],
     }
+
+
+# ═══════════════════════════════════════════════════════════
+# مختبر الإرسال — نعزلو سبب الـ400 بدل ما نخمّنو
+# ═══════════════════════════════════════════════════════════
+
+def probe_pickup_endpoints():
+    """
+    يجرّب مسارات GET محتملة لقائمة مكاتب ZR ويرجّع كود كل واحد.
+
+    ⚠️ ليش؟ `pickupPointId` اللي نبعثوه درك هو **اسم المكتب** («Hub
+    Setif 19 مكتب سطيف»)، وZR يستعمل UUID فكل شي آخر (territoryId
+    مثلاً UUID). الأرجح أنه يستنّى UUID هنا كذلك — والاسم يترفض بـ400
+    بلا رسالة.
+
+    القراءة فقط: كلها GET، ما تنشئ والو.
+    """
+    paths = [
+        "/pickup-points", "/pickuppoints", "/pickup_points",
+        "/agencies", "/offices", "/desks", "/stop-desks", "/stopdesks",
+        "/territories/pickup-points",
+        "/delivery-pricing/pickup-points",
+        "/parcels/pickup-points",
+    ]
+
+    headers = _headers()
+
+    results = []
+    for path in paths:
+        try:
+            r = requests.get(f"{BASE_URL}{path}", headers=headers, timeout=15)
+            body = (r.text or "")[:300]
+            results.append({
+                "path": path,
+                "status": r.status_code,
+                "size": len(r.content or b""),
+                "preview": body,
+            })
+        except Exception as e:
+            results.append({"path": path, "status": "—", "size": 0,
+                            "preview": f"فشل الاتصال: {e}"})
+
+    return results
+
+
+def inspect_territory_levels():
+    """
+    يجمّع مناطق ZR حسب `level` — نشوفو واش كاين نوع «pickup-point».
+
+    ⚠️ التشخيص السابق ورّى: 1585 منطقة، 1531 منها `commune`.
+    الـ54 الباقية نوعهم مجهول — إذا كانو مكاتب، معرّفهم هو اللي
+    لازم يمشي فـ`pickupPointId`.
+    """
+    items = get_territories()
+
+    by_level = {}
+    for it in items:
+        lvl = (it.get("level") or "?").lower()
+        by_level.setdefault(lvl, []).append(it)
+
+    return {
+        "total": len(items),
+        "levels": {k: len(v) for k, v in sorted(by_level.items())},
+        # عيّنة من كل نوع ماشي commune — هي اللي تهمّنا
+        "samples": {
+            k: v[:4] for k, v in by_level.items() if k != "commune"
+        },
+    }
+
+
+def send_variants(order, territory_id=None):
+    """
+    يجرّب عدة أشكال للـpayload ويوقف عند أول نجاح.
+
+    🔴 علاش هاد الدالة؟
+    ZR يرد **400 بحجم محتوى 0** — بلا أي رسالة. ثلاث جولات تخمين
+    ما حلّوش المشكل. بدل ما نبدّلو حقلاً ونعاودو نستنّاو، نجرّبو
+    الأشكال المحتملة فمرة وحدة ونشوفو أشمن واحد يعدّي.
+
+    ⚠️ **يوقف عند أول نجاح** — باش ما ننشئوش طرودًا مكررة.
+    الأشكال مرتّبة من الأقرب للأبعد.
+
+    يرجّع قائمة المحاولات، كل وحدة بحالتها وردّها.
+    """
+    # ⚠️ نفحصو المفاتيح **مرة وحدة قبل** الحلقة. بلا هذا، كل شكل
+    # يفشل فبناء الرؤوس، والمختبر يبان كأن ZR رفض 4 أشكال — وهو ما
+    # وصلوش حتى طلب. الخطأ يخرج واضحًا بدل ما يتخبّى فالنتائج.
+    headers = _headers()
+
+    base = build_parcel_payload(order, territory_id)
+    is_office = order.delivery_type == "office"
+
+    variants = []
+
+    if is_office:
+        commune = office_commune(order) or ""
+
+        # 1) بلا pickupPointId — يمكن ZR يحدّد المكتب من territoryId وحدو
+        v1 = dict(base)
+        v1.pop("pickupPointId", None)
+        variants.append(("بلا pickupPointId (المكتب من territoryId)", v1))
+
+        # 2) بلا pickupPointId + البلدية معمّرة
+        v2 = dict(v1)
+        v2["commune"] = commune
+        variants.append(("بلا pickupPointId + commune معمّرة", v2))
+
+        # 3) pickupPointId + البلدية معمّرة
+        v3 = dict(base)
+        v3["commune"] = commune
+        variants.append(("pickupPointId بالاسم + commune معمّرة", v3))
+
+        # 4) عنوان قصير بلا شرطة ولا خليط لغات
+        v4 = dict(v1)
+        v4["deliveryAddress"] = commune or order.wilaya_name or ""
+        variants.append(("بلا pickupPointId + عنوان بسيط", v4))
+    else:
+        v1 = dict(base)
+        v1["commune"] = order.commune or ""
+        variants.append(("commune معمّرة", v1))
+
+        v2 = dict(base)
+        v2.pop("commune", None)
+        variants.append(("بلا حقل commune أصلاً", v2))
+
+    attempts = []
+
+    for label, payload in variants:
+        try:
+            r = requests.post(f"{BASE_URL}/parcels", headers=headers,
+                              json=payload, timeout=TIMEOUT)
+            status = r.status_code
+            body = (r.text or "")[:600]
+        except Exception as e:
+            attempts.append({"label": label, "status": "—", "body": str(e),
+                             "payload": payload, "ok": False})
+            continue
+
+        ok = 200 <= status < 300
+        attempts.append({"label": label, "status": status, "body": body,
+                         "payload": payload, "ok": ok})
+
+        if ok:
+            # ⚠️ نوقفو هنا — الطرد اتنشأ فعلاً، ما نعاودوش
+            break
+
+    return attempts

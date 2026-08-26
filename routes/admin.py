@@ -2301,6 +2301,16 @@ def order_zr_debug(order_id):
             )
             if request.args.get("check_territory") else None
         ),
+        # نتائج مختبر الإرسال (إذا اتشغّل قبل شوية)
+        lab=session.pop("zr_lab", None),
+        endpoint_probe=(
+            zr.probe_pickup_endpoints()
+            if request.args.get("probe") else None
+        ),
+        levels=(
+            zr.inspect_territory_levels()
+            if request.args.get("levels") else None
+        ),
         last=zr.LAST_EXCHANGE,
         last_payload=(
             __import__("json").dumps(zr.LAST_EXCHANGE.get("payload"),
@@ -2313,6 +2323,63 @@ def order_zr_debug(order_id):
                        and os.environ.get("ZR_API_KEY", "").strip()),
         base_url=zr.BASE_URL,
     )
+
+
+@admin_bp.route("/orders/<int:order_id>/zr-lab", methods=["POST"])
+@login_required
+def order_zr_lab(order_id):
+    """
+    مختبر الإرسال: يجرّب عدة أشكال للـpayload ويوقف عند أول نجاح.
+
+    ⚠️ ZR يرد 400 بحجم 0 — بلا أي رسالة. التخمين ما نفعش ثلاث جولات.
+    هنا نجرّبو الأشكال المحتملة ونشوفو أشمن واحد يعدّي فعلاً.
+
+    ⚠️ إذا نجح شكل، الطرد **اتنشأ حقيقة** — نحفظو رقم التتبّع.
+    """
+    from services import zrexpress as zr
+
+    order = Order.query.get_or_404(order_id)
+
+    if not zr.is_configured():
+        flash("مفاتيح ZR غير معمّرة", "error")
+        return redirect(url_for("admin.order_zr_debug", order_id=order.id))
+
+    territory_id, _why = zr.resolve_territory_id(order)
+    attempts = zr.send_variants(order, territory_id)
+
+    session["zr_lab"] = [
+        {"label": a["label"], "status": a["status"],
+         "body": (a["body"] or "")[:400], "ok": a["ok"]}
+        for a in attempts
+    ]
+
+    winner = next((a for a in attempts if a["ok"]), None)
+
+    if winner:
+        flash(f"✅ نجح الشكل: «{winner['label']}» — الطرد اتنشأ فعلاً",
+              "success")
+
+        # ⚠️ الطرد موجود درك عند ZR — نحفظو رقم التتبّع وإلا يضيع
+        try:
+            import json as _json
+            data = _json.loads(winner["body"] or "{}")
+            tracking = (data.get("trackingNumber")
+                        or data.get("tracking_number")
+                        or (data.get("data") or {}).get("trackingNumber"))
+            if tracking:
+                order.tracking_number = tracking
+                db.session.commit()
+                flash(f"رقم التتبّع: {tracking}", "success")
+            else:
+                flash("⚠️ نجح لكن ماكانش رقم تتبّع فالرد — راجع عند ZR",
+                      "warning")
+        except Exception:
+            flash("⚠️ ما قدرناش نقراو رقم التتبّع — راجع الرد تحت", "warning")
+    else:
+        flash(f"كل الأشكال ({len(attempts)}) فشلو — شوف التفاصيل تحت",
+              "error")
+
+    return redirect(url_for("admin.order_zr_debug", order_id=order.id))
 
 
 @admin_bp.route("/orders/<int:order_id>/zr-send-test", methods=["POST"])
