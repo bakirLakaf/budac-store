@@ -201,24 +201,31 @@ def api_pickup_points():
     """
     مكاتب الاستلام لولاية معيّنة — كي يختار الزبون «التوصيل للمكتب».
     """
-    from services.zrexpress import get_pickup_points, ZRError, is_configured
+    # 🔴 كان هنا `if carrier_code != "zrexpress": return []` — وهاد
+    # الشرط كان يسدّ التوصيل للمكتب على كل شركة أخرى. World Express
+    # عندو 57 سعر مكتب معمّر، وحتى واحد ما كان يقدر يستعملهم: القائمة
+    # فارغة، والحقل مطلوب، فالطلبية تتوقف.
+    #
+    # درك المصدر واحد لكل الشركات: ملف مكاتب محلي لكل شركة.
+    from services.carrier_offices import get_pickup_points, has_offices
 
     carrier_code = (request.args.get("carrier") or "").strip()
     wilaya_code = (request.args.get("wilaya") or "").strip()
 
-    if carrier_code != "zrexpress":
+    if not has_offices(carrier_code):
         return jsonify({
             "points": [],
-            "message": "هاد الشركة ما عندهاش قائمة مكاتب — اكتب البلدية عادي",
+            "no_list": True,
+            "message": "هاد الشركة ما عندهاش قائمة مكاتب — جرّب التوصيل للمنزل",
         })
 
-    if not is_configured():
-        return jsonify({"points": [], "message": "التكامل ماشي مفعّل"})
+    points = get_pickup_points(carrier_code, wilaya_code)
 
-    try:
-        points = get_pickup_points(wilaya_code)
-    except ZRError as e:
-        return jsonify({"points": [], "message": str(e)})
+    if not points:
+        return jsonify({
+            "points": [],
+            "message": "ماكانش مكتب لهاد الشركة فهاد الولاية — جرّب التوصيل للمنزل",
+        })
 
     return jsonify({"points": points, "count": len(points)})
 

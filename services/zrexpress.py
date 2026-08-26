@@ -661,6 +661,77 @@ def lookup_territory_id(wilaya_code, commune_name):
     return index.get(key)
 
 
+def office_commune(order):
+    """
+    بلدية مكتب الاستلام تاع طلبية «توصيل للمكتب».
+
+    🔴 علاش هاد الدالة؟
+    طلبية المكتب ما عندهاش بلدية أصلاً (`commune` تتفرّغ عمدًا — شوف
+    التحقق فـroutes/cart.py). النتيجة كانت: `lookup_territory_id`
+    تترفض على طول، الطرد يتبعث بلا `territoryId`، وZR يرد **400 بلا
+    أي رسالة**. كل طلبيات المكتب كانت تفشل.
+
+    الحل: نجيبو البلدية من **المكتب نفسو**. مكتب سطيف موجود فبلدية
+    Setif، وZR عندو منطقة اسمها setif — فالربط ممكن.
+
+    نطابقو على `pickup_point_id` أولاً (هو اسم المكتب كيما نبعثوه)،
+    ومن بعد على `pickup_point_name` اللي ممكن يكون فيه العنوان معاه.
+    """
+    if order.delivery_type != "office":
+        return None
+
+    wanted_id = (order.pickup_point_id or "").strip()
+    wanted_name = (order.pickup_point_name or "").strip()
+
+    for o in get_offices():
+        name = (o.get("name") or "").strip()
+        if not name:
+            continue
+        # ⚠️ `pickup_point_name` عند الزبون يكون «الاسم — العنوان»،
+        # فنقبلو البداية كذلك ماشي التطابق التام برك.
+        if name == wanted_id or name == wanted_name or wanted_name.startswith(name):
+            return o.get("commune") or None
+
+    return None
+
+
+def resolve_territory_id(order):
+    """
+    معرّف الوجهة عند ZR لأي طلبية — منزل ولا مكتب.
+
+    ⚠️ مصدر واحد للحقيقة: قبل، كل مستدعي كان يبني منطقو بيدو،
+    فمسار الإرسال ومسار التشخيص كانو يعطيو نتائج مختلفة.
+
+    يرجّع (المعرّف، السبب إذا فشل).
+    """
+    # 1) محفوظ من قبل
+    if order.commune_external_id:
+        return order.commune_external_id, None
+
+    # 2) الاسم اللي نبحثو بيه يختلف حسب نوع التوصيل
+    if order.delivery_type == "office":
+        name = office_commune(order)
+        if not name:
+            return None, (
+                f"ما لقيناش بلدية المكتب «{order.pickup_point_name or '—'}» "
+                "فملف المكاتب. تأكد أن اسم المكتب مطابق."
+            )
+    else:
+        name = order.commune
+        if not name:
+            return None, "الطلبية بلا بلدية"
+
+    try:
+        found = lookup_territory_id(order.wilaya_code, name)
+    except Exception as e:
+        return None, f"فشل البحث: {e}"
+
+    if not found:
+        return None, f"ما لقيناش «{name}» فمناطق ZR تاع الولاية {order.wilaya_code}"
+
+    return found, None
+
+
 # ═══════════════════════════════════════════════════════════
 # المكاتب — من ملف محلي، بلا API
 # ═══════════════════════════════════════════════════════════

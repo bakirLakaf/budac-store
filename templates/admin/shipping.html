@@ -19,6 +19,23 @@
     </form>
 </div>
 
+{# World Express: ماكانش API معاهم، فالجدول مخزّن عندنا فملف. #}
+<div class="zr-sync-bar">
+    <div>
+        <strong>World Express</strong> — قارن الأسعار بجدولهم الرسمي
+        <br><small class="muted">
+            من ملف <code>data/world_rates.json</code> (57 ولاية).
+            ولاية ماكانتش فالجدول تولّي «غير متوفر».
+        </small>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.shipping_sync_world') }}"
+          onsubmit="return confirm('تقارن أسعار World بالجدول الرسمي؟ اللي مختلف راح يتبدّل.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin">🔄 زامن أسعار World</button>
+    </form>
+</div>
+
 <style>
     .zr-sync-bar {
         display: flex; align-items: center; justify-content: space-between;

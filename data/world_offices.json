@@ -1,0 +1,762 @@
+[
+  {
+    "name": "Adrar",
+    "wilaya_code": "01",
+    "commune": "Adrar",
+    "address": "حي عيسات إيدير (القرية) امام مركز الشرطة",
+    "phone": "0660639399",
+    "pickup": true
+  },
+  {
+    "name": "Chlef (P)",
+    "wilaya_code": "02",
+    "commune": "Chlef",
+    "address": "Cité Arroudj Deriére le Musé de Abd El Madjid Meziane Chlef",
+    "phone": "0660639689",
+    "pickup": true
+  },
+  {
+    "name": "Chlef 02 Tenes",
+    "wilaya_code": "02",
+    "commune": "Tenes",
+    "address": "شارع الشهداء مقابل اتصالات الجزائر شلف تنس",
+    "phone": "0561868816",
+    "pickup": true
+  },
+  {
+    "name": "Chlef 03 Chettia",
+    "wilaya_code": "02",
+    "commune": "Chettia",
+    "address": "Rue l annexe a côté de la pharmacie ibrahimi",
+    "phone": "0779067912",
+    "pickup": true
+  },
+  {
+    "name": "Chlef 04 Boukadir",
+    "wilaya_code": "02",
+    "commune": "Boukadir",
+    "address": "بوقادير وسط المدينة مقابل مقر الدائرة",
+    "phone": "0675270478",
+    "pickup": true
+  },
+  {
+    "name": "Laghouat",
+    "wilaya_code": "03",
+    "commune": "Laghouat",
+    "address": "Cité Mamourah en face la maison de la culture Benkerriou Laghouat",
+    "phone": "0660639776",
+    "pickup": true
+  },
+  {
+    "name": "Oum El Bouaghi 02 Ain Fakroun",
+    "wilaya_code": "04",
+    "commune": "Ain Fekroune",
+    "address": "عين فكرون بجانب ابتدائية 20 اوت ووراء فندق توكاي",
+    "phone": "0660364703",
+    "pickup": true
+  },
+  {
+    "name": "Oum El Bouaghi 04 Ain El Beida",
+    "wilaya_code": "04",
+    "commune": "Ain Beida",
+    "address": "مقابل مقر الضمان الاجتماعي و بجانب كلينيك طاهير",
+    "phone": "0770135074",
+    "pickup": true
+  },
+  {
+    "name": "Oum el bouaghi (P)",
+    "wilaya_code": "04",
+    "commune": "Oum El Bouaghi",
+    "address": "المدينة الجديدة تحت مفتشية الجمارك ام البوقي",
+    "phone": "0660639912",
+    "pickup": true
+  },
+  {
+    "name": "Batna (P)",
+    "wilaya_code": "05",
+    "commune": "Batna",
+    "address": "حي 1020 مسكن طريق la casnos بجانب محور الدوران (البطة)",
+    "phone": "0676680995",
+    "pickup": true
+  },
+  {
+    "name": "Batna 02 Barika",
+    "wilaya_code": "05",
+    "commune": "Barika",
+    "address": "بجانب مكتب البريد بريكة",
+    "phone": "0662490755",
+    "pickup": true
+  },
+  {
+    "name": "Bejaia (P)",
+    "wilaya_code": "06",
+    "commune": "Bejaia",
+    "address": "Cité Somacob Edimco Bejaia",
+    "phone": "0660639387",
+    "pickup": true
+  },
+  {
+    "name": "Bejaia 02 Akbou",
+    "wilaya_code": "06",
+    "commune": "Akbou",
+    "address": "Route nationale 26 faubourg de la gare akbou Béjaïa (06) a coté Axa assurance",
+    "phone": "0770372143",
+    "pickup": true
+  },
+  {
+    "name": "Bejaia 03 Tamoukra",
+    "wilaya_code": "06",
+    "commune": "Tamokra",
+    "address": "",
+    "phone": "",
+    "pickup": true
+  },
+  {
+    "name": "Biskra",
+    "wilaya_code": "07",
+    "commune": "Biskra",
+    "address": "ممرات محمد الصديق بن يحي بجانب سوق الرحمه",
+    "phone": "0660639283",
+    "pickup": true
+  },
+  {
+    "name": "Biskra 02 Zeribet El Oued",
+    "wilaya_code": "07",
+    "commune": "Zeribet El Oued",
+    "address": "سوق النساء بجانب صيدلية عاشوري - زريبة الوادي -",
+    "phone": "0655668247",
+    "pickup": true
+  },
+  {
+    "name": "Bechar",
+    "wilaya_code": "08",
+    "commune": "Bechar",
+    "address": "حي السلام بجانب مركز عبور الجيش الوطني(transit) بجانب السكة الحديدية",
+    "phone": "0660639123",
+    "pickup": true
+  },
+  {
+    "name": "Blida (P)",
+    "wilaya_code": "09",
+    "commune": "Blida",
+    "address": "470 Rue des Freres Zedri Route de Beni Tamou Blida",
+    "phone": "0660639818",
+    "pickup": true
+  },
+  {
+    "name": "Blida 02 Boufarik",
+    "wilaya_code": "09",
+    "commune": "Boufarik",
+    "address": "Résidence Bousakin local 1 boulvard sidi ben youcef (route chabli) boufarik",
+    "phone": "0770074677",
+    "pickup": true
+  },
+  {
+    "name": "Blida 03 Mouzaia",
+    "wilaya_code": "09",
+    "commune": "Mouzaia",
+    "address": "Rue Mohamed yesaad n 15 (rue edalya)",
+    "phone": "0770074214",
+    "pickup": true
+  },
+  {
+    "name": "Bouira",
+    "wilaya_code": "10",
+    "commune": "Bouira",
+    "address": "Amar Khodja a coté de la nouvelle gare routiére Bouira",
+    "phone": "0660638228",
+    "pickup": true
+  },
+  {
+    "name": "Tamanrasset",
+    "wilaya_code": "11",
+    "commune": "Tamanrasset",
+    "address": "شارع المتقنة بجانب متوسطة عبد الوهاب عباس تمنراست",
+    "phone": "0660637873",
+    "pickup": true
+  },
+  {
+    "name": "Tebessa",
+    "wilaya_code": "12",
+    "commune": "Tebessa",
+    "address": "حي 414 سكن بجانب مركز البريد النهضة",
+    "phone": "0660638960",
+    "pickup": true
+  },
+  {
+    "name": "Tlemcen (P)",
+    "wilaya_code": "13",
+    "commune": "Tlemcen",
+    "address": "El kiffen a côté djezzy",
+    "phone": "0660634909",
+    "pickup": true
+  },
+  {
+    "name": "Tlemcen 02 Maghnia",
+    "wilaya_code": "13",
+    "commune": "Maghnia",
+    "address": "Centre ville Maghnia en face l'ancienne prison",
+    "phone": "0770189109",
+    "pickup": true
+  },
+  {
+    "name": "Tlemcen 03 Ghazaouet",
+    "wilaya_code": "13",
+    "commune": "Ghazaouet",
+    "address": "Remla - hawt amer - en allant vers le nouveau Hôpital",
+    "phone": "0670862950",
+    "pickup": true
+  },
+  {
+    "name": "Tiaret",
+    "wilaya_code": "14",
+    "commune": "Tiaret",
+    "address": "En face le stade kaïd Ahmed a côté le groupement des gendarmes",
+    "phone": "0672203266/0671776356",
+    "pickup": true
+  },
+  {
+    "name": "Tizi Ouzou",
+    "wilaya_code": "15",
+    "commune": "Tizi Ouzou",
+    "address": "A 100m du portaille université Mouloud Maameri Bastos Nouvelle ville Tizi Ouzou",
+    "phone": "0660636254",
+    "pickup": true
+  },
+  {
+    "name": "Tizi Ouzou 02 Azzazga",
+    "wilaya_code": "15",
+    "commune": "Azazga",
+    "address": "Cité adl derrière mobilis azazga",
+    "phone": "0784518940",
+    "pickup": true
+  },
+  {
+    "name": "Alger 01 Bab Ezzouar (P)",
+    "wilaya_code": "16",
+    "commune": "Bab Ezzouar",
+    "address": "حي الدوزي  01 باب الزوار مقابل المسجد ابو بكر الصديق",
+    "phone": "0660630633",
+    "pickup": true
+  },
+  {
+    "name": "Alger 02 El Hamiz",
+    "wilaya_code": "16",
+    "commune": "Dar El Beida",
+    "address": "Avenue El Hamiz 1er arret el hamiz",
+    "phone": "0671997011",
+    "pickup": true
+  },
+  {
+    "name": "Alger 03 Rais Hamidou",
+    "wilaya_code": "16",
+    "commune": "Rais Hamidou",
+    "address": "حي ميرمار جانب مسجد ابو ذي الغفاري  الرايس حميدو",
+    "phone": "0550955165",
+    "pickup": true
+  },
+  {
+    "name": "Alger 04 Cheraga",
+    "wilaya_code": "16",
+    "commune": "Cheraga",
+    "address": "Entre l'institut Pasteur et la cite militaire",
+    "phone": "0670695252/0660641892",
+    "pickup": true
+  },
+  {
+    "name": "Alger 05 Birtouta",
+    "wilaya_code": "16",
+    "commune": "Bir Touta",
+    "address": "Rue Mohamed Mehdi Birtouta",
+    "phone": "0654834934",
+    "pickup": true
+  },
+  {
+    "name": "Alger 06 Café Chergui",
+    "wilaya_code": "16",
+    "commune": "Bordj El Bahri",
+    "address": "Café Chergui",
+    "phone": "0770057980/0770057981",
+    "pickup": true
+  },
+  {
+    "name": "Djelfa (P)",
+    "wilaya_code": "17",
+    "commune": "Djelfa",
+    "address": "عند مفترق الطرق حي الوئام",
+    "phone": "0660637354",
+    "pickup": true
+  },
+  {
+    "name": "Djelfa 02 Messaad",
+    "wilaya_code": "17",
+    "commune": "Messaad",
+    "address": "وسط مدينة مسعد بالقرب من صيدلية الشاوي",
+    "phone": "0660089839",
+    "pickup": true
+  },
+  {
+    "name": "Djelfa 03 Ain Oussara",
+    "wilaya_code": "17",
+    "commune": "Ain Oussera",
+    "address": "En face de la Banque Al Salam et du bureau d’Algérie Poste, Route de Chellala, Aïn Oussara",
+    "phone": "0661717869",
+    "pickup": true
+  },
+  {
+    "name": "Jijel",
+    "wilaya_code": "18",
+    "commune": "Jijel",
+    "address": "حي أيوف الغربي محل 63 ب جيجل",
+    "phone": "0660636005",
+    "pickup": true
+  },
+  {
+    "name": "Setif (P)",
+    "wilaya_code": "19",
+    "commune": "Setif",
+    "address": "Cite ouled brahem en face mosquee 1014",
+    "phone": "0660631783",
+    "pickup": true
+  },
+  {
+    "name": "Setif 02 El Eulma",
+    "wilaya_code": "19",
+    "commune": "El Eulma",
+    "address": "التساهمي الجديد بالقرب من المستشفى الجديد وراء العمارات المقابلة لمحلات حنظلة",
+    "phone": "0660638621",
+    "pickup": true
+  },
+  {
+    "name": "Setif 03 Ain Oulmene",
+    "wilaya_code": "19",
+    "commune": "Ain Oulmane",
+    "address": "شارع رشيدي بخوش ( المعروف ب صالح زورة) مقابل مسجد مالك بن نبي عين ولمان",
+    "phone": "0562658068",
+    "pickup": true
+  },
+  {
+    "name": "Saida",
+    "wilaya_code": "20",
+    "commune": "Saida",
+    "address": "شارع قروج الشيخ حي الدرب سعيدة",
+    "phone": "0660638828",
+    "pickup": true
+  },
+  {
+    "name": "Skikda",
+    "wilaya_code": "21",
+    "commune": "Skikda",
+    "address": "عمارات قرزة طريق بويعلي بمحادات سوبيرات ديبون سكيكدة وسط",
+    "phone": "0660303360",
+    "pickup": true
+  },
+  {
+    "name": "Sidi Bel Abbes",
+    "wilaya_code": "22",
+    "commune": "Sidi Bel Abbes",
+    "address": "بن حمودة مقابل فيلات حسناوي (الطريق المؤدي إلى مسجد معاذ بن جبل)",
+    "phone": "0770732855",
+    "pickup": true
+  },
+  {
+    "name": "Sidi Bel Abbes 02 Telagh",
+    "wilaya_code": "22",
+    "commune": "Telagh",
+    "address": "تلاغ بجانب الحديقة مقابل مدرسة عدة خيرة",
+    "phone": "0784514027",
+    "pickup": true
+  },
+  {
+    "name": "Annaba",
+    "wilaya_code": "23",
+    "commune": "Annaba",
+    "address": "À côté du stade akid chabou et en face le cimetière chrétien _annaba",
+    "phone": "0660639341",
+    "pickup": true
+  },
+  {
+    "name": "Guelma",
+    "wilaya_code": "24",
+    "commune": "Guelma",
+    "address": "Cité La gar sous la salle des fetes Maaoui - Guelma",
+    "phone": "0660757479",
+    "pickup": true
+  },
+  {
+    "name": "Constantine 02 Ali Mendjeli (P)",
+    "wilaya_code": "25",
+    "commune": "Constantine",
+    "address": "علي منجلي – حي 700 مسكن UV10 مقابل السوبيرات عالم الدار",
+    "phone": "0773863343/0771906265",
+    "pickup": true
+  },
+  {
+    "name": "Constantine El Khroub",
+    "wilaya_code": "25",
+    "commune": "El Khroub",
+    "address": "الخروب-  حي بوهالي مقابل حديقة صنوبر لاند  أسفل محطة المسافرين خطابي-",
+    "phone": "0556027082",
+    "pickup": true
+  },
+  {
+    "name": "Medea",
+    "wilaya_code": "26",
+    "commune": "Medea",
+    "address": "Bazar Farhat en face commissariat  Bouziane Médéa",
+    "phone": "0660636279",
+    "pickup": true
+  },
+  {
+    "name": "Mostaganem",
+    "wilaya_code": "27",
+    "commune": "Mostaganem",
+    "address": "Salamandre a cote la mosquée el kods et la maison vms",
+    "phone": "0660636694",
+    "pickup": true
+  },
+  {
+    "name": "Msila",
+    "wilaya_code": "28",
+    "commune": "M'sila",
+    "address": "حي 500 مسكن خلف وكالة انوار الصباح بجانب جمعية و افعلو الخير و الجمارك القديمة",
+    "phone": "0660634974",
+    "pickup": true
+  },
+  {
+    "name": "Msila 02 - Bou Saada",
+    "wilaya_code": "28",
+    "commune": "Bou Saada",
+    "address": "",
+    "phone": "",
+    "pickup": true
+  },
+  {
+    "name": "Msila 03 - Sidi Aissa",
+    "wilaya_code": "28",
+    "commune": "Sidi Aissa",
+    "address": "sidi Aïssa ( --cité 01 avril 1946 L'asiti )",
+    "phone": "0660843454",
+    "pickup": true
+  },
+  {
+    "name": "Mascara",
+    "wilaya_code": "29",
+    "commune": "Mascara",
+    "address": "طريق فوبور من جهة ليفيلا مقابل مطعم silvano",
+    "phone": "0770041301",
+    "pickup": true
+  },
+  {
+    "name": "Mascara 02 Sig",
+    "wilaya_code": "29",
+    "commune": "Sig",
+    "address": "مقابل محور دوران ااشريط وراء قاعة الحفلات",
+    "phone": "0770397367",
+    "pickup": true
+  },
+  {
+    "name": "Ouargla",
+    "wilaya_code": "30",
+    "commune": "Ouargla",
+    "address": "جنب بيت الشباب وردة الرمال والوزيز للافرشة",
+    "phone": "0660638327",
+    "pickup": true
+  },
+  {
+    "name": "Oran (P)",
+    "wilaya_code": "31",
+    "commune": "Oran",
+    "address": "16 Bvd Benarbia Lahouari, Oran maraval",
+    "phone": "0770963996",
+    "pickup": true
+  },
+  {
+    "name": "Oran 02 Bir El Djir",
+    "wilaya_code": "31",
+    "commune": "Bir El Djir",
+    "address": "canastel hai khmisti bir el djir",
+    "phone": "0660636657",
+    "pickup": true
+  },
+  {
+    "name": "El Bayadh",
+    "wilaya_code": "32",
+    "commune": "El Bayadh",
+    "address": "طريق مستشفى رحماني مقابل عمارات النصر",
+    "phone": "0660593504",
+    "pickup": true
+  },
+  {
+    "name": "Illizi",
+    "wilaya_code": "33",
+    "commune": "Illizi",
+    "address": "حي الحدب الغربي الوقواق",
+    "phone": "0670454744",
+    "pickup": true
+  },
+  {
+    "name": "Illizi 02 In Amenas",
+    "wilaya_code": "33",
+    "commune": "In Amenas",
+    "address": "In aminas Cité police proche le tribunal",
+    "phone": "0654778299",
+    "pickup": true
+  },
+  {
+    "name": "Bordj Bou Arreridj",
+    "wilaya_code": "34",
+    "commune": "Bordj Bou Arreridj",
+    "address": "حي لاقراف بجانب محلات الحاج عمر طبي  و مخبر نباش للتحاليل الطبية",
+    "phone": "0660630733",
+    "pickup": true
+  },
+  {
+    "name": "Bordj Bouararidj 02 RAS El Oued",
+    "wilaya_code": "34",
+    "commune": "Ras El Oued",
+    "address": "شارع أحمد طيار بجانب Casnos  رأس الوادي",
+    "phone": "0551494597",
+    "pickup": true
+  },
+  {
+    "name": "Boumerdes",
+    "wilaya_code": "35",
+    "commune": "Boumerdes",
+    "address": "Cité 11 decembre 1960, Boumerdès",
+    "phone": "0660638564",
+    "pickup": true
+  },
+  {
+    "name": "El Tarf",
+    "wilaya_code": "36",
+    "commune": "El Tarf",
+    "address": "حي فلالي حسن بجانب ثانوية مرزوق الشريف الطارف",
+    "phone": "0660630692",
+    "pickup": true
+  },
+  {
+    "name": "Tindouf",
+    "wilaya_code": "37",
+    "commune": "Tindouf",
+    "address": "حي النصر جنب  المدرسة الابتدائية بليلة محمد",
+    "phone": "0670936658",
+    "pickup": true
+  },
+  {
+    "name": "Tissemsilt",
+    "wilaya_code": "38",
+    "commune": "Tissemsilt",
+    "address": "حي علي باي بجانب مسجد بلال",
+    "phone": "0671358984",
+    "pickup": true
+  },
+  {
+    "name": "El Oued",
+    "wilaya_code": "39",
+    "commune": "El Oued",
+    "address": "حي 400سكن بجانب بنك البركة ومقابل الصندوق الوطني للتوفير والاحتياط واد سوف",
+    "phone": "0660636724",
+    "pickup": true
+  },
+  {
+    "name": "Khenchela",
+    "wilaya_code": "40",
+    "commune": "Khenchela",
+    "address": "طريق الوزن الثقيل مقابل مدرسة الصم و البكم بجانب بوزيدي لبيع العتاد الفلاحي",
+    "phone": "0660639375",
+    "pickup": true
+  },
+  {
+    "name": "Khenchela 02 Kais",
+    "wilaya_code": "40",
+    "commune": "Kais",
+    "address": "بجانب وكالة موبيليس",
+    "phone": "0661654067",
+    "pickup": true
+  },
+  {
+    "name": "Souk ahras",
+    "wilaya_code": "41",
+    "commune": "Souk Ahras",
+    "address": "Centre ville  la rue de Zama derrière la résidence Walli Souk Ahras",
+    "phone": "0660635833",
+    "pickup": true
+  },
+  {
+    "name": "Tipaza",
+    "wilaya_code": "42",
+    "commune": "Tipaza",
+    "address": "Cité 158/84 bâtiment n3 Tipaza",
+    "phone": "0657872252",
+    "pickup": true
+  },
+  {
+    "name": "Tipaza 02 Kolea (P)",
+    "wilaya_code": "42",
+    "commune": "Kolea",
+    "address": "Rue d’Alger Kolea en face clinique dentaire el Siwak",
+    "phone": "0660635113",
+    "pickup": true
+  },
+  {
+    "name": "Mila",
+    "wilaya_code": "43",
+    "commune": "Mila",
+    "address": "كائن بطريق زغاية رقم 04 بجانب محور الدوران محطة المسافرين القديمة بمحاذاة إدارة بلدي",
+    "phone": "0660632927",
+    "pickup": true
+  },
+  {
+    "name": "Mila 02 (Chelghoum Laïd)",
+    "wilaya_code": "43",
+    "commune": "Chelghoum Laid",
+    "address": "شارع اول ماي حي العربي بن مهيدي شلغوم العيد ميلة بجانب بنك البدر",
+    "phone": "0660704363",
+    "pickup": true
+  },
+  {
+    "name": "Mila 03 Ferdjioua",
+    "wilaya_code": "43",
+    "commune": "Ferdjioua",
+    "address": "حي 200 مسكن رقم 21 بلقرب من المحكمة",
+    "phone": "0698257582",
+    "pickup": true
+  },
+  {
+    "name": "Ain Defla 01 Khemis Miliana (P)",
+    "wilaya_code": "44",
+    "commune": "Khemis Miliana",
+    "address": "امام محطة الحافلات خميس مليانة طريق القايد صحت الكوندور خميس مليانة",
+    "phone": "0660637749",
+    "pickup": true
+  },
+  {
+    "name": "Ain Defla 02",
+    "wilaya_code": "44",
+    "commune": "Ain Defla",
+    "address": "امام طبيب الحساسية بن يحي CNR بالقرب من محطة الحافلات طريق",
+    "phone": "0660645192",
+    "pickup": true
+  },
+  {
+    "name": "Ain Defla 03 El Attaf",
+    "wilaya_code": "44",
+    "commune": "El Attaf",
+    "address": "BNPG العطاف أمام الدائرة مقابل الطبيبة رزيقة و",
+    "phone": "0770649476",
+    "pickup": true
+  },
+  {
+    "name": "Naama",
+    "wilaya_code": "45",
+    "commune": "Naama",
+    "address": "مكتب المشرية محور الغزالات بجانب مكتب دجيزي",
+    "phone": "0660899674",
+    "pickup": true
+  },
+  {
+    "name": "Naama 02 Ain Safra",
+    "wilaya_code": "45",
+    "commune": "Ain Safra",
+    "address": "حي الصومام بجانب مقهى الشروق",
+    "phone": "0661301177",
+    "pickup": true
+  },
+  {
+    "name": "Ain Temouchent (P)",
+    "wilaya_code": "46",
+    "commune": "Ain Temouchent",
+    "address": "حي 44 مسكن جوهرة خلف مركز الشرطة 7",
+    "phone": "0660635361",
+    "pickup": true
+  },
+  {
+    "name": "Ain Temouchent 02 Beni Saf",
+    "wilaya_code": "46",
+    "commune": "Beni Saf",
+    "address": "",
+    "phone": "",
+    "pickup": true
+  },
+  {
+    "name": "Ghardaia (P)",
+    "wilaya_code": "47",
+    "commune": "Ghardaia",
+    "address": "حاج مسعود امام مقهى قوسطو مقابل المتوسطة",
+    "phone": "0660633874",
+    "pickup": true
+  },
+  {
+    "name": "Ghardaia 02 Metlili",
+    "wilaya_code": "47",
+    "commune": "Metlili",
+    "address": "الحي الاداري متليلي في محلات دقة عبد الكريم متليلي",
+    "phone": "0667956614",
+    "pickup": true
+  },
+  {
+    "name": "Relizane (P)",
+    "wilaya_code": "48",
+    "commune": "Relizane",
+    "address": "A coté de la grande poste Relizane",
+    "phone": "0662958284",
+    "pickup": true
+  },
+  {
+    "name": "Relizane 02 Oued Rhiou",
+    "wilaya_code": "48",
+    "commune": "Oued Rhiou",
+    "address": "حي الشهيد خليفة موساوي Oued Rhiou",
+    "phone": "0662542589",
+    "pickup": true
+  },
+  {
+    "name": "Bordj Badji Mokhtar",
+    "wilaya_code": "50",
+    "commune": "Bordj Badji Mokhtar",
+    "address": "Bordj Badji Mokhtar",
+    "phone": "0660639399",
+    "pickup": true
+  },
+  {
+    "name": "Biskra 03 - Ouled Djellal",
+    "wilaya_code": "51",
+    "commune": "Ouled Djellal",
+    "address": "حي 80 مسكن رقم 21 مكرر أولاد جلال",
+    "phone": "0552419623",
+    "pickup": true
+  },
+  {
+    "name": "In salah",
+    "wilaya_code": "53",
+    "commune": "In Salah",
+    "address": "وسط المدينة بجانب صيدلية شيريفي",
+    "phone": "0660631385",
+    "pickup": true
+  },
+  {
+    "name": "Touggourt",
+    "wilaya_code": "55",
+    "commune": "Touggourt",
+    "address": "Touggourt",
+    "phone": "0672504089",
+    "pickup": true
+  },
+  {
+    "name": "Djanet",
+    "wilaya_code": "56",
+    "commune": "Djanet",
+    "address": "إيفري حي الشموع. الشارع قبل مديرية التجارة",
+    "phone": "0698066016",
+    "pickup": true
+  },
+  {
+    "name": "El Meniaa",
+    "wilaya_code": "58",
+    "commune": "El Meniaa",
+    "address": "قريب رومبوا حمزة طريق حفرة العباس",
+    "phone": "0654480215",
+    "pickup": true
+  }
+]

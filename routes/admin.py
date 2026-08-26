@@ -1943,7 +1943,9 @@ def order_send_to_carrier(order_id):
     ⚠️ الفشل ما يكسرش الطلبية: إذا ZR ما ردّش، الطلبية تبقى كيما هي والأدمن
     يقدر يبعثها يدويًا أو يعاود يجرّب. ما نخسروش بيعة بسبب مشكل شبكة.
     """
-    from services.zrexpress import create_parcel, ZRError, lookup_territory_id, is_configured
+    from services.zrexpress import (
+        create_parcel, ZRError, resolve_territory_id, is_configured,
+    )
 
     order = db.session.get(Order, order_id) or abort(404)
 
@@ -1961,26 +1963,25 @@ def order_send_to_carrier(order_id):
     # ⚠️ معرّف البلدية عند ZR (territoryId) يسهّل الأمور، لكن **ماشي إجباري**:
     # ZR يقبل الطرد بالاسم كذلك. قبل، كنّا نمنعو الإرسال بلا معرّف — وهذا
     # كان يحبس طلبيات صحيحة بلا سبب. درك نبعثو ونخلّيو ZR يقرّر.
-    territory_id = order.commune_external_id or None
+    # 🔴 كان هنا `if ... order.delivery_type != "office"` — يعني طلبيات
+    # المكتب ما كانت تدوّر أبدًا على المعرّف، وتتبعث بلا `territoryId`،
+    # وZR يرد 400 بلا رسالة. **كل** طلبيات المكتب كانت تفشل.
+    #
+    # درك `resolve_territory_id` تتكفّل بالنوعين: المنزل من البلدية،
+    # والمكتب من بلدية المكتب نفسو.
+    territory_id, why = resolve_territory_id(order)
 
-    # ⚠️ ZR يحدّد الوجهة بـterritoryId، ماشي بأسماء الولاية والبلدية.
-    # بلاه يرد بـ400 بلا رسالة. إذا الطلبية ما عندهاش معرّف محفوظ
-    # (قديمة، ولا الزبون كتب البلدية بيدو)، ندوّرو عليه درك ونحفظوه.
-    if not territory_id and order.delivery_type != "office" and order.commune:
-        try:
-            territory_id = lookup_territory_id(order.wilaya_code, order.commune)
-            if territory_id:
-                order.commune_external_id = territory_id
-                db.session.commit()
-            else:
-                # ⚠️ ما نبلعوش الفشل بصمت — الأدمن لازم يعرف
-                flash(
-                    f"ما لقيناش معرّف البلدية «{order.commune}» عند ZR. "
-                    "اضغط «افحص ليش ما لقيناش المعرّف» فصفحة التشخيص.",
-                    "warning",
-                )
-        except Exception as e:
-            flash(f"فشل البحث عن معرّف البلدية: {e}", "warning")
+    if territory_id and not order.commune_external_id:
+        order.commune_external_id = territory_id
+        db.session.commit()
+
+    if not territory_id:
+        # ⚠️ ما نبلعوش الفشل بصمت — الأدمن لازم يعرف قبل ما يشوف 400
+        flash(
+            f"ما لقيناش معرّف الوجهة عند ZR ({why}). "
+            "اضغط «افحص ليش ما لقيناش المعرّف» فصفحة التشخيص.",
+            "warning",
+        )
 
     try:
         result = create_parcel(order, territory_id=territory_id)
@@ -2274,7 +2275,11 @@ def order_zr_debug(order_id):
     preview, build_error = None, None
     try:
         import json as _json
-        payload = zr.build_parcel_payload(order, order.commune_external_id or None)
+        # ⚠️ نستعملو نفس المعرّف اللي راح يستعملو الإرسال الحقيقي —
+        # قبل، المعاينة كانت توري `territoryId` ناقصًا حتى كي الإرسال
+        # يلقاه. البحث هنا بلا حفظ: المعاينة ما تبدّلش البيانات.
+        preview_territory, _why = zr.resolve_territory_id(order)
+        payload = zr.build_parcel_payload(order, preview_territory)
         # ⚠️ ensure_ascii=False باش العربية تبان كيما هي، ماشي \u0627\u0644...
         preview = _json.dumps(payload, ensure_ascii=False, indent=2)
     except Exception as e:
@@ -2286,8 +2291,14 @@ def order_zr_debug(order_id):
         preview=preview,
         build_error=build_error,
         problems=zr._check_parcel_data(order),
+        # ⚠️ للمكتب نشخّصو على **بلدية المكتب** ماشي على `commune`
+        # الفارغة — وإلا التشخيص يقول «ما لقيناش» بلا ما يقول واش دوّر.
         territory_diag=(
-            zr.diagnose_territory_lookup(order.wilaya_code, order.commune)
+            zr.diagnose_territory_lookup(
+                order.wilaya_code,
+                zr.office_commune(order) if order.delivery_type == "office"
+                else order.commune,
+            )
             if request.args.get("check_territory") else None
         ),
         last=zr.LAST_EXCHANGE,
@@ -2316,21 +2327,17 @@ def order_zr_send_test(order_id):
 
     order = Order.query.get_or_404(order_id)
 
-    territory_id = order.commune_external_id or None
-    if not territory_id and order.delivery_type != "office" and order.commune:
-        try:
-            territory_id = zr.lookup_territory_id(order.wilaya_code, order.commune)
-            if territory_id:
-                order.commune_external_id = territory_id
-                db.session.commit()
-                flash(f"لقينا معرّف البلدية وحفظناه: {territory_id}", "success")
-            else:
-                flash(
-                    f"ما لقيناش معرّف «{order.commune}» — شوف القسم 3ب تحت",
-                    "warning",
-                )
-        except Exception as e:
-            flash(f"فشل البحث عن المعرّف: {e}", "warning")
+    # ⚠️ نفس الدالة اللي يستعملها الإرسال الحقيقي — وإلا التشخيص
+    # يقوللك حاجة والإرسال يدير حاجة أخرى.
+    had_id = bool(order.commune_external_id)
+    territory_id, why = zr.resolve_territory_id(order)
+
+    if territory_id and not had_id:
+        order.commune_external_id = territory_id
+        db.session.commit()
+        flash(f"لقينا معرّف الوجهة وحفظناه: {territory_id}", "success")
+    elif not territory_id:
+        flash(f"ما لقيناش معرّف الوجهة ({why}) — شوف القسم 3ب تحت", "warning")
 
     try:
         zr.create_parcel(order, territory_id=territory_id)
@@ -2628,6 +2635,54 @@ def shipping_sync_zr():
         flash(
             f"⚠️ {len(result['missing'])} ولاية ماكانتش فأسعار ZR "
             f"(خلّيناها كيما هي): {'، '.join(result['missing'][:8])}",
+            "warning",
+        )
+
+    return redirect(url_for("admin.shipping_list"))
+
+
+@admin_bp.route("/shipping/sync-world", methods=["POST"])
+@login_required
+def shipping_sync_world():
+    """
+    يحدّث أسعار World Express من جدولهم الرسمي المخزّن عندنا.
+
+    ⚠️ الفرق على ZR: هنا ماكانش API — الجدول مخزّن فـ
+    `data/world_rates.json`. الزر يقارن قاعدة البيانات بالجدول
+    ويوري بالضبط واش تبدّل، بدل ما الأدمن يقلّب 58 خانة بالعين.
+    """
+    from services.carrier_offices import sync_rates_from_file
+
+    try:
+        result = sync_rates_from_file("worldexpress")
+    except (ValueError, OSError) as e:
+        flash(f"🔴 {e}", "error")
+        return redirect(url_for("admin.shipping_list"))
+
+    if result["changed"]:
+        flash(
+            f"✅ تحدّثو {result['changed']} ولاية "
+            f"({result['unchanged']} بلا تبديل، {result['from_file']} فالجدول)",
+            "success",
+        )
+        for change in result["details"][:12]:
+            flash(
+                f"{change['wilaya']}: منزل {change['old_home'] or '—'} → "
+                f"{change['new_home'] or 'غير متوفر'} · "
+                f"مكتب {change['old_office'] or '—'} → "
+                f"{change['new_office'] or 'غير متوفر'}",
+                "info",
+            )
+    else:
+        flash(
+            f"الأسعار مطابقة أصلاً — ماكانش تبديل ({result['unchanged']} ولاية)",
+            "success",
+        )
+
+    if result["missing"]:
+        flash(
+            f"⚠️ {len(result['missing'])} ولاية ماكانتش فجدول World "
+            f"(باقية غير متوفرة): {'، '.join(result['missing'][:8])}",
             "warning",
         )
 

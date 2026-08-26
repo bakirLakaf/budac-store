@@ -287,13 +287,22 @@
                         pickupNote.textContent = data.message || 'جرّب التوصيل للمنزل.';
                         pickupNote.hidden = false;
                     }
+
+                    /* 🔴 مهم: نحيّدو `required` هنا.
+                       بلاه، الزبون يلقى حقلاً مطلوبًا وقائمة فارغة —
+                       الفورم ما يتبعثش وما يفهمش علاش. درك نحيّدو
+                       الإجبار ونوجّهوه للتوصيل للمنزل. */
+                    pickupSelect.required = false;
                     return;
                 }
+
+                pickupSelect.required = (deliveryType.value === 'office');
 
                 var html = '<option value="">اختر المكتب</option>';
                 list.forEach(function (pt) {
                     var label = pt.name + (pt.address ? ' — ' + pt.address : '');
-                    html += '<option value="' + label + '" data-id="' + pt.id + '">'
+                    html += '<option value="' + label + '" data-id="' + pt.id + '"'
+                          + ' data-phone="' + (pt.phone || '') + '">'
                           + label + '</option>';
                 });
                 pickupSelect.innerHTML = html;
@@ -309,10 +318,56 @@
             });
     }
 
+    /**
+     * نخبّيو خيار «التوصيل للمكتب» إذا الشركة ما عندهاش قائمة مكاتب.
+     *
+     * 🔴 قبل، الخيار كان يبان لكل الشركات. الزبون يختارو مع شركة
+     * بلا مكاتب، يلقى قائمة فارغة وحقلاً مطلوبًا، والطلبية توقف
+     * بلا سبب مفهوم — يخرج ويخسر البيع.
+     *
+     * ⚠️ نستعملو `disabled` ماشي حذف العنصر: إذا بدّل الشركة لوحدة
+     * عندها مكاتب، الخيار يرجع بلا ما نعاودو نبنيو القائمة.
+     */
+    function syncOfficeOption() {
+        if (!deliveryType || !carrier.value) return;
+
+        var url = '{{ url_for("cart.api_pickup_points") }}'
+            + '?carrier=' + encodeURIComponent(carrier.value);
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var noList = !!data.no_list;
+                var opt = deliveryType.querySelector('option[value="office"]');
+                if (!opt) return;
+
+                opt.disabled = noList;
+                opt.hidden = noList;
+
+                // كان مختارًا وولّى ممنوعًا → نرجّعوه للاختيار الفارغ
+                if (noList && deliveryType.value === 'office') {
+                    deliveryType.value = '';
+                    syncCommuneField();
+                    updateShipping();
+                }
+            })
+            .catch(function () { /* الشبكة — نخليو الخيار كيما هو */ });
+    }
+
     if (pickupSelect) {
         pickupSelect.addEventListener('change', function () {
             var opt = pickupSelect.options[pickupSelect.selectedIndex];
             pickupIdInput.value = opt ? (opt.getAttribute('data-id') || '') : '';
+
+            // ⚠️ نوريو هاتف المكتب: الزبون يعيّط ويتأكد أن الطرد وصل
+            // قبل ما يتحرّك — يقلل «رحت ولقيتو ماكانش».
+            var phone = opt ? (opt.getAttribute('data-phone') || '') : '';
+            if (pickupNote) {
+                if (phone) {
+                    pickupNote.textContent = 'هاتف المكتب: ' + phone;
+                    pickupNote.hidden = false;
+                }
+            }
         });
     }
 
@@ -460,7 +515,12 @@
         });
     });
 
+    // ⚠️ تبديل الشركة يقدر يبدّل **وجود** خيار المكتب أصلاً،
+    // ماشي غير محتوى القائمة.
+    carrier.addEventListener('change', syncOfficeOption);
+
     syncCommuneField();
+    syncOfficeOption();
     updateShipping();
 })();
 </script>
