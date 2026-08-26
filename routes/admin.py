@@ -2382,6 +2382,55 @@ def order_zr_lab(order_id):
     return redirect(url_for("admin.order_zr_debug", order_id=order.id))
 
 
+@admin_bp.route("/orders/<int:order_id>/zr-lab-dims", methods=["POST"])
+@login_required
+def order_zr_lab_dims(order_id):
+    """
+    مختبر الأبعاد: طرود **تجريبية** بمبلغ صغير، كل وحدة تعزل بُعدًا.
+
+    ⚠️ الفرق على المختبر الأول: هنا ما نجرّبوش نبعثو الطلبية الحقيقية،
+    نجرّبو نعرفو **واش الإرسال خدم عمرو** — بالدار، بالحد الأدنى،
+    بلا معرّف، بلا عربية.
+    """
+    from services import zrexpress as zr
+
+    order = Order.query.get_or_404(order_id)
+
+    if not zr.is_configured():
+        flash("مفاتيح ZR غير معمّرة", "error")
+        return redirect(url_for("admin.order_zr_debug", order_id=order.id))
+
+    territory_id, _why = zr.resolve_territory_id(order)
+    attempts = zr.lab_dimensions(order, territory_id)
+
+    session["zr_lab"] = [
+        {"label": a["label"], "status": a["status"],
+         "body": (a["body"] or "")[:400], "ok": a["ok"]}
+        for a in attempts
+    ]
+
+    winner = next((a for a in attempts if a["ok"]), None)
+
+    if winner:
+        # ⚠️ ما نحفظوش رقم التتبّع: هذا طرد **تجريبي** بمبلغ 100 دج،
+        # ماشي طلبية الزبون. ربطو بالطلبية يخربّق الحسابات.
+        flash(
+            f"✅ نجح: «{winner['label']}» — معناها الإرسال يخدم، "
+            "والمشكل فهاد البُعد بالضبط.",
+            "success",
+        )
+        flash("⚠️ اتنشأ طرد تجريبي عند ZR — امسحو من لوحتهم.", "warning")
+    else:
+        flash(
+            f"كل الأبعاد ({len(attempts)}) فشلو — معناها المشكل ماشي "
+            "فالطلبية ولا فنوع التوصيل، بل فالحساب ولا فحقل ناقص. "
+            "لازم تتواصل مع دعم ZR.",
+            "error",
+        )
+
+    return redirect(url_for("admin.order_zr_debug", order_id=order.id))
+
+
 @admin_bp.route("/orders/<int:order_id>/zr-send-test", methods=["POST"])
 @login_required
 def order_zr_send_test(order_id):

@@ -197,6 +197,20 @@
     </button>
 </form>
 
+<form method="post" action="{{ url_for('admin.order_zr_lab_dims', order_id=order.id) }}"
+      style="margin-top:10px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn-admin"
+            onclick="return confirm('نجرّبو 5 طرود تجريبية بمبلغ 100 دج؟ إذا نجح واحد، امسحو من لوحة ZR.')">
+        🔬 مختبر الأبعاد (طرود تجريبية)
+    </button>
+    <br><small class="muted">
+        يجرّب: توصيل للدار · الحد الأدنى تاع الحقول · بلا territoryId ·
+        مبلغ أكبر · بلا حروف عربية.
+        <b>مبلغ 100 دج ومرجع TEST</b> — إذا نجح واحد، امسحو من عند ZR.
+    </small>
+</form>
+
 <!-- ═════ 3د. استكشاف API ═════ -->
 <h2 class="form-section-title">3د. استكشاف ZR</h2>
 

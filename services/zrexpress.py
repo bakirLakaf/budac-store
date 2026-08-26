@@ -1234,6 +1234,128 @@ def inspect_territory_levels():
     }
 
 
+def lab_dimensions(order, territory_id=None, test_amount=100):
+    """
+    مختبر الأبعاد — يجرّب **طرودًا تجريبية** يعزل كل بُعد لوحدو.
+
+    🔴 علاش هاد الجولة الثانية؟
+    الجولة الأولى جرّبت 4 أشكال تاع المكتب، وكلهم رجعو 400 فارغ —
+    **حتى اللي بلا `pickupPointId`**. يعني المشكل ماشي فحقل المكتب.
+    والاستكشاف ورّى أن مناطق ZR فيها `commune` و`wilaya` برك، ماكانش
+    نوع «مكتب» أصلاً.
+
+    فالسؤال الحقيقي ولّى: **واش الإرسال خدم عمرو؟** ما جرّبنا عمرنا
+    توصيل للدار. إذا هو تاني يطيح، المشكل فالحساب ولا فحقل ناقص
+    نبعثوهش، ماشي فمنطق المكتب.
+
+    ⚠️ **طرود تجريبية**: مبلغ صغير (100 دج افتراضيًا) ومرجع فريد
+    فيه TEST. إذا نجح واحد، امسحو من لوحة ZR — ماشي طلبية حقيقية.
+
+    يوقف عند أول نجاح.
+    """
+    import time as _time
+
+    headers = _headers()
+    base = build_parcel_payload(order, territory_id)
+    stamp = int(_time.time())
+
+    def make(label, **over):
+        p = dict(base)
+        # ⚠️ مرجع فريد فكل محاولة — إذا ZR يرفض المرجع المكرر،
+        # هاد الشي وحدو يقدر يكون السبب، وما نعرفوهش بلا ما نجرّبو.
+        p["reference"] = f"TEST-{stamp}-{len(variants) + 1}"
+        p["amount"] = test_amount
+        p["orderedProducts"] = [{
+            "productName": ZR_PRODUCT_LABEL, "quantity": 1,
+            "price": test_amount, "stockType": "none",
+        }]
+        p.update(over)
+        return (label, p)
+
+    variants = []
+    commune = office_commune(order) or order.commune or ""
+
+    # 1) 🔴 البُعد الأهم: توصيل للدار — ما جرّبناهش عمرنا
+    v = make("توصيل للدار (نفس الوجهة)",
+             deliveryType="home",
+             commune=commune,
+             deliveryAddress=commune or order.wilaya_name or "وسط المدينة")
+    v[1].pop("pickupPointId", None)
+    variants.append(v)
+
+    # 2) الحد الأدنى: غير الحقول اللي ZR صرّح أنها إجبارية
+    minimal = {
+        "customerName": base["customerName"],
+        "customerPhone": base["customerPhone"],
+        "deliveryAddress": commune or order.wilaya_name or "وسط المدينة",
+        "wilaya": base["wilaya"],
+        "amount": test_amount,
+        "deliveryType": "home",
+        "description": ZR_PRODUCT_LABEL,
+        "orderedProducts": [{
+            "productName": ZR_PRODUCT_LABEL, "quantity": 1,
+            "price": test_amount, "stockType": "none",
+        }],
+        "reference": f"TEST-{stamp}-min",
+    }
+    if territory_id:
+        minimal["territoryId"] = territory_id
+    variants.append(("الحد الأدنى تاع الحقول", minimal))
+
+    # 3) بلا territoryId أصلاً — يمكن المعرّف اللي لقيناه ماشي هو المطلوب
+    v = make("للدار بلا territoryId", deliveryType="home", commune=commune,
+             deliveryAddress=commune or order.wilaya_name or "وسط المدينة")
+    v[1].pop("territoryId", None)
+    v[1].pop("pickupPointId", None)
+    variants.append(v)
+
+    # 4) مبلغ كبير معقول — نستبعدو حد المبلغ الصغير
+    v = make("للدار بمبلغ 2000", deliveryType="home", commune=commune,
+             amount=2000,
+             deliveryAddress=commune or order.wilaya_name or "وسط المدينة")
+    v[1]["orderedProducts"] = [{
+        "productName": ZR_PRODUCT_LABEL, "quantity": 1,
+        "price": 2000, "stockType": "none",
+    }]
+    v[1].pop("pickupPointId", None)
+    variants.append(v)
+
+    # 5) بلا حروف عربية أصلاً — نستبعدو مشكل ترميز فبيانات الزبون
+    v = make("بلا عربية (اسم ووصف لاتيني)",
+             deliveryType="home",
+             customerName="Test Client",
+             description="Accessoires",
+             wilaya=base["wilaya"],
+             commune=commune,
+             deliveryAddress="Centre ville")
+    v[1]["orderedProducts"] = [{
+        "productName": "Accessoires", "quantity": 1,
+        "price": test_amount, "stockType": "none",
+    }]
+    v[1].pop("pickupPointId", None)
+    variants.append(v)
+
+    attempts = []
+
+    for label, payload in variants:
+        try:
+            r = requests.post(f"{BASE_URL}/parcels", headers=headers,
+                              json=payload, timeout=TIMEOUT)
+            status, body = r.status_code, (r.text or "")[:600]
+        except Exception as e:
+            attempts.append({"label": label, "status": "—", "body": str(e),
+                             "payload": payload, "ok": False})
+            continue
+
+        ok = 200 <= status < 300
+        attempts.append({"label": label, "status": status, "body": body,
+                         "payload": payload, "ok": ok})
+        if ok:
+            break
+
+    return attempts
+
+
 def send_variants(order, territory_id=None):
     """
     يجرّب عدة أشكال للـpayload ويوقف عند أول نجاح.
