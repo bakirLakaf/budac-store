@@ -126,7 +126,7 @@ def create_app():
 
         from datetime import datetime
 
-        # رسالة واتساب تتعمّر حسب الصفحة — الزبون ما يعاودش يشرح فين كان
+        # رسالة واتساب تتعمّر حسب الصفحة — الزبون ما يعاودش يشرح وين كان
         from flask import request as _req
 
         wa_message = f"سلام، عندي سؤال بخصوص {app.config['STORE_NAME']}"
@@ -167,7 +167,7 @@ def create_app():
 
         # يمنع أي موقع آخر من عرض متجرك داخل إطار (clickjacking):
         # واحد يقدر يعرض متجرك بشفافية فوق أزرار مزيفة ويخلي الزبون يضغط
-        # على حاجة ما بغاهاش.
+        # على حاجة ما حبهاش.
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
 
         # ما نبعتوش الرابط الكامل لمواقع خارجية (يحمي خصوصية الزبون)
@@ -178,7 +178,7 @@ def create_app():
             "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
         )
 
-        # ⚠️ CSP: يحدّد من فين يتحمّل الكود والصور.
+        # ⚠️ CSP: يحدّد من وين يتحمّل الكود والصور.
         # فيه 'unsafe-inline' لأن القوالب فيها <script> و<style> مباشرة،
         # وبيكسل فيسبوك/تيك توك يحتاجوها. حتى هكذا يمنع تحميل سكريبت من
         # نطاق غريب — وهذا أهم حماية ضد XSS.

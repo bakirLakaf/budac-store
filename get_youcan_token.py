@@ -83,7 +83,7 @@ class CallbackHandler(http.server.BaseHTTPRequestHandler):
 
         ok = bool(_result["code"])
         message = (
-            "تمام! رجع للترمينال — التوكن غادي يبان تماك."
+            "تمام! رجع للترمينال — التوكن راح يبان تماك."
             if ok else
             f"فشل: {_result['error'] or 'ماكانش code'}"
         )

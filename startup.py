@@ -171,7 +171,7 @@ def _fix_null_flags(db):
     ⚠️ علاش لازم؟ إذا عمود انزاد قبل ما نحطّو `DEFAULT FALSE`، الصفوف
     القديمة تولّي NULL. وفـSQL، `NULL == False` ترجّع NULL ماشي True —
     فالصفوف يختفيو من أي فلترة. صرا مع `product_images.is_extra`:
-    كل صور المنتجات القديمة كانت غادي تختفي من المعرض.
+    كل صور المنتجات القديمة كانت راح تختفي من المعرض.
 
     التشغيل المتكرر آمن — يمسّ غير الصفوف اللي فيها NULL.
     """
@@ -245,7 +245,7 @@ def _repair_stale_communes(db):
 
     inspector = inspect(db.engine)
     if "communes" not in inspector.get_table_names():
-        return  # الجدول ماكانش — create_all غادي يبنيه صحيح
+        return  # الجدول ماكانش — create_all راح يبنيه صحيح
 
     db_columns = {c["name"] for c in inspector.get_columns("communes")}
     model_columns = {c.name for c in Commune.__table__.columns}
@@ -407,4 +407,4 @@ if __name__ == "__main__":
             sys.exit(1)
 
         print(f"⚠️ خطوة تجهيز فشلت: {message}", file=sys.stderr)
-        print("   الموقع غادي يبدا رغم هذا — راجع السجلات.", file=sys.stderr)
+        print("   الموقع راح يبدا رغم هذا — راجع السجلات.", file=sys.stderr)

@@ -6,7 +6,7 @@
     python optimize_images.py --apply    # التحويل الفعلي
 
 ⚠️ ليش المعاينة أولاً؟
-السكريبت يبدّل ملفات على القرص **ويحدّث قاعدة البيانات**. تشوف واش غادي يصرا
+السكريبت يبدّل ملفات على القرص **ويحدّث قاعدة البيانات**. تشوف واش راح يصرا
 قبل ما يصرا، بدل ما تكتشف مشكل بعد فوات الأوان.
 
 الأمان:
@@ -92,7 +92,7 @@ def run(apply_changes):
         print(f"   الحجم الحالي: {human(total_before)}\n")
 
         if not apply_changes:
-            print("   أمثلة على اللي غادي يصرا:")
+            print("   أمثلة على اللي راح يصرا:")
             for subfolder, record, field, filename in jobs[:5]:
                 size, dims = get_size_info(os.path.join("static", "img", subfolder, filename))
                 print(f"     {filename}  ({human(size)}, {dims[0]}×{dims[1]})  →  .webp + مصغّرة")

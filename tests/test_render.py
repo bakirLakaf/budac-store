@@ -482,7 +482,7 @@ def main():
         check("الرد فيه رابط الصورة", bool(j.get("url")))
         check("الرد فيه id", isinstance(j.get("id"), int))
 
-    # ⚠️ الحالة اللي كانت تكسر: عدة صور — دابا كل وحدة طلب مستقل
+    # ⚠️ الحالة اللي كانت تكسر: عدة صور — درك كل وحدة طلب مستقل
     ok_n = 0
     for i in range(4):
         rr = client.post(up, data={"image": fake_image(1400, f"m{i}.jpg")},

@@ -30,7 +30,7 @@ def run():
 
         existing = AdminUser.query.filter_by(username=username).first()
         if existing:
-            print(f"ℹ️  الحساب '{username}' موجود — غادي نبدلو كلمة السر.")
+            print(f"ℹ️  الحساب '{username}' موجود — راح نبدلو كلمة السر.")
 
         password = getpass.getpass("كلمة السر: ")
         if len(password) < MIN_PASSWORD_LENGTH:

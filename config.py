@@ -16,7 +16,7 @@ class Config:
     SQLALCHEMY_DATABASE_URI = _db_url
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # يعاود يربط الاتصالات المقطوعة تلقائيًا — مهم على الاستضافة، فين
+    # يعاود يربط الاتصالات المقطوعة تلقائيًا — مهم على الاستضافة، وين
     # قاعدة البيانات تقطع الاتصالات الخاملة بعد مدة
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
