@@ -193,6 +193,54 @@ def main():
               len(calls) == 2 and attempts[-1]["ok"], len(calls))
 
     print("\n" + "=" * 60)
+    print("مختبر الأبعاد")
+    print("=" * 60)
+
+    with app.app_context():
+        o = make(delivery_type="office",
+                 pickup_point_id="Hub Setif 19 مكتب سطيف",
+                 pickup_point_name="Hub Setif 19 مكتب سطيف")
+
+        calls = []
+        real_post = zr.requests.post
+        zr.requests.post = lambda url, **kw: (
+            calls.append(kw.get("json")) or FakeResp()
+        )
+        try:
+            dims = zr.lab_dimensions(o, "tid-1", test_amount=100)
+        finally:
+            zr.requests.post = real_post
+
+        check("يجرّب 5 أبعاد", len(dims) == 5, len(dims))
+
+        # 🔴 الأهم: الطرود تجريبية — ما نبعثوش مبلغ الزبون الحقيقي
+        check("🔴 كل المبالغ تجريبية (ماشي 3360)",
+              all(c["amount"] != 3360 for c in calls),
+              [c["amount"] for c in calls])
+        check("المراجع كلها TEST وفريدة",
+              all(str(c["reference"]).startswith("TEST") for c in calls)
+              and len({c["reference"] for c in calls}) == 5,
+              [c["reference"] for c in calls])
+        check("سعر المنتج يطابق المبلغ فكل محاولة",
+              all(c["orderedProducts"][0]["price"] == c["amount"] for c in calls),
+              [(c["amount"], c["orderedProducts"][0]["price"]) for c in calls])
+
+        check("كاين بُعد «للدار»",
+              any(c["deliveryType"] == "home" for c in calls))
+        check("ماكانش pickupPointId فأبعاد الدار",
+              all("pickupPointId" not in c for c in calls
+                  if c["deliveryType"] == "home"))
+        check("كاين بُعد بلا territoryId",
+              any("territoryId" not in c for c in calls))
+        check("كاين بُعد بلا حروف عربية",
+              any(not any("\u0600" <= ch <= "\u06FF" for ch in c["customerName"])
+                  for c in calls), [c["customerName"] for c in calls])
+
+    src2 = open("routes/admin.py", encoding="utf-8").read()
+    check("🔴 الطرد التجريبي ما يتحفظش كرقم تتبّع للطلبية",
+          "ماشي طلبية الزبون" in src2)
+
+    print("\n" + "=" * 60)
     print(f"نجح: {len(PASSED)}  ·  فشل: {len(FAILED)}")
     print("=" * 60)
     if FAILED:
