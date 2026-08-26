@@ -324,7 +324,9 @@ def main():
     section("6. عرض صفحات لوحة التحكم")
     client.post("/admin/login", data={"username": "admin", "password": "pass1234"})
     with app.app_context():
-        pid = Product.query.first().id
+        _p0 = Product.query.first()
+        pid = _p0.id
+        prod_name_for_uv = _p0.name
     for path, label in [
         ("/admin/", "الرئيسية"),
         ("/admin/products", "المنتجات"),
@@ -334,12 +336,39 @@ def main():
         ("/admin/settings", "الإعدادات"),
         ("/admin/shipping", "أسعار التوصيل"),
         ("/admin/reviews", "التقييمات"),
+        ("/admin/products/unlinked-variants", "موديلات بلا صورة"),
     ]:
         try:
             r = client.get(path)
             check(f"لوحة: {label} ({r.status_code})", r.status_code in (200, 302))
         except Exception as e:
             check(f"لوحة: {label}", False, repr(e)[:120])
+
+    # ───────── 6b) صفحة «موديلات بلا صورة» تشتغل فعلاً ─────────
+    # ⚠️ الصفحة تتعرض بلا خطأ ماشي كافٍ — لازم تلقى الموديل الناقص
+    # فعلاً وما تعرضش اللي عندو صورة.
+    section("6b. موديلات بلا صورة")
+    with app.app_context():
+        prod = Product.query.first()
+        naked = ProductVariant(product_id=prod.id, label="موديل بلا صورة",
+                               price=700, stock_quantity=3)
+        dressed = ProductVariant(product_id=prod.id, label="موديل عندو صورة",
+                                 price=800, stock_quantity=3,
+                                 image_filename="x.webp")
+        db.session.add_all([naked, dressed])
+        db.session.commit()
+
+    uv = client.get("/admin/products/unlinked-variants").get_data(as_text=True)
+    check("يوري الموديل الناقص", "موديل بلا صورة" in uv)
+    check("🔴 ما يوريش الموديل اللي عندو صورة",
+          "موديل عندو صورة" not in uv)
+    check("يوري اسم المنتج فوقو", prod_name_for_uv in uv)
+
+    dash = client.get("/admin/").get_data(as_text=True)
+    check("النظرة العامة توري التنبيه", "موديل بلا صورة" in dash)
+    check("التنبيه يودّي للصفحة", "unlinked-variants" in dash)
+    check("رابط دائم فقائمة المنتجات",
+          "unlinked-variants" in client.get("/admin/products").get_data(as_text=True))
 
     # ───────── 7) getCsrf معرّفة مرة وحدة وعالميًا ─────────
     section("7. getCsrf عالمية (إصلاح حفظ سعر الموديل)")
