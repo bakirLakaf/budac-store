@@ -136,14 +136,6 @@
                     </select>
                 </label>
 
-                <label class="field" id="rollLengthField">
-                    <span>طول اللفة (متر)</span>
-                    <input type="number" name="roll_length_m" step="0.1" min="0"
-                           value="{{ product.roll_length_m if product and product.roll_length_m else '' }}"
-                           placeholder="مثلاً: 5">
-                    <small class="hint">باش نقولو للزبون شحال لفة يحتاج</small>
-                </label>
-
                 <label class="field" id="rollWidthField">
                     <span>عرض اللفة (متر) *</span>
                     <input type="number" name="roll_width_m" step="0.1" min="0"
@@ -163,12 +155,12 @@
             <script>
             (function () {
                 var sel = document.getElementById("calcTypeSelect");
-                var lenField = document.getElementById("rollLengthField");
                 var widField = document.getElementById("rollWidthField");
-                if (!sel) return;
+                if (!sel || !widField) return;
 
+                /* 🔴 اتحيّدت خانة «طول اللفة» — حاسبة المحيط ولّات
+                   تعطي أمتار برك، فما بقاتش تحتاج أي إعداد. */
                 function sync() {
-                    lenField.style.display = sel.value === "perimeter" ? "" : "none";
                     widField.style.display = sel.value === "area" ? "" : "none";
                 }
                 sel.addEventListener("change", sync);

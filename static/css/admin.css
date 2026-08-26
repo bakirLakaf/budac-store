@@ -1997,3 +1997,25 @@ img.thumb-sm:hover {
 /* أزرار رأس الصفحة */
 .page-head-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .inline-form { display: inline; margin: 0; }
+
+
+/* ═══════════ شعار اللوحة ═══════════
+   الاسم النصي ولّى صورة. الارتفاع محدود باش الشريط الجانبي ما يتاكلش،
+   و`object-fit: contain` يمنع تشويه الشعار مهما كانت أبعادو. */
+.admin-brand-logo {
+    display: block;
+    margin-bottom: 6px;
+}
+
+.admin-brand-logo img {
+    width: auto;
+    height: 38px;
+    max-width: 100%;
+    object-fit: contain;
+    /* الشعار مصمّم لخلفية فاتحة، والشريط الجانبي غامق — نقلبوه */
+    filter: brightness(0) invert(1);
+    opacity: .95;
+    transition: opacity .15s;
+}
+
+.admin-brand-logo:hover img { opacity: 1; }

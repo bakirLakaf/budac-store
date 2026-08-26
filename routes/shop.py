@@ -571,7 +571,6 @@ def api_calculate(slug):
             result = calculate_perimeter(
                 shape=data.get("shape"),
                 dimensions=data,
-                roll_length_m=product.roll_length_m,
                 margin_percent=product.calculator_margin,
             )
         elif product.calculator_type == CALC_AREA:

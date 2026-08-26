@@ -6,12 +6,25 @@
     <title>{% block title %}لوحة التحكم — {{ store_name }}{% endblock %}</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+
+    {# ⚠️ نفس الأيقونات تاع المتجر — اللوحة كانت بلا favicon، فتبان
+       بأيقونة فارغة فالتبويب وتضيع بين التبويبات المفتوحة.
+       ?v=2 يجبر المتصفح يعيد تحميلها بدل ما ياخذ القديمة من الكاش. #}
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=2" sizes="any">
+    <link rel="icon" type="image/png" sizes="192x192"
+          href="{{ url_for('static', filename='img/brand/icon-192.png') }}">
+    <link rel="apple-touch-icon"
+          href="{{ url_for('static', filename='img/brand/apple-touch-icon.png') }}">
 </head>
 <body class="admin-body">
 
 <aside class="admin-sidebar">
     <div class="admin-brand">
-        <span class="admin-brand-name">{{ store_name }}</span>
+        {# الشعار يودّي للمتجر — الأدمن يحتاج يقفز للواجهة بزاف #}
+        <a href="{{ url_for('shop.home') }}" class="admin-brand-logo" title="عرض المتجر">
+            <img src="{{ url_for('static', filename='img/brand/logo.png') }}"
+                 alt="{{ store_name }}" width="445" height="217">
+        </a>
         <span class="admin-brand-sub">لوحة التحكم</span>
     </div>
 

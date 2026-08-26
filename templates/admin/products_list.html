@@ -104,7 +104,7 @@
                 </form>
 
                 <form method="post" action="{{ url_for('admin.product_delete', product_id=p.id) }}"
-                      onsubmit="return confirm('متأكد باغي تمسح «{{ p.name }}»؟ هاد العملية ما ترجعش.')">
+                      onsubmit="return confirm('متأكد راك تحب تمسح «{{ p.name }}»؟ هاد العملية ما ترجعش.')">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn-admin btn-sm btn-danger">حذف</button>
                 </form>

@@ -17,6 +17,17 @@
             <input type="hidden" name="mode" value="all">
             <button type="submit" class="vis-reset-btn">صفّر العدّاد</button>
         </form>
+
+        {# يمسح التاريخ القديم ويخلّي غير الأسبوع الجاري — أخفّ من
+           التصفير الكامل كي تحب تنطلق من نقطة نظيفة بلا ما تخسر
+           أرقام هاد الأسبوع. #}
+        <form method="post" action="{{ url_for('admin.visitors_reset') }}"
+              class="vis-reset"
+              onsubmit="return confirm('تمسح كل سجل الزيارات ما عدا الأسبوع الجاري (من السبت)؟ ما ترجعش.')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="mode" value="week">
+            <button type="submit" class="vis-reset-btn">خلّي غير هاد الأسبوع</button>
+        </form>
     </div>
 
     <div class="vis-cards">

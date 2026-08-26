@@ -364,7 +364,6 @@ def product_form(product_id=None):
         # إعدادات حاسبة الكمية
         calc_type = request.form.get("calculator_type") or None
         product.calculator_type = calc_type if calc_type in ("perimeter", "area") else None
-        product.roll_length_m = request.form.get("roll_length_m", type=float) or None
         product.roll_width_m = request.form.get("roll_width_m", type=float) or None
         product.calculator_margin = request.form.get("calculator_margin", type=int) or 10
 
@@ -669,7 +668,6 @@ def product_duplicate(product_id):
         category_id=original.category_id,
         color_variant=original.color_variant,
         calculator_type=original.calculator_type,
-        roll_length_m=original.roll_length_m,
         roll_width_m=original.roll_width_m,
         calculator_margin=original.calculator_margin,
         stock_quantity=original.stock_quantity,
@@ -1253,7 +1251,7 @@ def offer_delete(offer_id):
 def shipping_list():
     """جدول أسعار التوصيل — عرض حسب شركة مختارة."""
 
-    # نعرضو كل الشركات (حتى المعطّلة) — الأدمن خاصو يشوفهم باش يفعّلهم
+    # نعرضو كل الشركات (حتى المعطّلة) — الأدمن لازمو يشوفهم باش يفعّلهم
     carriers = Carrier.query.order_by(Carrier.name).all()
     if not carriers:
         flash("ماكاين حتى شركة توصيل — شغّل seed_shipping.py أولاً", "warning")
@@ -1678,11 +1676,11 @@ def coupons_list():
 
         # التحقق حسب النوع — نسبة فوق 100% ما عندهاش معنى
         if discount_type == Coupon.TYPE_PERCENT and not (1 <= value <= 100):
-            flash("النسبة خاصها تكون بين 1 و100", "error")
+            flash("النسبة لازمها تكون بين 1 و100", "error")
             return redirect(url_for("admin.coupons_list"))
 
         if discount_type == Coupon.TYPE_FIXED and value <= 0:
-            flash("مبلغ الخصم خاصو يكون أكبر من صفر", "error")
+            flash("مبلغ الخصم لازمو يكون أكبر من صفر", "error")
             return redirect(url_for("admin.coupons_list"))
 
         coupon = Coupon(
@@ -2516,13 +2514,21 @@ def youcan_disconnect():
 @login_required
 def visitors_reset():
     """يصفّر عدّاد الزوار — قبل الإطلاق ولا بعد تجارب."""
-    from services.analytics import reset_all, purge_scan_noise
+    from services.analytics import reset_all, purge_scan_noise, keep_current_week
 
     mode = request.form.get("mode")
 
     if mode == "all":
         removed = reset_all()
         flash(f"تصفّر العدّاد — مسحنا {removed} سطر", "success")
+    elif mode == "week":
+        # يخلّي غير الأسبوع الجاري (من السبت لليوم)
+        removed, start = keep_current_week()
+        flash(
+            f"مسحنا {removed} سطر قديم — بقى غير الأسبوع الجاري "
+            f"(من {start.strftime('%d/%m')})",
+            "success",
+        )
     else:
         removed = purge_scan_noise()
         if removed:

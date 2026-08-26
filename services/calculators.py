@@ -42,10 +42,10 @@ def _to_float(value, field_name):
     try:
         number = float(str(value).strip().replace(",", "."))
     except (TypeError, ValueError):
-        raise CalculationError(f"«{field_name}» خاصو يكون رقم")
+        raise CalculationError(f"«{field_name}» لازمو يكون رقم")
 
     if number <= 0:
-        raise CalculationError(f"«{field_name}» خاصو يكون أكبر من صفر")
+        raise CalculationError(f"«{field_name}» لازمو يكون أكبر من صفر")
 
     # سقف معقول — يمنع أخطاء الإدخال (واحد يكتب 5000 بدل 50)
     if number > 10000:
@@ -54,16 +54,20 @@ def _to_float(value, field_name):
     return number
 
 
-def calculate_perimeter(shape, dimensions, roll_length_m=None, margin_percent=10):
+def calculate_perimeter(shape, dimensions, margin_percent=10):
     """
-    يحسب المحيط المطلوب وعدد اللفات.
+    يحسب كم متر يحتاج الزبون.
+
+    🔴 كان هنا حساب «عدد اللفات» — اتحيّد.
+    السبب: المنتج يتباع **بالمتر**، والزبون يطلب أمتار ماشي لفات.
+    الحساب القديم كان يقول «اطلب 2 لفة» على 6.22 متر، والزبون
+    ما يفهمش واش هي اللفة ولا شحال فيها. درك: رقم واحد بالمتر.
 
     shape      : "circle" / "square" / "rectangle"
     dimensions : dict بالسنتيمتر — حسب الشكل:
                    circle    → {"diameter": 60}
                    square    → {"side": 50}
                    rectangle → {"width": 80, "height": 40}
-    roll_length_m : طول اللفة بالمتر (اختياري)
     margin_percent: هامش أمان %
 
     يرجع dict فيه التفاصيل كاملة.
@@ -97,22 +101,18 @@ def calculate_perimeter(shape, dimensions, roll_length_m=None, margin_percent=10
     # هامش الأمان: القص والأخطاء
     with_margin_m = total_m * (1 + margin_percent / 100)
 
-    result = {
+    return {
         "shape_label": shape_label,
         "quantity": quantity,
         "perimeter_per_piece_m": round(perimeter_m, 2),
         "total_m": round(total_m, 2),
         "with_margin_m": round(with_margin_m, 2),
         "margin_percent": margin_percent,
+        # ⚠️ نقرّبو للأعلى لأقرب متر — نفس منطق حاسبة المساحة.
+        # 6.22 متر تولّي 7: الزبون ما يقدرش يطلب كسر متر، والنقصان
+        # أسوأ من الزيادة (يوقف الخدمة ويعاود يطلب).
+        "meters_to_order": math.ceil(with_margin_m),
     }
-
-    if roll_length_m and roll_length_m > 0:
-        rolls = math.ceil(with_margin_m / roll_length_m)
-        result["roll_length_m"] = roll_length_m
-        result["rolls_needed"] = rolls
-        result["total_covered_m"] = round(rolls * roll_length_m, 2)
-
-    return result
 
 
 def calculate_area(surfaces, roll_width_m, margin_percent=10):

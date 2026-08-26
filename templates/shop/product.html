@@ -220,12 +220,18 @@
             </div>
             {% endif %}
 
-            <div class="share-row">
+            {# ⚠️ الروابط هنا قيم أولية برك — الجافاسكريبت يعاود يبنيها
+               مع كل تبديل موديل باش يزيد `?v=<id>`. بلا هذا، الزبون
+               اللي يشارك «بلاستيك دوري» يوصل صاحبو لصفحة فيها الموديل
+               الافتراضي — موديل آخر وسعر آخر. #}
+            <div class="share-row" id="shareRow"
+                 data-base="{{ url_for('shop.product_detail', slug=product.slug, _external=True) }}"
+                 data-name="{{ product.name }}">
                 <span class="share-label">شارك:</span>
-                <a class="share-btn share-wa" target="_blank" rel="noopener"
+                <a class="share-btn share-wa" id="shareWa" target="_blank" rel="noopener"
                    href="https://wa.me/?text={{ (product.name + ' — ' + request.url) | urlencode }}"
                    aria-label="شارك على واتساب">واتساب</a>
-                <a class="share-btn share-fb" target="_blank" rel="noopener"
+                <a class="share-btn share-fb" id="shareFb" target="_blank" rel="noopener"
                    href="https://www.facebook.com/sharer/sharer.php?u={{ request.url | urlencode }}"
                    aria-label="شارك على فيسبوك">فيسبوك</a>
                 <button type="button" class="share-btn share-copy" id="copyLinkBtn"
@@ -536,16 +542,14 @@
                 var html = "";
 
                 if (data.type === "perimeter") {
-                    html += '<p class="cr-main">تحتاج <strong>' + res.with_margin_m + ' متر</strong></p>';
+                    /* 🔴 كان هنا سطر «اطلب X لفة» — اتحيّد.
+                       المنتج يتباع بالمتر، والزبون ما يعرفش شحال فاللفة.
+                       درك رقم واحد واضح: كم متر يطلب. */
+                    html += '<p class="cr-main">تحتاج <strong>' + res.meters_to_order + ' متر</strong></p>';
                     html += '<p class="cr-detail">' + res.shape_label;
                     if (res.quantity > 1) html += " × " + res.quantity + " قطعة";
                     html += "</p>";
                     html += '<p class="cr-detail">المحيط: ' + res.total_m + ' م + هامش ' + res.margin_percent + '% للقص</p>';
-
-                    if (res.rolls_needed) {
-                        html += '<p class="cr-highlight">→ اطلب <strong>' + res.rolls_needed + '</strong> لفة'
-                             + ' (كل لفة ' + res.roll_length_m + ' م)</p>';
-                    }
                 } else {
                     html += '<p class="cr-main">تحتاج <strong>' + res.meters_to_order + ' متر</strong></p>';
                     html += '<p class="cr-detail">المساحة: ' + res.total_area_m2 + ' م² | عرض اللفة: ' + res.roll_width_m + ' م</p>';
@@ -768,6 +772,41 @@
         }
     }
 
+    /* ══════════════════════════════════════════════════════════
+       رابط المشاركة يحمل الموديل المختار
+       ⚠️ نستعملو `?v=<id>` ماشي `#`، لأن الواتساب وفيسبوك يقراو
+       الرابط فالسيرفر باش يوريو المعاينة — والجزء اللي بعد `#`
+       ما يوصلش للسيرفر أصلاً.
+       ══════════════════════════════════════════════════════════ */
+    var shareRow = document.getElementById("shareRow");
+
+    function updateShareLinks(chip) {
+        if (!shareRow) return;
+
+        var base = shareRow.getAttribute("data-base") || window.location.href;
+        var name = shareRow.getAttribute("data-name") || "";
+        var vid = chip ? (chip.getAttribute("data-variant-id") || "") : "";
+        var label = chip ? chip.textContent.trim() : "";
+
+        var link = vid ? base + "?v=" + encodeURIComponent(vid) : base;
+        // اسم الموديل فنص الواتساب — الصاحب يعرف على واش تهدر
+        var text = name + (label ? " — " + label : "") + " — " + link;
+
+        var wa = document.getElementById("shareWa");
+        var fb = document.getElementById("shareFb");
+        var copy = document.getElementById("copyLinkBtn");
+
+        if (wa) wa.href = "https://wa.me/?text=" + encodeURIComponent(text);
+        if (fb) fb.href = "https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(link);
+        if (copy) copy.setAttribute("data-link", link);
+
+        // نبدّلو رابط الصفحة كذلك (بلا إعادة تحميل) — الزبون اللي
+        // ينسخ من شريط العنوان ياخذ الموديل الصحيح تاني
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, "", link);
+        }
+    }
+
     variantChips.forEach(function (chip) {
         chip.addEventListener("click", function () {
             if (chip.classList.contains("is-out")) return;
@@ -796,8 +835,49 @@
 
             // نحدّثو جدول أسعار الجملة والسعر حسب الكمية الحالية
             applyTiers(chip);
+            updateShareLinks(chip);
         });
     });
+
+    /* ── اختيار الموديل من الرابط عند فتح الصفحة ──────────────
+       الزبون اللي يوصلو رابط `?v=12` لازم يلقى الموديل 12 مختارًا
+       بصورتو وسعرو — وإلا المشاركة بلا فايدة. */
+    (function selectVariantFromUrl() {
+        // ⚠️ الحماية ضرورية: بعض المتصفحات القديمة ما عندهاش
+        // URLSearchParams، والصفحة ما لازمش تطيح كاملة على ميزة مشاركة.
+        var search = (window.location && window.location.search) || "";
+        var wanted = null;
+        try {
+            wanted = new URLSearchParams(search).get("v");
+        } catch (e) {
+            var m = search.match(/[?&]v=([^&]+)/);
+            wanted = m ? decodeURIComponent(m[1]) : null;
+        }
+        var target = null;
+
+        if (wanted) {
+            variantChips.forEach(function (c) {
+                if (c.getAttribute("data-variant-id") === wanted) target = c;
+            });
+        }
+
+        // ⚠️ موديل مطلوب لكنو نافد: نختاروه برك باش الزبون يشوف
+        // بالضبط واش تشارك معاه، ويشوف أنه غير متوفر بدل ما نحوّلوه
+        // بصمت لموديل آخر ونخلّيوه يظن أنه راه يطلب اللي شاف.
+        if (target) {
+            variantChips.forEach(function (c) { c.classList.remove("is-active"); });
+            target.classList.add("is-active");
+            applyVariantPrice(target);
+            applyTiers(target);
+
+            var img = target.getAttribute("data-image");
+            if (img && window.__setPinnedImage) window.__setPinnedImage(img);
+        }
+
+        // نبنيو روابط المشاركة على أساس المختار حاليًا (المطلوب ولا الافتراضي)
+        var active = target || document.querySelector(".variant-chip.is-active");
+        updateShareLinks(active);
+    })();
 
     /* ══════════════════════════════════════════════════════════
        أسعار الجملة: السعر يتبدّل حسب الكمية

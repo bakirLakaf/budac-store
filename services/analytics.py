@@ -324,7 +324,7 @@ def purge_scan_noise():
     ⚠️ ليش نحتاجوها؟
     الفلتر القديم كان يعتمد على User-Agent وحدو، والسكانرات تزوّرو.
     فدخلو زيارات لـ/wp-admin/install.php و/wp-login.php وخرّبو الأرقام.
-    الفلتر الجديد يمنعهم، لكن اللي تسجّل من قبل خاصو يتنظّف.
+    الفلتر الجديد يمنعهم، لكن اللي تسجّل من قبل لازمو يتنظّف.
     """
     from sqlalchemy import or_
 
@@ -351,3 +351,36 @@ def reset_all():
     deleted = SiteVisit.query.delete(synchronize_session=False)
     db.session.commit()
     return deleted
+
+
+def week_start(today=None):
+    """
+    أول يوم فالأسبوع الجاري = **السبت**.
+
+    ⚠️ ماشي الاثنين ولا الأحد: الأسبوع فالجزائر يبدا السبت، والعطلة
+    الجمعة والسبت. `weekday()` تاع بايثون: الاثنين=0 … السبت=5، الأحد=6.
+    الحساب تحت يرجّع السبت اللي فات (ولا اليوم نفسو إذا كان سبت).
+    """
+    today = today or date.today()
+    # السبت=5 → 0 · الأحد=6 → 1 · الاثنين=0 → 2 · … · الجمعة=4 → 6
+    days_since_saturday = (today.weekday() - 5) % 7
+    return today - timedelta(days=days_since_saturday)
+
+
+def keep_current_week(today=None):
+    """
+    يمسح كل سجل الزيارات **ما عدا** الأسبوع الجاري (من السبت لليوم).
+
+    يرجّع (عدد الأسطر الممسوحة، تاريخ بداية الأسبوع).
+
+    ⚠️ نمسحو `day < السبت` برك. أي سطر بتاريخ مستقبلي (ساعة سيرفر
+    غالطة) يبقى — أحسن من مسح بيانات صحيحة بالغلط.
+    """
+    start = week_start(today)
+    deleted = (
+        SiteVisit.query
+        .filter(SiteVisit.day < start)
+        .delete(synchronize_session=False)
+    )
+    db.session.commit()
+    return deleted, start
