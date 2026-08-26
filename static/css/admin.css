@@ -2019,3 +2019,70 @@ img.thumb-sm:hover {
 }
 
 .admin-brand-logo:hover img { opacity: 1; }
+
+
+/* ═══════════ موديلات بلا صورة ═══════════ */
+.uv-list { display: grid; gap: 14px; }
+
+.uv-card {
+    background: var(--a-surface);
+    border: 1px solid var(--a-border);
+    border-radius: 12px;
+    padding: 14px;
+}
+
+/* المنتج المعطّل يبقى يبان، لكن باهت — الأدمن يعرف أنه ماشي مستعجل */
+.uv-card.is-off { opacity: .62; }
+
+.uv-card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.uv-thumb {
+    width: 52px; height: 52px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.uv-thumb-empty {
+    display: flex; align-items: center; justify-content: center;
+    background: var(--a-border);
+    color: var(--a-text-soft);
+    font-size: 10px;
+    text-align: center;
+}
+
+.uv-title { flex: 1; min-width: 140px; }
+.uv-title strong { display: block; font-size: 15px; }
+.uv-meta { font-size: 12px; color: var(--a-text-soft); }
+.uv-off { color: var(--a-warning); }
+
+.uv-variants {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 10px 0 0;
+    border-top: 1px dashed var(--a-border);
+    display: flex; flex-wrap: wrap; gap: 8px;
+}
+
+.uv-variants li {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--a-bg);
+    border: 1px solid var(--a-border);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 13px;
+}
+
+.uv-price { color: var(--a-text-soft); font-size: 12px; }
+
+.uv-tag {
+    font-size: 11px;
+    color: var(--a-warning);
+    border-right: 1px solid var(--a-border);
+    padding-right: 6px;
+}

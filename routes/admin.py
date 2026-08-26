@@ -208,6 +208,18 @@ def dashboard():
         .count()
     )
 
+    # ⚠️ موديلات بلا صورة — الزبون يختار الموديل ويشوف نفس الصورة
+    # تاع الموديل السابق، فيظن أنه غالط ويخرج. زيادة على هذا، ترتيب
+    # الموديلات مربوط بترتيب الصور، فالموديل بلا صورة يوقع فالآخر.
+    unlinked_variants = (
+        ProductVariant.query
+        .join(Product)
+        .filter(Product.is_active.is_(True))
+        .filter((ProductVariant.image_filename.is_(None))
+                | (ProductVariant.image_filename == ""))
+        .count()
+    )
+
     # منتجات بلا تصنيف — ما يبانوش فالفلترة
     uncategorized = Product.query.filter_by(category_id=None, is_active=True).count()
 
@@ -269,6 +281,7 @@ def dashboard():
         out_of_stock=out_of_stock,
         out_of_stock_count=out_of_stock_count,
         products_without_images=products_without_images,
+        unlinked_variants=unlinked_variants,
         uncategorized=uncategorized,
         stock_value=stock_value,
     )
@@ -306,6 +319,44 @@ def products_list():
         search=search,
         active_category=category_id,
         stock_filter=stock_filter,
+    )
+
+
+@admin_bp.route("/products/unlinked-variants")
+@login_required
+def unlinked_variants():
+    """
+    الموديلات اللي ماكانش عندها صورة مربوطة.
+
+    ⚠️ علاش صفحة مستقلة ماشي فلتر فقائمة المنتجات؟
+    القائمة تعرض **منتجات**، وهنا نحتاجو نشوفو **موديلات** — منتج
+    واحد ممكن يكون فيه 10 موديلات وواحد برك ناقصو صورة. الفلتر
+    كان يوري المنتج كامل ويخلّيك تقلّب بيدك على الموديل الناقص.
+
+    نعرضو حتى المنتجات المعطّلة، مع علامة — الأدمن يقدر يكون معطّلو
+    مؤقتًا وهو ينظّف صورو.
+    """
+    rows = (
+        ProductVariant.query
+        .join(Product)
+        .filter((ProductVariant.image_filename.is_(None))
+                | (ProductVariant.image_filename == ""))
+        .order_by(Product.is_active.desc(), Product.name, ProductVariant.id)
+        .all()
+    )
+
+    # نجمّعوهم حسب المنتج — أسرع للعين، وضغطة وحدة تصلّح عدة موديلات
+    grouped = []
+    for v in rows:
+        if grouped and grouped[-1]["product"].id == v.product_id:
+            grouped[-1]["variants"].append(v)
+        else:
+            grouped.append({"product": v.product, "variants": [v]})
+
+    return render_template(
+        "admin/unlinked_variants.html",
+        grouped=grouped,
+        total=len(rows),
     )
 
 

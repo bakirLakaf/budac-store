@@ -137,7 +137,8 @@
     </div>
 </div>
 
-{% if abandoned_new or pending_reviews_count or products_without_images or uncategorized %}
+{% if abandoned_new or pending_reviews_count or products_without_images
+      or unlinked_variants or uncategorized %}
 <h2 class="section-title">يحتاج انتباهك</h2>
 <div class="alert-grid">
     {% if abandoned_new %}
@@ -161,6 +162,14 @@
         <strong>{{ products_without_images }} منتج بلا صورة</strong>
         <p>المنتجات بلا صور تبان ضعيفة وتقلل المبيعات.</p>
         <a href="{{ url_for('admin.products_list') }}">راجع المنتجات ←</a>
+    </div>
+    {% endif %}
+
+    {% if unlinked_variants %}
+    <div class="alert-card alert-warning">
+        <strong>{{ unlinked_variants }} موديل بلا صورة</strong>
+        <p>الزبون يختار الموديل ويبقى يشوف صورة الموديل السابق.</p>
+        <a href="{{ url_for('admin.unlinked_variants') }}">شوفهم ←</a>
     </div>
     {% endif %}
 

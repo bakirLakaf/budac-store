@@ -3,6 +3,9 @@
 
 <div class="page-head">
     <h1 class="page-title">المنتجات <span class="count-pill">{{ products|length }}</span></h1>
+    <a href="{{ url_for('admin.unlinked_variants') }}" class="btn-admin btn-ghost btn-sm">
+        موديلات بلا صورة
+    </a>
     <a href="{{ url_for('admin.product_form') }}" class="btn-admin">+ منتج جديد</a>
 </div>
 
