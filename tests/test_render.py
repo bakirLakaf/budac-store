@@ -987,6 +987,28 @@ def main():
         check("مع base_url: فيها روابط منتجات",
               "https://budacdz.com/product/" in linked, linked[:80])
 
+    # ═══════ قناع رقم الهاتف ═══════
+    checkout_html = open("templates/shop/checkout.html", encoding="utf-8").read()
+    check("خانة الهاتف محدودة الطول (10 أرقام + 4 مسافات)",
+          'maxlength="14"' in checkout_html)
+    check("لوحة الأرقام فالموبايل", 'inputmode="numeric"' in checkout_html)
+    check("القناع 0X XX XX XX XX موجود", "formatPhone" in checkout_html)
+    check("القناع ينظّف رمز الدولة",
+          "00213" in checkout_html and "'213'" in checkout_html)
+    check("مثال يبان تحت الخانة", 'id="phoneHint"' in checkout_html)
+
+    # 🔴 الحد الصارم: 10 أرقام، لا أكثر — بثلاث طبقات
+    check("حد أقصى معرّف بوضوح",
+          "PHONE_MAX_DIGITS = 10" in checkout_html)
+    check("القص يستعمل الحد ماشي رقمًا مكتوبًا",
+          "slice(0, PHONE_MAX_DIGITS)" in checkout_html)
+    check("المدخل يتمنع قبل ما يدخل (beforeinput)",
+          "'beforeinput'" in checkout_html)
+    check("اللصق يتقص هو تاني",
+          "'paste'" in checkout_html and "formatPhone(text)" in checkout_html)
+    check("الحروف اللي ماشي أرقام ممنوعة",
+          "e.preventDefault()" in checkout_html)
+
     # ═══════ مشاركة رابط الموديل ═══════
     # 🔴 قبل، رابط المشاركة كان دايمًا الصفحة العامة — الزبون يشارك
     # موديلاً معيّنًا وصاحبو يلقى الموديل الافتراضي بسعر آخر.

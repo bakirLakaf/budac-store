@@ -1112,6 +1112,11 @@ class Order(db.Model):
 
     # نقطة الاستلام (للتوصيل للمكتب) — تُختار من قائمة الشركة
     pickup_point_id = db.Column(db.String(80), nullable=True)
+
+    # ⚠️ UUID تاع المكتب عند ZR (من `POST /hubs/search`). منفصل على
+    # `pickup_point_id` اللي هو **الاسم** اللي يشوفو الزبون.
+    # ZR يستنّى المعرّف، والاسم كان يترفض بـ400 فارغ.
+    hub_external_id = db.Column(db.String(64), nullable=True)
     pickup_point_name = db.Column(db.String(200), nullable=True)
 
     address_note = db.Column(db.Text, nullable=True)

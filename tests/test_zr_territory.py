@@ -241,6 +241,42 @@ def main():
           "ماشي طلبية الزبون" in src2)
 
     print("\n" + "=" * 60)
+    print("معرّف المكتب (hub)")
+    print("=" * 60)
+
+    with app.app_context():
+        # معرّف محفوظ يتستعمل بلا أي طلب لـZR
+        saved_hub = make(delivery_type="office", hub_external_id="hub-uuid-1",
+                         pickup_point_id="Hub Setif 19 مكتب سطيف")
+        hid, why = zr.resolve_hub_id(saved_hub)
+        check("معرّف الـhub المحفوظ يتستعمل مباشرة",
+              hid == "hub-uuid-1" and why is None)
+
+        home = make(delivery_type="home", commune="سطيف")
+        hid, why = zr.resolve_hub_id(home)
+        check("توصيل الدار: بلا hub", hid is None)
+
+        # 🔴 الـpayload لازم يبعث UUID ماشي الاسم
+        payload = zr.build_parcel_payload(saved_hub, "tid-1")
+        check("🔴 pickupPointId = UUID ماشي الاسم",
+              payload["pickupPointId"] == "hub-uuid-1", payload["pickupPointId"])
+
+        # بلا UUID محفوظ، الاسم يبقى كتراجع (أحسن من والو)
+        no_hub = make(delivery_type="office",
+                      pickup_point_id="Hub Setif 19 مكتب سطيف")
+        payload2 = zr.build_parcel_payload(no_hub, "tid-1")
+        check("بلا UUID: الاسم كتراجع",
+              payload2["pickupPointId"] == "Hub Setif 19 مكتب سطيف")
+
+        # hub_id ممرّر مباشرة يغلب المحفوظ
+        payload3 = zr.build_parcel_payload(no_hub, "tid-1", hub_id="fresh-uuid")
+        check("hub_id الممرّر عندو الأولوية",
+              payload3["pickupPointId"] == "fresh-uuid")
+
+    src3 = open("services/zrexpress.py", encoding="utf-8").read()
+    check("المسار الصحيح /hubs/search موجود", '"/hubs/search"' in src3)
+
+    print("\n" + "=" * 60)
     print(f"نجح: {len(PASSED)}  ·  فشل: {len(FAILED)}")
     print("=" * 60)
     if FAILED:
