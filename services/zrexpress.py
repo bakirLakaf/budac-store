@@ -369,7 +369,8 @@ def _check_parcel_data(order):
     return problems
 
 
-def build_parcel_payload(order, territory_id=None, hub_id=None):
+def build_parcel_payload(order, territory_id=None, hub_id=None,
+                         city_territory_id=None):
     """
     يبني الـpayload اللي يتبعث لـZR.
 
@@ -405,74 +406,86 @@ def build_parcel_payload(order, territory_id=None, hub_id=None):
     """
     is_office = order.delivery_type == "office"
 
-    # ⚠️ القيم الحرفية اللي يقبلها ZR — أي قيمة أخرى ترفض بـ400
+    # ⚠️ القيم الحرفية اللي يقبلها ZR — أي قيمة أخرى ترفض
     delivery_type = "pickup-point" if is_office else "home"
 
-    # ⚠️ كل نوع توصيل يبعث معلومة مختلفة:
-    #   • منزل → العنوان الدقيق ولا البلدية
-    #   • مكتب → اسم المكتب (البلدية ما عندهاش معنى هنا)
-    if is_office:
-        address = order.pickup_point_name or order.wilaya_name
-        commune = ""
-    else:
-        address = order.address_note or order.commune or order.wilaya_name
-        commune = order.commune or ""
-
-    # ⚠️ ZR يرفض العنوان الفارغ صراحةً (deliveryAddress cannot be null or
-    # empty). إذا كل الحقول فارغة، نبنيو عنوان من الولاية باش الطرد يمشي
-    # ويتصل عامل التوصيل بالزبون — أحسن من رفض الطلبية.
-    address = (address or "").strip()
-    if not address:
-        address = order.wilaya_name or order.wilaya_code or "الجزائر"
-
-    # ⚠️ نبعثو الهاتف أرقام فقط — ZR يرفض المسافات والرموز
+    # ⚠️ نبعثو الهاتف أرقام فقط — بلا مسافات ولا رموز
     phone = "".join(c for c in (order.customer_phone or "") if c.isdigit())
     if phone.startswith("00213"):
         phone = "0" + phone[5:]
     elif phone.startswith("213"):
         phone = "0" + phone[3:]
 
-    # ---------- قائمة المنتجات ----------
-    # ⚠️ نبعثو سطر واحد ثابت «أكسسوارات» بكمية 1، ماشي تفاصيل المنتجات.
-    # ليش؟
-    #   • ما نكشفوش لشركة التوصيل واش نبيعو بالضبط ولا الأسعار
-    #   • أسماء منتجات طويلة ولا رموز غريبة تسبّب رفض من ZR
-    #   • عامل التوصيل ما يحتاجش التفاصيل — يحتاج المبلغ فقط
-    # المبلغ الحقيقي يمشي فحقل amount، وهو اللي يتحصّل من الزبون.
+    # ---------- الشارع ----------
+    if is_office:
+        street = order.pickup_point_name or order.wilaya_name or ""
+    else:
+        street = order.address_note or order.commune or order.wilaya_name or ""
+
+    street = (street or "").strip() or (order.wilaya_name or "الجزائر")
+
+    # ---------- المنتجات ----------
+    # ⚠️ سطر واحد ثابت «أكسسوارات»: ما نكشفوش لشركة التوصيل واش نبيعو
+    # ولا بأشمن سعر. المبلغ الحقيقي يمشي فـ`amount`.
+    #
+    # 🔴 `stockType` يقبل **"local" ولا "warehouse"** برك (من التوثيق).
+    # كنا نبعثو "none" — قيمة ما كاينةش، وهي وحدها كافية للرفض.
+    # 🔴 السعر اسمو `unitPrice` ماشي `price`.
     ordered_products = [{
         "productName": ZR_PRODUCT_LABEL,
         "quantity": 1,
-        "price": order.total,
-        "stockType": "none",
+        "unitPrice": order.total,
+        "stockType": "local",
     }]
 
-    description = ZR_PRODUCT_LABEL
-
+    # ══════════════════════════════════════════════════════════
+    # 🔴 الشكل الصحيح — من التوثيق الرسمي (POST /parcels)
+    #
+    # خمس جولات تخمين راحو لأن الـpayload القديم كان **بشكل تاني
+    # كليًا**: حقول مسطّحة (customerName, customerPhone, wilaya,
+    # commune, reference, price...) بينما ZR يستنّى **كائنات
+    # متداخلة**: customer{} · deliveryAddress{} · hubId · externalId.
+    #
+    # ASP.NET يتجاهل الحقول اللي ما يعرفهاش بصمت، ومن بعد يرفض لأن
+    # الحقول الحقيقية ناقصة — ويرد **400 بحجم 0**، بلا ما يقول واش
+    # ناقص. هذا يفسّر كل شي شفناه.
+    # ══════════════════════════════════════════════════════════
     payload = {
-        "customerName": (order.customer_name or "").strip(),
-        "customerPhone": phone,
-        # ⚠️ الاسم الصحيح عند ZR هو deliveryAddress
-        "deliveryAddress": address,
-        "commune": commune,
-        "wilaya": order.wilaya_name or "",
-        "amount": order.total,
-        "deliveryType": delivery_type,
-        "description": description,
+        "customer": {
+            "name": (order.customer_name or "").strip(),
+            "phone": {"number1": phone},
+        },
+        "deliveryAddress": {
+            # cityTerritoryId = الولاية · districtTerritoryId = البلدية
+            "street": street,
+        },
         "orderedProducts": ordered_products,
-        "reference": order.order_number,
-        "note": order.customer_note or "",
+        "deliveryType": delivery_type,
+        "description": ZR_PRODUCT_LABEL,
+        "amount": order.total,
+        # ⚠️ مرجعنا اسمو عندهم `externalId` ماشي `reference`
+        "externalId": order.order_number,
     }
 
-    if is_office:
-        # ⚠️ الأفضلية لـUUID تاع الـhub. الاسم يبقى كتراجع برك —
-        # ZR يستعمل UUID فكل شي آخر، والأرجح أنه يرفض الاسم بصمت
-        # (400 بحجم 0، بالضبط اللي كنا نشوفو).
-        pickup = hub_id or order.hub_external_id or order.pickup_point_id
-        if pickup:
-            payload["pickupPointId"] = pickup
+    # الولاية
+    city_id = city_territory_id or order.wilaya_external_id
+    if not city_id:
+        try:
+            city_id = lookup_wilaya_territory_id(order.wilaya_code)
+        except Exception:
+            city_id = None
+    if city_id:
+        payload["deliveryAddress"]["cityTerritoryId"] = city_id
 
+    # البلدية
     if territory_id:
-        payload["territoryId"] = territory_id
+        payload["deliveryAddress"]["districtTerritoryId"] = territory_id
+
+    if is_office:
+        # 🔴 المكتب اسمو `hubId` فالجذر — ماشي `pickupPointId`
+        hub = hub_id or order.hub_external_id
+        if hub:
+            payload["hubId"] = hub
 
     return payload
 
@@ -493,11 +506,31 @@ def create_parcel(order, territory_id=None, hub_id=None):
 
     data = _request("POST", "/parcels", json=payload)
 
+    # 🔴 الرد تاع الإنشاء فيه `{"id": "..."}` **برك** — ماكانش رقم
+    # تتبّع (من التوثيق: 201 Created). لازم نداء ثاني باش نجيبوه.
+    parcel_id = data.get("id") if isinstance(data, dict) else None
+
     tracking = (
         data.get("trackingNumber")
         or data.get("tracking_number")
         or (data.get("data") or {}).get("trackingNumber")
     )
+
+    if not tracking and parcel_id:
+        try:
+            detail = _request("GET", f"/parcels/{parcel_id}")
+            tracking = (detail or {}).get("trackingNumber")
+        except Exception as e:
+            # ⚠️ الطرد **اتنشأ فعلاً** — ما نرميوش خطأ ونخلّيو الأدمن
+            # يظن أنه فشل ويعاود يبعث ويخلق طردًا ثانيًا.
+            try:
+                from flask import current_app
+                current_app.logger.warning(
+                    "📦 الطرد %s اتنشأ لكن ما جبناش رقم التتبّع: %s",
+                    parcel_id, e,
+                )
+            except Exception:
+                pass
 
     if not tracking:
         raise ZRError("ZR Express ما رجعش رقم تتبّع — راجع الطلبية عندهم")
@@ -632,6 +665,34 @@ def _build_territory_index(force=False):
 
     _territory_index = index
     return index
+
+
+def lookup_wilaya_territory_id(wilaya_code):
+    """
+    معرّف **الولاية** عند ZR (`cityTerritoryId`).
+
+    ⚠️ ZR عندو نوعين مناطق: `wilaya` (54) و`commune` (1531). الطرد
+    يحتاج الجوج: الولاية فـ`cityTerritoryId`، والبلدية فـ
+    `districtTerritoryId`.
+
+    مناطق الولاية عندها `code` = رمز الولاية الرسمي (25 = قسنطينة)،
+    فالمطابقة مباشرة. البلديات عندها ترقيم داخلي مختلف.
+    """
+    if not wilaya_code:
+        return None
+
+    try:
+        wanted = int(str(wilaya_code).lstrip("0") or "0")
+    except ValueError:
+        return None
+
+    for item in get_territories():
+        if (item.get("level") or "").lower() != "wilaya":
+            continue
+        if item.get("code") == wanted:
+            return item.get("id")
+
+    return None
 
 
 def lookup_territory_id(wilaya_code, commune_name):
@@ -1187,8 +1248,11 @@ def search_hubs(page_size=500):
     الأرجح أن `pickupPointId` يستنّى **UUID تاع الـhub** ماشي اسمو،
     وهذا يفسّر الـ400 الفارغ.
     """
+    # 🔴 `_request(method, path, **kwargs)` — الجسم لازم `json=`.
+    # بلاه: TypeError → صفحة 500 كاملة بدل رسالة خطأ. (غلطة صدرت مني
+    # وطاحت فالإنتاج — علاش زدنا فحصًا يمنعها تحت.)
     data = _request("POST", "/hubs/search",
-                    {"pageNumber": 1, "pageSize": page_size})
+                    json={"pageNumber": 1, "pageSize": page_size})
 
     items = data.get("items") if isinstance(data, dict) else data
     return items or []
@@ -1228,6 +1292,22 @@ def find_hub_id(office_name, wilaya_code=None):
             return same[0].get("id"), hub_name(same[0])
 
     return None, None
+
+
+def resolve_city_id(order):
+    """معرّف الولاية عند ZR — محفوظ ولا نجيبوه ونحفظوه."""
+    if order.wilaya_external_id:
+        return order.wilaya_external_id, None
+
+    try:
+        found = lookup_wilaya_territory_id(order.wilaya_code)
+    except Exception as e:
+        return None, f"فشل البحث عن الولاية: {e}"
+
+    if not found:
+        return None, f"ما لقيناش الولاية {order.wilaya_code} فمناطق ZR"
+
+    return found, None
 
 
 def resolve_hub_id(order):
@@ -1395,15 +1475,17 @@ def lab_dimensions(order, territory_id=None, test_amount=100):
     base = build_parcel_payload(order, territory_id)
     stamp = int(_time.time())
 
+    import copy as _copy
+
     def make(label, **over):
-        p = dict(base)
-        # ⚠️ مرجع فريد فكل محاولة — إذا ZR يرفض المرجع المكرر،
-        # هاد الشي وحدو يقدر يكون السبب، وما نعرفوهش بلا ما نجرّبو.
-        p["reference"] = f"TEST-{stamp}-{len(variants) + 1}"
+        p = _copy.deepcopy(base)
+        # ⚠️ مرجع فريد فكل محاولة: إذا ZR يرفض المرجع المكرر،
+        # هاد الشي وحدو يقدر يكون السبب.
+        p["externalId"] = f"TEST-{stamp}-{len(variants) + 1}"
         p["amount"] = test_amount
         p["orderedProducts"] = [{
             "productName": ZR_PRODUCT_LABEL, "quantity": 1,
-            "price": test_amount, "stockType": "none",
+            "unitPrice": test_amount, "stockType": "local",
         }]
         p.update(over)
         return (label, p)
@@ -1412,63 +1494,40 @@ def lab_dimensions(order, territory_id=None, test_amount=100):
     commune = office_commune(order) or order.commune or ""
 
     # 1) 🔴 البُعد الأهم: توصيل للدار — ما جرّبناهش عمرنا
-    v = make("توصيل للدار (نفس الوجهة)",
-             deliveryType="home",
-             commune=commune,
-             deliveryAddress=commune or order.wilaya_name or "وسط المدينة")
-    v[1].pop("pickupPointId", None)
+    v = make("توصيل للدار (نفس الوجهة)", deliveryType="home")
+    v[1].pop("hubId", None)
     variants.append(v)
 
-    # 2) الحد الأدنى: غير الحقول اللي ZR صرّح أنها إجبارية
+    # 2) الحد الأدنى: غير الحقول اللي التوثيق يقول أنها إجبارية
     minimal = {
-        "customerName": base["customerName"],
-        "customerPhone": base["customerPhone"],
-        "deliveryAddress": commune or order.wilaya_name or "وسط المدينة",
-        "wilaya": base["wilaya"],
-        "amount": test_amount,
-        "deliveryType": "home",
-        "description": ZR_PRODUCT_LABEL,
+        "customer": _copy.deepcopy(base["customer"]),
+        "deliveryAddress": _copy.deepcopy(base["deliveryAddress"]),
         "orderedProducts": [{
             "productName": ZR_PRODUCT_LABEL, "quantity": 1,
-            "price": test_amount, "stockType": "none",
+            "unitPrice": test_amount, "stockType": "local",
         }],
-        "reference": f"TEST-{stamp}-min",
+        "deliveryType": "home",
+        "description": ZR_PRODUCT_LABEL,
+        "amount": test_amount,
     }
-    if territory_id:
-        minimal["territoryId"] = territory_id
     variants.append(("الحد الأدنى تاع الحقول", minimal))
 
-    # 3) بلا territoryId أصلاً — يمكن المعرّف اللي لقيناه ماشي هو المطلوب
-    v = make("للدار بلا territoryId", deliveryType="home", commune=commune,
-             deliveryAddress=commune or order.wilaya_name or "وسط المدينة")
-    v[1].pop("territoryId", None)
-    v[1].pop("pickupPointId", None)
+    # 3) بلا districtTerritoryId (البلدية)
+    v = make("للدار بلا البلدية", deliveryType="home")
+    v[1]["deliveryAddress"].pop("districtTerritoryId", None)
+    v[1].pop("hubId", None)
     variants.append(v)
 
-    # 4) مبلغ كبير معقول — نستبعدو حد المبلغ الصغير
-    v = make("للدار بمبلغ 2000", deliveryType="home", commune=commune,
-             amount=2000,
-             deliveryAddress=commune or order.wilaya_name or "وسط المدينة")
-    v[1]["orderedProducts"] = [{
-        "productName": ZR_PRODUCT_LABEL, "quantity": 1,
-        "price": 2000, "stockType": "none",
-    }]
-    v[1].pop("pickupPointId", None)
+    # 4) بلا cityTerritoryId (الولاية)
+    v = make("للدار بلا الولاية", deliveryType="home")
+    v[1]["deliveryAddress"].pop("cityTerritoryId", None)
+    v[1].pop("hubId", None)
     variants.append(v)
 
-    # 5) بلا حروف عربية أصلاً — نستبعدو مشكل ترميز فبيانات الزبون
-    v = make("بلا عربية (اسم ووصف لاتيني)",
-             deliveryType="home",
-             customerName="Test Client",
-             description="Accessoires",
-             wilaya=base["wilaya"],
-             commune=commune,
-             deliveryAddress="Centre ville")
-    v[1]["orderedProducts"] = [{
-        "productName": "Accessoires", "quantity": 1,
-        "price": test_amount, "stockType": "none",
-    }]
-    v[1].pop("pickupPointId", None)
+    # 5) stockType = warehouse
+    v = make("للدار بـstockType=warehouse", deliveryType="home")
+    v[1]["orderedProducts"][0]["stockType"] = "warehouse"
+    v[1].pop("hubId", None)
     variants.append(v)
 
     attempts = []
@@ -1517,35 +1576,37 @@ def send_variants(order, territory_id=None):
     variants = []
 
     if is_office:
-        commune = office_commune(order) or ""
-
-        # 1) بلا pickupPointId — يمكن ZR يحدّد المكتب من territoryId وحدو
+        # 1) بلا hubId — يمكن الوجهة تكفي
         v1 = dict(base)
-        v1.pop("pickupPointId", None)
-        variants.append(("بلا pickupPointId (المكتب من territoryId)", v1))
+        v1.pop("hubId", None)
+        variants.append(("بلا hubId (الوجهة برك)", v1))
 
-        # 2) بلا pickupPointId + البلدية معمّرة
-        v2 = dict(v1)
-        v2["commune"] = commune
-        variants.append(("بلا pickupPointId + commune معمّرة", v2))
+        # 2) بلا districtTerritoryId — يمكن الولاية تكفي للمكتب
+        import copy
+        v2 = copy.deepcopy(base)
+        v2["deliveryAddress"].pop("districtTerritoryId", None)
+        variants.append(("بلا districtTerritoryId", v2))
 
-        # 3) pickupPointId + البلدية معمّرة
-        v3 = dict(base)
-        v3["commune"] = commune
-        variants.append(("pickupPointId بالاسم + commune معمّرة", v3))
+        # 3) stockType = warehouse بدل local
+        v3 = copy.deepcopy(base)
+        for prod in v3["orderedProducts"]:
+            prod["stockType"] = "warehouse"
+        variants.append(("stockType = warehouse", v3))
 
-        # 4) عنوان قصير بلا شرطة ولا خليط لغات
-        v4 = dict(v1)
-        v4["deliveryAddress"] = commune or order.wilaya_name or ""
-        variants.append(("بلا pickupPointId + عنوان بسيط", v4))
+        # 4) بلا externalId — يمكن المرجع المكرر يترفض
+        v4 = copy.deepcopy(base)
+        v4.pop("externalId", None)
+        variants.append(("بلا externalId", v4))
     else:
-        v1 = dict(base)
-        v1["commune"] = order.commune or ""
-        variants.append(("commune معمّرة", v1))
+        import copy
+        v1 = copy.deepcopy(base)
+        v1["deliveryAddress"].pop("districtTerritoryId", None)
+        variants.append(("بلا districtTerritoryId", v1))
 
-        v2 = dict(base)
-        v2.pop("commune", None)
-        variants.append(("بلا حقل commune أصلاً", v2))
+        v2 = copy.deepcopy(base)
+        for prod in v2["orderedProducts"]:
+            prod["stockType"] = "warehouse"
+        variants.append(("stockType = warehouse", v2))
 
     attempts = []
 

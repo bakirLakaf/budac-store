@@ -3,6 +3,15 @@
 
 <h1 class="page-title">تشخيص ZR — {{ order.order_number }}</h1>
 
+{% if diag_error %}
+{# ⚠️ نداء تشخيصي طاح — نوريو السبب بدل ما نخبّيوه ولا ننهارو #}
+<div class="lp-errors" style="background:#FDEBDA;border:1px solid #E8C9A8;
+     padding:12px 16px;border-radius:12px;margin-bottom:14px;">
+    <strong>⚠️ نداء تشخيصي ما كملش:</strong>
+    <code dir="ltr" style="font-size:12px;">{{ diag_error }}</code>
+</div>
+{% endif %}
+
 <p style="margin: -8px 0 20px;">
     <a href="{{ url_for('admin.order_detail', order_id=order.id) }}">← رجوع للطلبية</a>
 </p>

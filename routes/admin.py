@@ -1945,7 +1945,7 @@ def order_send_to_carrier(order_id):
     """
     from services.zrexpress import (
         create_parcel, ZRError, resolve_territory_id, resolve_hub_id,
-        is_configured,
+        resolve_city_id, is_configured,
     )
 
     order = db.session.get(Order, order_id) or abort(404)
@@ -1974,6 +1974,13 @@ def order_send_to_carrier(order_id):
 
     # ⚠️ للمكتب: نجيبو UUID تاع الـhub. ZR يستنّى المعرّف ماشي الاسم —
     # هاد الشي هو أرجح سبب الـ400 الفارغ اللي دام 5 جولات.
+    city_id, city_why = resolve_city_id(order)
+    if city_id and not order.wilaya_external_id:
+        order.wilaya_external_id = city_id
+        db.session.commit()
+    elif not city_id:
+        flash(f"⚠️ ما لقيناش معرّف الولاية عند ZR ({city_why})", "warning")
+
     hub_id, hub_why = resolve_hub_id(order)
     if hub_id and not order.hub_external_id:
         order.hub_external_id = hub_id
@@ -2267,6 +2274,21 @@ def landing_delete(page_id):
     return redirect(url_for("admin.landing_list"))
 
 
+def _safe(fn, *args):
+    """
+    ينفّذ نداء تشخيصي ويرجّع None إذا طاح، مع تسجيل السبب.
+
+    ⚠️ صفحة التشخيص لازم تحلّ **دايمًا**. إذا انهارت كي ZR يطيح،
+    الأدمن يبقى بلا أي معلومة — وهي أسوأ حالة ممكنة.
+    """
+    try:
+        return fn(*args)
+    except Exception as e:
+        current_app.logger.warning("🔍 نداء تشخيصي طاح: %s", e)
+        session["zr_diag_error"] = str(e)
+        return None
+
+
 @admin_bp.route("/orders/<int:order_id>/zr-debug")
 @login_required
 def order_zr_debug(order_id):
@@ -2304,7 +2326,7 @@ def order_zr_debug(order_id):
         # ⚠️ للمكتب نشخّصو على **بلدية المكتب** ماشي على `commune`
         # الفارغة — وإلا التشخيص يقول «ما لقيناش» بلا ما يقول واش دوّر.
         territory_diag=(
-            zr.diagnose_territory_lookup(
+            _safe(zr.diagnose_territory_lookup,
                 order.wilaya_code,
                 zr.office_commune(order) if order.delivery_type == "office"
                 else order.commune,
@@ -2313,23 +2335,23 @@ def order_zr_debug(order_id):
         ),
         # نتائج مختبر الإرسال (إذا اتشغّل قبل شوية)
         lab=session.pop("zr_lab", None),
-        hubs=(
-            zr.search_hubs() if request.args.get("hubs") else None
-        ),
+        # ⚠️ كل نداء لـZR ملفوف: صفحة **التشخيص** ما لازمش تنهار كي
+        # ZR يطيح — هي بالضبط الصفحة اللي نجيو ليها كي يطيح شي حاجة.
+        # (طاحت 500 فالإنتاج علاه.)
+        hubs=_safe(zr.search_hubs) if request.args.get("hubs") else None,
         hub_match=(
-            zr.resolve_hub_id(order) if request.args.get("hubs") else None
+            _safe(zr.resolve_hub_id, order) if request.args.get("hubs") else None
         ),
-        spec=(
-            zr.fetch_openapi_spec() if request.args.get("spec") else None
-        ),
+        spec=_safe(zr.fetch_openapi_spec) if request.args.get("spec") else None,
         endpoint_probe=(
-            zr.probe_pickup_endpoints()
+            _safe(zr.probe_pickup_endpoints)
             if request.args.get("probe") else None
         ),
         levels=(
-            zr.inspect_territory_levels()
+            _safe(zr.inspect_territory_levels)
             if request.args.get("levels") else None
         ),
+        diag_error=session.pop("zr_diag_error", None),
         last=zr.LAST_EXCHANGE,
         last_payload=(
             __import__("json").dumps(zr.LAST_EXCHANGE.get("payload"),
@@ -2475,6 +2497,12 @@ def order_zr_send_test(order_id):
         flash(f"ما لقيناش معرّف الوجهة ({why}) — شوف القسم 3ب تحت", "warning")
 
     # نفس الشي للمكتب: UUID تاع الـhub
+    city_id, city_why = zr.resolve_city_id(order)
+    if city_id and not order.wilaya_external_id:
+        order.wilaya_external_id = city_id
+        db.session.commit()
+        flash(f"لقينا معرّف الولاية وحفظناه: {city_id}", "success")
+
     hub_id, hub_why = zr.resolve_hub_id(order)
     if hub_id and not order.hub_external_id:
         order.hub_external_id = hub_id
