@@ -1117,6 +1117,10 @@ class Order(db.Model):
     # `pickup_point_id` اللي هو **الاسم** اللي يشوفو الزبون.
     # ZR يستنّى المعرّف، والاسم كان يترفض بـ400 فارغ.
     hub_external_id = db.Column(db.String(64), nullable=True)
+
+    # ⚠️ UUID تاع **الولاية** عند ZR (`cityTerritoryId`). البلدية
+    # محفوظة فـ`commune_external_id` (`districtTerritoryId`).
+    wilaya_external_id = db.Column(db.String(64), nullable=True)
     pickup_point_name = db.Column(db.String(200), nullable=True)
 
     address_note = db.Column(db.Text, nullable=True)

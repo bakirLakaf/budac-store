@@ -987,6 +987,44 @@ def main():
         check("مع base_url: فيها روابط منتجات",
               "https://budacdz.com/product/" in linked, linked[:80])
 
+    # ═══════ صفحة تشخيص ZR — كل أزرارها ═══════
+    # 🔴 علاش هاد الفحص؟ خلل `_request` طاح فالإنتاج كصفحة 500، لأن
+    # ماكانش فحص يفتح الصفحة بأقسامها. درك نفتحو كل قسم ونتأكد أنها
+    # ما تنهارش — حتى بلا مفاتيح ZR (لازم ترد برسالة، ماشي 500).
+    section("تشخيص ZR — الصفحة وأقسامها")
+    with app.app_context():
+        _zo = _O3(order_number="ZR-TEST-1", customer_name="فحص",
+                  customer_phone="0555000000", wilaya_code="19",
+                  wilaya_name="سطيف", total=1000, subtotal=800,
+                  shipping_price=200, delivery_type="office",
+                  pickup_point_id="Hub Setif 19 مكتب سطيف",
+                  status="confirmed")
+        db.session.add(_zo)
+        db.session.commit()
+        zid = _zo.id
+
+    for suffix, label in [
+        ("", "الصفحة الأساسية"),
+        ("?hubs=1", "قسم المكاتب"),
+        ("?spec=1", "قسم مخطط الـAPI"),
+        ("?probe=1", "قسم استكشاف المسارات"),
+        ("?levels=1", "قسم أنواع المناطق"),
+    ]:
+        r = client.get(f"/admin/orders/{zid}/zr-debug{suffix}")
+        check(f"تشخيص ZR — {label}: ما ينهارش",
+              r.status_code == 200, r.status_code)
+
+    # الأزرار (POST) — بلا مفاتيح لازم ترد بتحويل مع رسالة، ماشي 500
+    for path, label in [
+        (f"/admin/orders/{zid}/zr-send-test", "زر التجربة"),
+        (f"/admin/orders/{zid}/zr-lab", "مختبر الأشكال"),
+        (f"/admin/orders/{zid}/zr-lab-dims", "مختبر الأبعاد"),
+        (f"/admin/orders/{zid}/send-to-carrier", "الإرسال الحقيقي"),
+    ]:
+        r = client.post(path)
+        check(f"{label}: ما ينهارش بلا مفاتيح",
+              r.status_code in (200, 302), r.status_code)
+
     # ═══════ قناع رقم الهاتف ═══════
     checkout_html = open("templates/shop/checkout.html", encoding="utf-8").read()
     check("خانة الهاتف محدودة الطول (10 أرقام + 4 مسافات)",

@@ -108,13 +108,35 @@ def main():
         print("=" * 60)
 
         payload = zr.build_parcel_payload(saved, "abc-123")
-        check("territoryId يدخل فالـpayload",
-              payload.get("territoryId") == "abc-123", payload.get("territoryId"))
+
+        # 🔴 الشكل الرسمي من توثيق ZR: كائنات متداخلة ماشي حقول مسطّحة.
+        # خمس جولات تخمين راحو لأن الشكل القديم كان غالطًا كليًا.
+        check("البلدية فـdeliveryAddress.districtTerritoryId",
+              payload["deliveryAddress"].get("districtTerritoryId") == "abc-123",
+              payload["deliveryAddress"])
         check("deliveryType = pickup-point",
               payload["deliveryType"] == "pickup-point")
-        check("pickupPointId يتبعث",
-              payload.get("pickupPointId") == "Hub Setif 19 مكتب سطيف")
-        check("العنوان ماشي فارغ (ZR يرفضو)", bool(payload["deliveryAddress"]))
+        check("الزبون كائن متداخل customer{name, phone{number1}}",
+              payload["customer"]["phone"]["number1"] == "0775297494",
+              payload.get("customer"))
+        check("الشارع ماشي فارغ", bool(payload["deliveryAddress"]["street"]))
+        check("🔴 المرجع اسمو externalId ماشي reference",
+              payload.get("externalId") == "BD-970966"
+              and "reference" not in payload, list(payload))
+        check("🔴 السعر اسمو unitPrice ماشي price",
+              payload["orderedProducts"][0].get("unitPrice") == 0
+              or "unitPrice" in payload["orderedProducts"][0],
+              payload["orderedProducts"][0])
+        check("🔴 stockType = local (ماشي none — قيمة ما كاينةش)",
+              payload["orderedProducts"][0]["stockType"] in ("local", "warehouse"),
+              payload["orderedProducts"][0]["stockType"])
+        check("🔴 ماكانش حقول الشكل القديم",
+              not any(k in payload for k in
+                      ("customerName", "customerPhone", "wilaya",
+                       "commune", "pickupPointId", "territoryId")),
+              [k for k in payload if k in
+               ("customerName", "customerPhone", "wilaya", "commune",
+                "pickupPointId", "territoryId")])
 
     print("\n" + "=" * 60)
     print("مسار الإرسال")
@@ -159,13 +181,13 @@ def main():
             zr.requests.post = real_post
 
         check("يجرّب 4 أشكال للمكتب", len(attempts) == 4, len(attempts))
-        check("الشكل الأول بلا pickupPointId",
-              "pickupPointId" not in calls[0], calls[0].keys())
-        check("شكل بالبلدية معمّرة موجود",
-              any(c.get("commune") == "Setif" for c in calls),
-              [c.get("commune") for c in calls])
-        check("كل الأشكال فيها territoryId",
-              all(c.get("territoryId") == "tid-1" for c in calls))
+        check("الشكل الأول بلا hubId", "hubId" not in calls[0], list(calls[0]))
+        check("كاين شكل بلا البلدية",
+              any("districtTerritoryId" not in c["deliveryAddress"]
+                  for c in calls))
+        check("كاين شكل بـstockType=warehouse",
+              any(c["orderedProducts"][0]["stockType"] == "warehouse"
+                  for c in calls))
         check("كل الأشكال deliveryType = pickup-point",
               all(c["deliveryType"] == "pickup-point" for c in calls))
 
@@ -217,24 +239,26 @@ def main():
         check("🔴 كل المبالغ تجريبية (ماشي 3360)",
               all(c["amount"] != 3360 for c in calls),
               [c["amount"] for c in calls])
+        # ⚠️ «الحد الأدنى» بلا externalId عمدًا — نفحصو اللي فيهم برك
+        refs = [c["externalId"] for c in calls if "externalId" in c]
         check("المراجع كلها TEST وفريدة",
-              all(str(c["reference"]).startswith("TEST") for c in calls)
-              and len({c["reference"] for c in calls}) == 5,
-              [c["reference"] for c in calls])
+              all(str(r).startswith("TEST") for r in refs)
+              and len(set(refs)) == len(refs), refs)
         check("سعر المنتج يطابق المبلغ فكل محاولة",
-              all(c["orderedProducts"][0]["price"] == c["amount"] for c in calls),
-              [(c["amount"], c["orderedProducts"][0]["price"]) for c in calls])
+              all(c["orderedProducts"][0]["unitPrice"] == c["amount"]
+                  for c in calls),
+              [(c["amount"], c["orderedProducts"][0]["unitPrice"]) for c in calls])
 
         check("كاين بُعد «للدار»",
               any(c["deliveryType"] == "home" for c in calls))
-        check("ماكانش pickupPointId فأبعاد الدار",
-              all("pickupPointId" not in c for c in calls
+        check("ماكانش hubId فأبعاد الدار",
+              all("hubId" not in c for c in calls
                   if c["deliveryType"] == "home"))
-        check("كاين بُعد بلا territoryId",
-              any("territoryId" not in c for c in calls))
-        check("كاين بُعد بلا حروف عربية",
-              any(not any("\u0600" <= ch <= "\u06FF" for ch in c["customerName"])
-                  for c in calls), [c["customerName"] for c in calls])
+        check("كاين بُعد بلا معرّف الولاية",
+              any("cityTerritoryId" not in c["deliveryAddress"] for c in calls))
+        check("كاين بُعد بلا معرّف البلدية",
+              any("districtTerritoryId" not in c["deliveryAddress"]
+                  for c in calls))
 
     src2 = open("routes/admin.py", encoding="utf-8").read()
     check("🔴 الطرد التجريبي ما يتحفظش كرقم تتبّع للطلبية",
@@ -256,25 +280,42 @@ def main():
         hid, why = zr.resolve_hub_id(home)
         check("توصيل الدار: بلا hub", hid is None)
 
-        # 🔴 الـpayload لازم يبعث UUID ماشي الاسم
+        # 🔴 المكتب اسمو hubId فالجذر، وقيمتو UUID
         payload = zr.build_parcel_payload(saved_hub, "tid-1")
-        check("🔴 pickupPointId = UUID ماشي الاسم",
-              payload["pickupPointId"] == "hub-uuid-1", payload["pickupPointId"])
+        check("🔴 hubId = UUID فالجذر", payload.get("hubId") == "hub-uuid-1",
+              payload.get("hubId"))
 
-        # بلا UUID محفوظ، الاسم يبقى كتراجع (أحسن من والو)
+        # ⚠️ بلا UUID ما نبعثوش الاسم: ZR يستنّى UUID، والاسم يترفض
         no_hub = make(delivery_type="office",
                       pickup_point_id="Hub Setif 19 مكتب سطيف")
         payload2 = zr.build_parcel_payload(no_hub, "tid-1")
-        check("بلا UUID: الاسم كتراجع",
-              payload2["pickupPointId"] == "Hub Setif 19 مكتب سطيف")
+        check("بلا UUID: ما نبعثوش الاسم بدلو",
+              "hubId" not in payload2, payload2.get("hubId"))
 
-        # hub_id ممرّر مباشرة يغلب المحفوظ
         payload3 = zr.build_parcel_payload(no_hub, "tid-1", hub_id="fresh-uuid")
         check("hub_id الممرّر عندو الأولوية",
-              payload3["pickupPointId"] == "fresh-uuid")
+              payload3.get("hubId") == "fresh-uuid")
 
     src3 = open("services/zrexpress.py", encoding="utf-8").read()
     check("المسار الصحيح /hubs/search موجود", '"/hubs/search"' in src3)
+
+    # 🔴 فحص بنيوي: `_request(method, path, **kwargs)` — أي جسم ممرّر
+    # موقعيًا يرمي TypeError، والنتيجة صفحة 500 كاملة عند الزبون.
+    # هاد الخلل طاح فالإنتاج فعلاً، فالفحص يمنع رجوعو.
+    import ast as _ast
+    bad_calls = [
+        node.lineno for node in _ast.walk(_ast.parse(src3))
+        if isinstance(node, _ast.Call)
+        and getattr(node.func, "id", None) == "_request"
+        and len(node.args) > 2
+    ]
+    check("🔴 كل نداءات _request تمرّر الجسم بـjson=",
+          not bad_calls, f"أسطر: {bad_calls}")
+
+    # ونفس الشي: كل دوال ZR اللي ينادوها المسارات لازم تكون موجودة
+    for fn in ["search_hubs", "find_hub_id", "resolve_hub_id",
+               "fetch_openapi_spec", "lab_dimensions", "send_variants"]:
+        check(f"الدالة {fn} موجودة", hasattr(zr, fn))
 
     print("\n" + "=" * 60)
     print(f"نجح: {len(PASSED)}  ·  فشل: {len(FAILED)}")
