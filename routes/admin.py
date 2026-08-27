@@ -1944,7 +1944,8 @@ def order_send_to_carrier(order_id):
     يقدر يبعثها يدويًا أو يعاود يجرّب. ما نخسروش بيعة بسبب مشكل شبكة.
     """
     from services.zrexpress import (
-        create_parcel, ZRError, resolve_territory_id, is_configured,
+        create_parcel, ZRError, resolve_territory_id, resolve_hub_id,
+        is_configured,
     )
 
     order = db.session.get(Order, order_id) or abort(404)
@@ -1971,6 +1972,15 @@ def order_send_to_carrier(order_id):
     # والمكتب من بلدية المكتب نفسو.
     territory_id, why = resolve_territory_id(order)
 
+    # ⚠️ للمكتب: نجيبو UUID تاع الـhub. ZR يستنّى المعرّف ماشي الاسم —
+    # هاد الشي هو أرجح سبب الـ400 الفارغ اللي دام 5 جولات.
+    hub_id, hub_why = resolve_hub_id(order)
+    if hub_id and not order.hub_external_id:
+        order.hub_external_id = hub_id
+        db.session.commit()
+    elif order.delivery_type == "office" and not hub_id:
+        flash(f"⚠️ ما لقيناش معرّف المكتب عند ZR ({hub_why})", "warning")
+
     if territory_id and not order.commune_external_id:
         order.commune_external_id = territory_id
         db.session.commit()
@@ -1984,7 +1994,7 @@ def order_send_to_carrier(order_id):
         )
 
     try:
-        result = create_parcel(order, territory_id=territory_id)
+        result = create_parcel(order, territory_id=territory_id, hub_id=hub_id)
     except ZRError as e:
         flash(f"ما قدرناش نبعثو الطلبية: {e}", "error")
         return redirect(url_for("admin.order_detail", order_id=order.id))
@@ -2303,6 +2313,15 @@ def order_zr_debug(order_id):
         ),
         # نتائج مختبر الإرسال (إذا اتشغّل قبل شوية)
         lab=session.pop("zr_lab", None),
+        hubs=(
+            zr.search_hubs() if request.args.get("hubs") else None
+        ),
+        hub_match=(
+            zr.resolve_hub_id(order) if request.args.get("hubs") else None
+        ),
+        spec=(
+            zr.fetch_openapi_spec() if request.args.get("spec") else None
+        ),
         endpoint_probe=(
             zr.probe_pickup_endpoints()
             if request.args.get("probe") else None
@@ -2455,8 +2474,17 @@ def order_zr_send_test(order_id):
     elif not territory_id:
         flash(f"ما لقيناش معرّف الوجهة ({why}) — شوف القسم 3ب تحت", "warning")
 
+    # نفس الشي للمكتب: UUID تاع الـhub
+    hub_id, hub_why = zr.resolve_hub_id(order)
+    if hub_id and not order.hub_external_id:
+        order.hub_external_id = hub_id
+        db.session.commit()
+        flash(f"لقينا معرّف المكتب (hub) وحفظناه: {hub_id}", "success")
+    elif order.delivery_type == "office" and not hub_id:
+        flash(f"ما لقيناش معرّف المكتب ({hub_why})", "warning")
+
     try:
-        zr.create_parcel(order, territory_id=territory_id)
+        zr.create_parcel(order, territory_id=territory_id, hub_id=hub_id)
         flash("نجح الإرسال التجريبي — شوف الرد تحت", "success")
     except Exception as e:
         flash(f"فشل: {e}", "error")

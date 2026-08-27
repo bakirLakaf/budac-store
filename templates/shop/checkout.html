@@ -18,8 +18,14 @@
 
                 <label class="field">
                     <span>رقم الهاتف *</span>
-                    <input type="tel" name="phone" required inputmode="tel" value="{{ form.get('phone', '') }}"
-                           placeholder="0X XX XX XX XX">
+                    {# ⚠️ maxlength=14 = 10 أرقام + 4 مسافات.
+                       inputmode=numeric يفتح لوحة الأرقام فالموبايل. #}
+                    <input type="tel" name="phone" id="phoneInput" required
+                           inputmode="numeric" autocomplete="tel"
+                           maxlength="14" value="{{ form.get('phone', '') }}"
+                           placeholder="0X XX XX XX XX"
+                           aria-describedby="phoneHint">
+                    <small class="field-hint" id="phoneHint">مثال: 06 66 25 52 00</small>
                 </label>
 
                 <h2 class="summary-title">التوصيل</h2>
@@ -518,6 +524,96 @@
     // ⚠️ تبديل الشركة يقدر يبدّل **وجود** خيار المكتب أصلاً،
     // ماشي غير محتوى القائمة.
     carrier.addEventListener('change', syncOfficeOption);
+
+    /* ══════════════════════════════════════════════════════════
+       قناع رقم الهاتف: 0X XX XX XX XX
+       ⚠️ نقبلو **الأرقام برك**، ونحطو المسافات وحدنا. الزبون اللي
+       يلصق رقمًا بـ+213 ولا بشرطات، ننظّفوه بدل ما نرفضوه.
+       السيرفر يعاود يتحقق ويخزّن بلا مسافات — القناع للعين برك.
+       ══════════════════════════════════════════════════════════ */
+    var phoneInput = document.getElementById('phoneInput');
+    var PHONE_MAX_DIGITS = 10;   // ⚠️ الحد الأقصى — ممنوع أكثر
+
+    if (phoneInput) {
+        function digitsOf(raw) {
+            return (raw || '').replace(/\D/g, '');
+        }
+
+        function formatPhone(raw) {
+            var d = (raw || '').replace(/\D/g, '');
+
+            // رمز الدولة: +213 ولا 00213 → 0
+            if (d.indexOf('00213') === 0) d = '0' + d.slice(5);
+            else if (d.indexOf('213') === 0 && d.length > 9) d = '0' + d.slice(3);
+
+            // ⚠️ الرقم الجزائري يبدا بـ0 — نزيدوه إذا الزبون نساه
+            if (d && d[0] !== '0') d = '0' + d;
+
+            // 🔴 القص الصارم: 10 أرقام، لا أكثر — مهما لصق الزبون
+            d = d.slice(0, PHONE_MAX_DIGITS);
+
+            // 0X XX XX XX XX
+            var out = d.slice(0, 2);
+            for (var i = 2; i < d.length; i += 2) {
+                out += ' ' + d.slice(i, i + 2);
+            }
+            return out;
+        }
+
+        phoneInput.addEventListener('input', function () {
+            // ⚠️ نحفظو موقع المؤشر: بلاه، الزبون اللي يصلّح رقمًا
+            // فالوسط يلقى المؤشر قفز للآخر مع كل حرف.
+            var atEnd = this.selectionStart === this.value.length;
+            var before = this.value;
+
+            this.value = formatPhone(this.value);
+
+            if (!atEnd && before.length === this.value.length) {
+                // ما تبدّل والو فالطول — نخليو المؤشر مكانو
+            } else if (!atEnd) {
+                this.setSelectionRange(this.value.length, this.value.length);
+            }
+        });
+
+        phoneInput.addEventListener('blur', function () {
+            this.value = formatPhone(this.value);
+        });
+
+        /* ⚠️ `maxlength` وحدو ما يكفيش:
+           - الحرف اللي ماشي رقم ياكل خانة من الحد (نمنعوه من الأصل)
+           - اللصق يقدر يعدّي فبعض المتصفحات
+           - `maxlength` ما يخدمش على input[type=number] أصلاً
+           لهذا نمنعو المدخل قبل ما يدخل، ماشي نصلّحوه من بعد. */
+        phoneInput.addEventListener('beforeinput', function (e) {
+            if (!e.data) return;   // مسح ولا تنقّل — نخليوه
+
+            // ماكانش رقم = ممنوع (المسافات نحطوها حنا)
+            if (/\D/.test(e.data.replace(/\s/g, ''))) {
+                e.preventDefault();
+                return;
+            }
+
+            var current = digitsOf(this.value);
+            var selected = digitsOf(
+                this.value.slice(this.selectionStart, this.selectionEnd)
+            );
+            var incoming = digitsOf(e.data);
+
+            if (current.length - selected.length + incoming.length > PHONE_MAX_DIGITS) {
+                e.preventDefault();
+            }
+        });
+
+        // اللصق: ناخذو الأرقام برك ونقصّو على 10
+        phoneInput.addEventListener('paste', function (e) {
+            e.preventDefault();
+            var text = (e.clipboardData || window.clipboardData).getData('text');
+            this.value = formatPhone(text);
+        });
+
+        // القيمة اللي جات من السيرفر (بلا مسافات) تتنسّق كي تحلّ الصفحة
+        if (phoneInput.value) phoneInput.value = formatPhone(phoneInput.value);
+    }
 
     syncCommuneField();
     syncOfficeOption();

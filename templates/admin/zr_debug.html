@@ -261,6 +261,54 @@
 {% endfor %}
 {% endif %}
 
+<!-- ═════ 3ه. المكاتب (hubs) ═════ -->
+<h2 class="form-section-title">3ه. مكاتب ZR (hubs)</h2>
+
+<p class="hint hint-block">
+    التوثيق الرسمي ورّى المسار <code dir="ltr">POST /hubs/search</code> —
+    ZR يسمّي المكاتب <b>hubs</b>. جرّبنا 11 اسمًا وما جرّبناش هذا.
+    <br>الأرجح أن <code>pickupPointId</code> يستنّى <b>UUID تاع الـhub</b>
+    ماشي اسمو — وهذا يفسّر الـ400 الفارغ.
+</p>
+
+<p>
+    <a href="{{ url_for('admin.order_zr_debug', order_id=order.id, hubs=1) }}"
+       class="btn-admin btn-sm">🏢 جيب المكاتب وطابقها</a>
+    <a href="{{ url_for('admin.order_zr_debug', order_id=order.id, spec=1) }}"
+       class="btn-admin btn-sm btn-ghost">📘 جيب مخطط الـAPI</a>
+</p>
+
+{% if hub_match %}
+<p style="margin-top:10px;">
+    {% if hub_match[0] %}
+    <strong style="color:#4E7C59">✓ لقينا معرّف المكتب:</strong>
+    <code dir="ltr">{{ hub_match[0] }}</code>
+    {% else %}
+    <strong style="color:#B4453E">✗ ما لقيناش:</strong> {{ hub_match[1] }}
+    {% endif %}
+</p>
+{% endif %}
+
+{% if hubs %}
+<p style="margin-top:10px;">{{ hubs | length }} مكتب. عيّنة:</p>
+<pre class="zr-code" dir="ltr">{{ hubs[:6] | tojson(indent=2) }}</pre>
+{% endif %}
+
+{% if spec %}
+<p style="margin-top:10px;">
+    {% if spec.found %}
+    <strong style="color:#4E7C59">✓ لقينا المخطط:</strong>
+    <code dir="ltr">{{ spec.found }}</code>
+    {% else %}
+    <strong style="color:#B4453E">✗ ماكانش مخطط منشور</strong>
+    {% endif %}
+</p>
+{% if spec.schema %}
+<pre class="zr-code" dir="ltr">{{ spec.schema | tojson(indent=2) }}</pre>
+{% endif %}
+<pre class="zr-code" dir="ltr">{{ spec.probe | tojson(indent=2) }}</pre>
+{% endif %}
+
 <!-- ═════ 4. آخر رد ═════ -->
 <h2 class="form-section-title">4. آخر رد من ZR</h2>
 {% if last and last.get('status') %}

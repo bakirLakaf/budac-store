@@ -369,7 +369,7 @@ def _check_parcel_data(order):
     return problems
 
 
-def build_parcel_payload(order, territory_id=None):
+def build_parcel_payload(order, territory_id=None, hub_id=None):
     """
     يبني الـpayload اللي يتبعث لـZR.
 
@@ -463,8 +463,13 @@ def build_parcel_payload(order, territory_id=None):
         "note": order.customer_note or "",
     }
 
-    if is_office and order.pickup_point_id:
-        payload["pickupPointId"] = order.pickup_point_id
+    if is_office:
+        # ⚠️ الأفضلية لـUUID تاع الـhub. الاسم يبقى كتراجع برك —
+        # ZR يستعمل UUID فكل شي آخر، والأرجح أنه يرفض الاسم بصمت
+        # (400 بحجم 0، بالضبط اللي كنا نشوفو).
+        pickup = hub_id or order.hub_external_id or order.pickup_point_id
+        if pickup:
+            payload["pickupPointId"] = pickup
 
     if territory_id:
         payload["territoryId"] = territory_id
@@ -472,7 +477,7 @@ def build_parcel_payload(order, territory_id=None):
     return payload
 
 
-def create_parcel(order, territory_id=None):
+def create_parcel(order, territory_id=None, hub_id=None):
     """
     ينشئ طرد عند ZR Express من طلبية عندنا.
 
@@ -484,7 +489,7 @@ def create_parcel(order, territory_id=None):
     if problems:
         raise ZRError("الطلبية ما تقبلهاش ZR: " + " | ".join(problems))
 
-    payload = build_parcel_payload(order, territory_id)
+    payload = build_parcel_payload(order, territory_id, hub_id)
 
     data = _request("POST", "/parcels", json=payload)
 
@@ -1169,6 +1174,137 @@ def sync_shipping_rates():
 # ═══════════════════════════════════════════════════════════
 # مختبر الإرسال — نعزلو سبب الـ400 بدل ما نخمّنو
 # ═══════════════════════════════════════════════════════════
+
+def search_hubs(page_size=500):
+    """
+    قائمة مراكز/مكاتب ZR — من `POST /hubs/search`.
+
+    🔴 هاد المسار هو اللي كان ناقصنا.
+    جرّبنا 11 اسمًا (`/pickup-points`، `/offices`، `/desks`...) وكلهم
+    404. التوثيق الرسمي ورّى أن ZR يسمّيهم **hubs**، وأسماء مكاتبهم
+    تبدا بـ«Hub» فعلاً («Hub Setif 19 مكتب سطيف») — كان لازم ننتبهو.
+
+    الأرجح أن `pickupPointId` يستنّى **UUID تاع الـhub** ماشي اسمو،
+    وهذا يفسّر الـ400 الفارغ.
+    """
+    data = _request("POST", "/hubs/search",
+                    {"pageNumber": 1, "pageSize": page_size})
+
+    items = data.get("items") if isinstance(data, dict) else data
+    return items or []
+
+
+def find_hub_id(office_name, wilaya_code=None):
+    """
+    يدوّر على UUID تاع مكتب من اسمو.
+
+    ⚠️ المطابقة متسامحة: أسماء ZR فيها خليط عربي/لاتيني وأرقام
+    («Hub Setif 19 مكتب سطيف»). نطابقو بالاسم الكامل أولاً، ومن بعد
+    بالجزء اللاتيني، ومن بعد بالولاية إذا بقى مكتب واحد فيها.
+    """
+    hubs = search_hubs()
+    wanted = (office_name or "").strip().lower()
+
+    def hub_name(h):
+        return (h.get("name") or h.get("label") or "").strip()
+
+    # 1) تطابق كامل
+    for h in hubs:
+        if hub_name(h).lower() == wanted:
+            return h.get("id"), hub_name(h)
+
+    # 2) واحد يحتوي الآخر
+    for h in hubs:
+        n = hub_name(h).lower()
+        if n and (n in wanted or wanted in n):
+            return h.get("id"), hub_name(h)
+
+    # 3) الولاية فيها مكتب واحد برك
+    if wilaya_code:
+        code = str(wilaya_code).zfill(2)
+        same = [h for h in hubs
+                if str(h.get("wilayaCode") or h.get("territoryCode") or "").zfill(2) == code]
+        if len(same) == 1:
+            return same[0].get("id"), hub_name(same[0])
+
+    return None, None
+
+
+def resolve_hub_id(order):
+    """
+    UUID تاع مكتب الطلبية — محفوظ ولا نجيبوه من ZR ونحفظوه.
+
+    يرجّع (المعرّف، السبب إذا فشل).
+    """
+    if order.delivery_type != "office":
+        return None, None
+
+    if order.hub_external_id:
+        return order.hub_external_id, None
+
+    name = order.pickup_point_id or order.pickup_point_name or ""
+    if not name:
+        return None, "الطلبية بلا مكتب"
+
+    try:
+        hub_id, matched = find_hub_id(name, order.wilaya_code)
+    except Exception as e:
+        return None, f"فشل جلب المكاتب من ZR: {e}"
+
+    if not hub_id:
+        return None, f"ما لقيناش مكتب «{name}» فقائمة hubs تاع ZR"
+
+    return hub_id, None
+
+
+def fetch_openapi_spec():
+    """
+    يجيب مخطط الـAPI الرسمي — باش نعرفو **بالضبط** واش يستنّى
+    `POST /parcels`، بدل ما نخمّنو الحقول.
+
+    ⚠️ التوثيق على docs.zrexpress.app يمنع الجلب الآلي، لكن السيرفر
+    نفسو عادةً ينشر المخطط. نجرّبو المسارات المعروفة.
+    """
+    import requests as _rq
+
+    roots = ["https://api.zrexpress.app"]
+    paths = [
+        "/swagger/v1/swagger.json",
+        "/swagger/v1.0/swagger.json",
+        "/openapi.json",
+        "/swagger.json",
+        "/api/v1.0/openapi.json",
+    ]
+
+    results = []
+    for root in roots:
+        for path in paths:
+            url = f"{root}{path}"
+            try:
+                r = _rq.get(url, timeout=20)
+                results.append({
+                    "url": url, "status": r.status_code,
+                    "size": len(r.content or b""),
+                    "is_spec": "openapi" in (r.text or "")[:200].lower()
+                               or "swagger" in (r.text or "")[:200].lower(),
+                })
+                if r.status_code == 200:
+                    try:
+                        spec = r.json()
+                    except ValueError:
+                        continue
+
+                    schemas = (spec.get("components") or {}).get("schemas") or {}
+                    create = (schemas.get("CreateParcelRequest")
+                              or schemas.get("SingleParcelCreationRequest"))
+                    return {"found": url, "schema": create,
+                            "probe": results}
+            except Exception as e:
+                results.append({"url": url, "status": "—", "size": 0,
+                                "is_spec": False, "error": str(e)})
+
+    return {"found": None, "schema": None, "probe": results}
+
 
 def probe_pickup_endpoints():
     """
