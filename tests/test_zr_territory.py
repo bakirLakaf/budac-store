@@ -117,7 +117,7 @@ def main():
         check("deliveryType = pickup-point",
               payload["deliveryType"] == "pickup-point")
         check("الزبون كائن متداخل customer{name, phone{number1}}",
-              payload["customer"]["phone"]["number1"] == "0775297494",
+              payload["customer"]["phone"]["number1"] == "+213775297494",
               payload.get("customer"))
         check("الشارع ماشي فارغ", bool(payload["deliveryAddress"]["street"]))
         check("🔴 المرجع اسمو externalId ماشي reference",
@@ -149,6 +149,102 @@ def main():
           "resolve_territory_id(order)" in src)
     check("التشخيص يستعمل بلدية المكتب",
           "zr.office_commune(order)" in src)
+
+    print("\n" + "=" * 60)
+    print("متطلبات ZR: الهاتف الدولي · الزبون · المنتج")
+    print("=" * 60)
+
+    # 🔴 «Phone_Number1 must be a valid international phone number»
+    for raw, want in [
+        ("0775297494", "+213775297494"),
+        ("00213775297494", "+213775297494"),
+        ("213775297494", "+213775297494"),
+        ("+213 775 29 74 94", "+213775297494"),
+        ("07 75 29 74 94", "+213775297494"),
+        ("", ""),
+    ]:
+        got = zr.to_international_phone(raw)
+        check(f"هاتف «{raw or 'فارغ'}» → {want or 'فارغ'}", got == want, got)
+
+    with app.app_context():
+        o = make(delivery_type="office",
+                 pickup_point_id="Hub Setif 19 مكتب سطيف",
+                 customer_external_id="cust-uuid",
+                 hub_external_id="hub-uuid",
+                 wilaya_external_id="wil-uuid")
+
+        payload = zr.build_parcel_payload(
+            o, "tid-1", product_id="prod-uuid", product_sku="BUDAC-ACC-001")
+
+        check("🔴 الهاتف بالشكل الدولي",
+              payload["customer"]["phone"]["number1"] == "+213775297494",
+              payload["customer"]["phone"]["number1"])
+        check("🔴 CustomerId موجود",
+              payload["customer"].get("customerId") == "cust-uuid")
+        check("🔴 ProductId موجود",
+              payload["orderedProducts"][0].get("productId") == "prod-uuid")
+        check("🔴 ProductSku موجود",
+              payload["orderedProducts"][0].get("productSku") == "BUDAC-ACC-001")
+
+        # ⚠️ بلا معرّفات ما نبعثوش حقولاً فارغة — ZR يرفض الفارغ كذلك
+        bare = make(delivery_type="home", commune="سطيف")
+        p2 = zr.build_parcel_payload(bare, "tid-1")
+        check("بلا معرّفات: ما نبعثوش حقولاً فارغة",
+              "customerId" not in p2["customer"]
+              and "productId" not in p2["orderedProducts"][0],
+              p2["orderedProducts"][0])
+
+    check("منتج ZR عندو SKU ثابت", zr.ZR_PRODUCT_SKU == "BUDAC-ACC-001")
+
+    # ═══ أجسام الإنشاء مطابقة للتوثيق ═══
+    # 🔴 كنت مخترع حقولاً (`price`، `description` فالمنتج). التوثيق
+    # ورّى الأسماء الحقيقية — والحقل المخترع يترفض بلا فايدة.
+    import unittest.mock as _mock
+
+    sent = {}
+
+    def _fake(method, path, **kw):
+        sent[path] = kw.get("json")
+        return {"id": "new-uuid"}
+
+    with app.app_context():
+        o = make(delivery_type="office",
+                 pickup_point_name="Hub Setif 19 مكتب سطيف",
+                 wilaya_external_id="wil-uuid",
+                 commune_external_id="com-uuid")
+
+        with _mock.patch.object(zr, "_request", _fake):
+            zr.create_customer(o.customer_name, o.customer_phone, o)
+            zr.create_zr_product()
+
+    cust = sent["/customers/individual"]
+    check("🔴 الزبون: الهاتف دولي",
+          cust["phone"]["number1"] == "+213775297494")
+    check("🔴 الزبون: العنوان فيه معرّف الولاية والبلدية",
+          cust["addresses"][0]["cityTerritoryId"] == "wil-uuid"
+          and cust["addresses"][0]["districtTerritoryId"] == "com-uuid",
+          cust["addresses"][0])
+    check("🔴 الزبون: deliveryPreference قيمة مقبولة",
+          cust["deliveryPreference"] in ("home", "pickup-point"),
+          cust["deliveryPreference"])
+    check("الزبون: ماكانش حقول مخترعة",
+          set(cust) <= {"name", "phone", "deliveryPreference", "addresses",
+                        "dateOfBirth", "timeSlot", "instruction"},
+          [k for k in cust])
+
+    prod = sent["/products"]
+    check("🔴 المنتج: السعر اسمو basePrice ماشي price",
+          "basePrice" in prod and "price" not in prod, list(prod))
+    check("🔴 المنتج: ماكانش description (ما كاينش فالمخطط)",
+          "description" not in prod, list(prod))
+    check("المنتج: كل الحقول من المخطط الرسمي",
+          set(prod) <= {"name", "localStock", "sku", "categoryId",
+                        "subCategoryId", "basePrice", "purchasePrice",
+                        "length", "width", "height", "weight"},
+          [k for k in prod])
+    for fn in ["ensure_customer", "ensure_zr_product", "find_customer",
+               "create_customer", "to_international_phone"]:
+        check(f"الدالة {fn} موجودة", hasattr(zr, fn))
 
     print("\n" + "=" * 60)
     print("مختبر الإرسال")

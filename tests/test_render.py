@@ -589,12 +589,15 @@ def main():
     check("الطلب اللي يفوت الحد يرجّع 413 ماشي انقطاع",
           r.status_code == 413, str(r.status_code))
 
-    # صور الهاتف تكون 3-5 ميغا. وحدة بوحدة كل طلب يبقى تحت الحد،
-    # لكن 5 مع بعض يفوتوه بكثير — علاش قسّمنا الرفع.
-    phone_photo = 4_500_000
-    check("صورة هاتف وحدة تبقى تحت الحد", phone_photo < limit,
+    # ⚠️ الفحص القديم كان يفرض أن 5 صور هاتف **يفوتو** الحد، وهو
+    # افتراض مبني على حد 6 ميغا. درك الحد 30 ميغا والمتصفح يصغّر قبل
+    # الرفع، فالمفروض العكس: صورة الهاتف تعدّي براحتها.
+    phone_photo = 12_000_000        # صورة هاتف حديث، بلا تصغير
+    check("صورة هاتف 12 ميغا تعدّي الحد", phone_photo < limit,
           f"{phone_photo} vs {limit}")
-    check("5 صور هاتف مع بعض يفوتو الحد", phone_photo * 5 > limit)
+    check("الرفع يبقى مقسّمًا وحدة بوحدة (ماشي كلهم فطلب واحد)",
+          "step(i + 1)" in open("templates/admin/product_form.html",
+                                encoding="utf-8").read())
 
     section("7.10.c رقم الإصدار يبان فاللوحة")
     from VERSION import VERSION as _V_
@@ -1024,6 +1027,27 @@ def main():
         r = client.post(path)
         check(f"{label}: ما ينهارش بلا مفاتيح",
               r.status_code in (200, 302), r.status_code)
+
+    # ═══════ حجم الصور ═══════
+    # 🔴 الحد القديم (5 ميغا) كان يرفض صور الهاتف العادية — والحال أن
+    # السيرفر أصلاً يصغّرها ويحوّلها WebP. درك المتصفح يصغّر قبل الرفع.
+    from services.uploads import MAX_FILE_SIZE as _MFS
+    check("حد الملف ولّى واسعًا (≥20 ميغا)",
+          _MFS >= 20 * 1024 * 1024, _MFS // (1024*1024))
+    check("حد الطلب أكبر من حد الملف",
+          app.config["MAX_CONTENT_LENGTH"] > _MFS,
+          app.config["MAX_CONTENT_LENGTH"] // (1024*1024))
+
+    pf = open("templates/admin/product_form.html", encoding="utf-8").read()
+    check("المتصفح يصغّر قبل الرفع", "function shrinkImage" in pf)
+    check("التصغير يحوّل لـWebP", "'image/webp'" in pf)
+    check("الملف الصغير يعدّي بلا تصغير", "file.size < 900 * 1024" in pf)
+    check("إذا التصغير كبّر الحجم نرجعو للأصل",
+          "blob.size >= file.size" in pf)
+    check("اسم الملف يتمرّر مع الـBlob",
+          "body.append('image', file, rawFile.name)" in pf)
+    check("🔴 ماكانش «الحد الأقصى 5 ميغا» فالواجهة",
+          "الحد الأقصى 5 ميغا" not in pf)
 
     # ═══════ قناع رقم الهاتف ═══════
     checkout_html = open("templates/shop/checkout.html", encoding="utf-8").read()

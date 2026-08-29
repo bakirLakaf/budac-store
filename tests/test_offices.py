@@ -172,7 +172,17 @@ def main():
     print("=" * 60)
 
     rates = _json.load(open("data/world_rates.json", encoding="utf-8"))
-    check("الجدول فيه 57 ولاية", len(rates) == 57, len(rates))
+    check("جدول World فيه 57 ولاية", len(rates) == 57, len(rates))
+
+    # ⚠️ ZR عندو نسخة احتياطية كذلك — كي الـAPI ما يجاوبش
+    zr_rates = _json.load(open("data/zr_rates.json", encoding="utf-8"))
+    check("جدول ZR الاحتياطي فيه 58 ولاية", len(zr_rates) == 58, len(zr_rates))
+    check("ملفا الأسعار بنفس الشكل",
+          set(zr_rates[0]) >= {"wilaya_code", "home", "office"},
+          list(zr_rates[0]))
+    check("كل رموز ZR نص بخانتين",
+          all(isinstance(r["wilaya_code"], str) and len(r["wilaya_code"]) == 2
+              for r in zr_rates))
     check("كل الرموز نص بخانتين",
           all(isinstance(r["wilaya_code"], str) and len(r["wilaya_code"]) == 2
               for r in rates))

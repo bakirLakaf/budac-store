@@ -62,8 +62,12 @@ BANNED = [
 EXTS = {".py", ".html", ".js", ".css", ".md"}
 SKIP = {"__pycache__", ".git", "node_modules", "venv"}
 
-# ⚠️ هاد الملف نفسو فيه الكلمات الممنوعة (هي القائمة) — نتجاهلوه
+# ⚠️ هاد الملف نفسو فيه الكلمات الممنوعة (هي القائمة) — نتجاهلوه.
+# ونتجاهلو كذلك ملفات الملخص: فيها **جدول** يقارن المغربية بالجزائرية،
+# فوجود الكلمة فيها مقصود ماشي خلل.
 SELF = os.path.basename(__file__)
+SKIP_FILES = {SELF}
+SKIP_PREFIXES = ("budac-ملخص-المحادثة",)
 
 PASSED, FAILED = [], []
 
@@ -83,7 +87,7 @@ def main():
             continue
         if any(part in SKIP for part in path.parts):
             continue
-        if path.name == SELF:
+        if path.name in SKIP_FILES or path.name.startswith(SKIP_PREFIXES):
             continue
 
         try:
