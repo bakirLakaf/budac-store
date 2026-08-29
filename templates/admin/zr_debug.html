@@ -166,6 +166,23 @@
 </p>
 {% endif %}
 
+<!-- ═════ 3و. تجهيز ZR ═════ -->
+<h2 class="form-section-title">3و. تجهيز ZR (الزبون والمنتج)</h2>
+
+<p class="hint hint-block">
+    ZR ماشي صندوق بريد ياخذ أي بيانات: الطرد لازم يشير لـ<b>زبون
+    موجود</b> فحسابهم و<b>منتج موجود</b> فكتالوجهم
+    (<code dir="ltr">CustomerId is required</code> ·
+    <code dir="ltr">ProductId must be a valid GUID</code>).
+    <br>هاد الزر يجهّزهم مرة وحدة — المنتج العام «أكسسوارات» للمتجر
+    كامل، والزبون حسب الطلبية.
+</p>
+
+<form method="post" action="{{ url_for('admin.order_zr_prepare', order_id=order.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn-admin">⚙️ جهّز الزبون والمنتج</button>
+</form>
+
 <!-- ═════ 3ج. مختبر الإرسال ═════ -->
 <h2 class="form-section-title">3ج. مختبر الإرسال</h2>
 

@@ -370,7 +370,8 @@ def _check_parcel_data(order):
 
 
 def build_parcel_payload(order, territory_id=None, hub_id=None,
-                         city_territory_id=None):
+                         city_territory_id=None, customer_id=None,
+                         product_id=None, product_sku=None):
     """
     يبني الـpayload اللي يتبعث لـZR.
 
@@ -409,12 +410,9 @@ def build_parcel_payload(order, territory_id=None, hub_id=None,
     # ⚠️ القيم الحرفية اللي يقبلها ZR — أي قيمة أخرى ترفض
     delivery_type = "pickup-point" if is_office else "home"
 
-    # ⚠️ نبعثو الهاتف أرقام فقط — بلا مسافات ولا رموز
-    phone = "".join(c for c in (order.customer_phone or "") if c.isdigit())
-    if phone.startswith("00213"):
-        phone = "0" + phone[5:]
-    elif phone.startswith("213"):
-        phone = "0" + phone[3:]
+    # 🔴 ZR يرفض الشكل المحلي: «must be a valid international phone
+    # number». لازم +213...
+    phone = to_international_phone(order.customer_phone)
 
     # ---------- الشارع ----------
     if is_office:
@@ -431,12 +429,20 @@ def build_parcel_payload(order, territory_id=None, hub_id=None,
     # 🔴 `stockType` يقبل **"local" ولا "warehouse"** برك (من التوثيق).
     # كنا نبعثو "none" — قيمة ما كاينةش، وهي وحدها كافية للرفض.
     # 🔴 السعر اسمو `unitPrice` ماشي `price`.
-    ordered_products = [{
+    # 🔴 ZR يفرض: ProductId (GUID صالح) + ProductSku. يعني السطر لازم
+    # يشير لمنتج **موجود فكتالوجهم** — ماشي أي نص.
+    product = {
         "productName": ZR_PRODUCT_LABEL,
         "quantity": 1,
         "unitPrice": order.total,
         "stockType": "local",
-    }]
+    }
+    if product_id:
+        product["productId"] = product_id
+    if product_sku:
+        product["productSku"] = product_sku
+
+    ordered_products = [product]
 
     # ══════════════════════════════════════════════════════════
     # 🔴 الشكل الصحيح — من التوثيق الرسمي (POST /parcels)
@@ -481,6 +487,11 @@ def build_parcel_payload(order, territory_id=None, hub_id=None,
     if territory_id:
         payload["deliveryAddress"]["districtTerritoryId"] = territory_id
 
+    # 🔴 ZR يفرض CustomerId — الطرد لازم يشير لزبون موجود عندهم
+    cust = customer_id or order.customer_external_id
+    if cust:
+        payload["customer"]["customerId"] = cust
+
     if is_office:
         # 🔴 المكتب اسمو `hubId` فالجذر — ماشي `pickupPointId`
         hub = hub_id or order.hub_external_id
@@ -502,7 +513,28 @@ def create_parcel(order, territory_id=None, hub_id=None):
     if problems:
         raise ZRError("الطلبية ما تقبلهاش ZR: " + " | ".join(problems))
 
-    payload = build_parcel_payload(order, territory_id, hub_id)
+    # ⚠️ التجهيز قبل الإرسال: الزبون والمنتج لازم يكونو موجودين عند ZR
+    customer_id, cust_why = ensure_customer(order)
+    if not customer_id:
+        raise ZRError(f"ما قدرناش نجهّزو الزبون عند ZR: {cust_why}")
+
+    (product_id, product_sku), prod_why = ensure_zr_product()
+    if not product_id:
+        raise ZRError(f"ما قدرناش نجهّزو المنتج فكتالوج ZR: {prod_why}")
+
+    # نحفظو معرّف الزبون فالطلبية باش ما نعاودوش البحث
+    if not order.customer_external_id:
+        try:
+            from models import db as _db
+            order.customer_external_id = customer_id
+            _db.session.commit()
+        except Exception:
+            pass
+
+    payload = build_parcel_payload(order, territory_id, hub_id,
+                                   customer_id=customer_id,
+                                   product_id=product_id,
+                                   product_sku=product_sku)
 
     data = _request("POST", "/parcels", json=payload)
 
@@ -1630,3 +1662,208 @@ def send_variants(order, territory_id=None):
             break
 
     return attempts
+
+
+# ═══════════════════════════════════════════════════════════
+# تجهيز ZR: الزبون والمنتج فكتالوجهم
+# ═══════════════════════════════════════════════════════════
+#
+# 🔴 ZR بدا يرد برسائل تحقق واضحة (بعد ما صلّحنا شكل الـpayload)،
+# وقال بالضبط واش ناقص:
+#
+#   • CustomerId is required
+#   • ProductId is required + must be a valid GUID
+#   • ProductSku is required
+#   • Phone_Number1 must be a valid international phone number
+#
+# يعني ZR ماشي «صندوق بريد» ياخذ أي بيانات: الطرد لازم يشير لـ**زبون
+# موجود** فحسابهم و**منتج موجود** فكتالوجهم. لهذا نجهّزوهم مرة وحدة.
+
+ZR_PRODUCT_SKU = "BUDAC-ACC-001"
+
+
+def to_international_phone(raw):
+    """
+    يحوّل الرقم الجزائري للشكل الدولي: 0775297494 → +213775297494
+
+    ⚠️ ZR يرفض الشكل المحلي صراحةً:
+    «Phone_Number1 must be a valid international phone number».
+    """
+    digits = "".join(c for c in (raw or "") if c.isdigit())
+
+    if digits.startswith("00213"):
+        digits = digits[5:]
+    elif digits.startswith("213"):
+        digits = digits[3:]
+    elif digits.startswith("0"):
+        digits = digits[1:]
+
+    return f"+213{digits}" if digits else ""
+
+
+def find_customer(phone):
+    """يدوّر على زبون عند ZR برقم هاتفو."""
+    intl = to_international_phone(phone)
+    local = "".join(c for c in (phone or "") if c.isdigit())
+
+    for term in (intl, local):
+        if not term:
+            continue
+        try:
+            data = _request("POST", "/customers/search",
+                            json={"pageNumber": 1, "pageSize": 20,
+                                  "search": {"value": term}})
+        except Exception:
+            continue
+
+        items = (data or {}).get("items") or []
+        if items:
+            return items[0].get("id")
+
+    return None
+
+
+def create_customer(name, phone, order=None):
+    """
+    ينشئ زبونًا عند ZR ويرجّع معرّفو.
+
+    ⚠️ الشكل من التوثيق الرسمي (`POST /customers/individual`):
+      • `phone.number1` بالشكل الدولي
+      • `addresses[]` فيها `cityTerritoryId` (الولاية) و
+        `districtTerritoryId` (البلدية) — نفس معرّفات الطرد
+      • `deliveryPreference` يقبل 'home' ولا 'pickup-point' برك
+
+    ⚠️ نبعثو غير الحقول اللي عندنا: `dateOfBirth` و`timeSlot`
+    و`instruction` اختيارية، وبعث قيم مخترعة فيهم يخلق رفضًا بلا فايدة.
+    """
+    body = {
+        "name": (name or "").strip() or "زبون",
+        "phone": {"number1": to_international_phone(phone)},
+    }
+
+    if order is not None:
+        body["deliveryPreference"] = (
+            "pickup-point" if order.delivery_type == "office" else "home"
+        )
+
+        address = {
+            "street": (
+                order.pickup_point_name if order.delivery_type == "office"
+                else (order.address_note or order.commune or "")
+            ) or order.wilaya_name or "",
+            "city": order.wilaya_name or "",
+            "country": "DZ",
+            "isPrimary": True,
+        }
+
+        if order.wilaya_external_id:
+            address["cityTerritoryId"] = order.wilaya_external_id
+        if order.commune_external_id:
+            address["districtTerritoryId"] = order.commune_external_id
+        if order.commune:
+            address["district"] = order.commune
+
+        body["addresses"] = [address]
+
+    data = _request("POST", "/customers/individual", json=body)
+
+    return (data or {}).get("id")
+
+
+def ensure_customer(order):
+    """
+    معرّف الزبون عند ZR — نلقاوه ولا ننشئوه.
+
+    يرجّع (المعرّف، السبب إذا فشل).
+    """
+    if order.customer_external_id:
+        return order.customer_external_id, None
+
+    try:
+        found = find_customer(order.customer_phone)
+        if found:
+            return found, None
+    except Exception as e:
+        return None, f"فشل البحث عن الزبون: {e}"
+
+    try:
+        created = create_customer(order.customer_name, order.customer_phone,
+                                  order)
+    except Exception as e:
+        return None, f"فشل إنشاء الزبون: {e}"
+
+    if not created:
+        return None, "ZR ما رجّعش معرّف الزبون"
+
+    return created, None
+
+
+def find_zr_product():
+    """يدوّر على منتجنا العام فكتالوج ZR بالـSKU."""
+    data = _request("POST", "/products/search",
+                    json={"pageNumber": 1, "pageSize": 50,
+                          "search": {"value": ZR_PRODUCT_SKU}})
+
+    for item in (data or {}).get("items") or []:
+        if (item.get("sku") or "").upper() == ZR_PRODUCT_SKU.upper():
+            return item.get("id"), item.get("sku")
+
+    return None, None
+
+
+def create_zr_product():
+    """
+    ينشئ منتجًا عامًا واحدًا «أكسسوارات» فكتالوج ZR.
+
+    ⚠️ الشكل من التوثيق (`POST /products`):
+      • السعر اسمو **`basePrice`** ماشي `price`
+      • `localStock` رقم (نحطوه 0 — ما نتبعوش المخزون عندهم)
+      • ماكانش حقل `description` أصلاً — كنت مخترعو
+
+    ⚠️ منتج **واحد** لكل المتجر، ماشي منتج لكل سلعة:
+      • ما نكشفوش لشركة التوصيل واش نبيعو بالضبط
+      • ما نحتاجوش نزامنو 26 منتجًا وموديلاتهم معاهم
+      • المبلغ الحقيقي يمشي فـ`amount` تاع الطرد
+    """
+    data = _request("POST", "/products", json={
+        "name": ZR_PRODUCT_LABEL,
+        "sku": ZR_PRODUCT_SKU,
+        "localStock": 0,
+        "basePrice": 0,
+    })
+
+    return (data or {}).get("id"), ZR_PRODUCT_SKU
+
+
+def ensure_zr_product():
+    """
+    معرّف المنتج العام — محفوظ فإعدادات المتجر، ولا نلقاوه/ننشئوه.
+
+    يرجّع ((المعرّف، الرمز)، السبب إذا فشل).
+    """
+    from models import db, StoreSetting
+
+    saved_id = StoreSetting.get("zr_product_id")
+    saved_sku = StoreSetting.get("zr_product_sku")
+    if saved_id and saved_sku:
+        return (saved_id, saved_sku), None
+
+    try:
+        pid, sku = find_zr_product()
+    except Exception as e:
+        return (None, None), f"فشل البحث فالكتالوج: {e}"
+
+    if not pid:
+        try:
+            pid, sku = create_zr_product()
+        except Exception as e:
+            return (None, None), f"فشل إنشاء المنتج: {e}"
+
+    if not pid:
+        return (None, None), "ZR ما رجّعش معرّف المنتج"
+
+    StoreSetting.set("zr_product_id", pid)
+    StoreSetting.set("zr_product_sku", sku or ZR_PRODUCT_SKU)
+    db.session.commit()
+
+    return (pid, sku or ZR_PRODUCT_SKU), None

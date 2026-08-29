@@ -15,7 +15,11 @@ from werkzeug.utils import secure_filename
 from services.images import process_image, delete_image_files, get_upload_dir, ImageProcessError
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 ميغا
+# ⚠️ هذا حد **أمان** ماشي حد استعمال: المتصفح يصغّر الصورة قبل الرفع
+# (شوف shrinkImage فـproduct_form.html)، والسيرفر يعاود يصغّرها ويحوّلها
+# WebP. الحد الكبير هنا يمنع رفع ملف ضخم بالغلط، بلا ما يرفض صورة هاتف
+# عادية — الحد القديم (5 ميغا) كان يرفض صور 8–12 ميغا بلا فايدة.
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 ميغا
 
 # التوقيعات الأولى (magic bytes) للصور الحقيقية — نتحققو أن المحتوى فعلاً صورة
 MAGIC_SIGNATURES = [

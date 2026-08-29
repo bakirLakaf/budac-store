@@ -136,6 +136,10 @@ def clear_cache(carrier_code=None):
 
 RATE_FILES = {
     "worldexpress": "world_rates.json",   # 57 ولاية، من جدول World الرسمي
+    # ⚠️ ZR عندو API حيّ (زر «زامن أسعار ZR»)، وهو المصدر الأول.
+    # هاد الملف نسخة احتياطية: كي المفاتيح تطيح ولا الـAPI ما يجاوبش،
+    # نرجّعو للأسعار المعروفة بدل ما نبقاو بلا والو.
+    "zrexpress": "zr_rates.json",         # 58 ولاية، نسخة احتياطية
 }
 
 

@@ -2423,6 +2423,43 @@ def order_zr_lab(order_id):
     return redirect(url_for("admin.order_zr_debug", order_id=order.id))
 
 
+@admin_bp.route("/orders/<int:order_id>/zr-prepare", methods=["POST"])
+@login_required
+def order_zr_prepare(order_id):
+    """
+    يجهّز ما يحتاجو ZR قبل الإرسال: الزبون + المنتج فكتالوجهم.
+
+    ⚠️ منفصل على الإرسال عمدًا: إذا التجهيز طاح، نشوفو رسالة ZR
+    بالضبط بدل ما تتخبّى داخل فشل الإرسال.
+    """
+    from services import zrexpress as zr
+
+    order = Order.query.get_or_404(order_id)
+
+    if not zr.is_configured():
+        flash("مفاتيح ZR غير معمّرة", "error")
+        return redirect(url_for("admin.order_zr_debug", order_id=order.id))
+
+    # 1) المنتج العام فكتالوج ZR (مرة وحدة للمتجر كامل)
+    (pid, sku), prod_why = zr.ensure_zr_product()
+    if pid:
+        flash(f"✅ منتج ZR جاهز: {sku} ({pid})", "success")
+    else:
+        flash(f"🔴 المنتج: {prod_why}", "error")
+
+    # 2) الزبون
+    cust_id, cust_why = zr.ensure_customer(order)
+    if cust_id:
+        if not order.customer_external_id:
+            order.customer_external_id = cust_id
+            db.session.commit()
+        flash(f"✅ الزبون جاهز عند ZR: {cust_id}", "success")
+    else:
+        flash(f"🔴 الزبون: {cust_why}", "error")
+
+    return redirect(url_for("admin.order_zr_debug", order_id=order.id))
+
+
 @admin_bp.route("/orders/<int:order_id>/zr-lab-dims", methods=["POST"])
 @login_required
 def order_zr_lab_dims(order_id):
@@ -2813,9 +2850,9 @@ def shipping_sync_zr():
     return redirect(url_for("admin.shipping_list"))
 
 
-@admin_bp.route("/shipping/sync-world", methods=["POST"])
+@admin_bp.route("/shipping/sync-file/<carrier_code>", methods=["POST"])
 @login_required
-def shipping_sync_world():
+def shipping_sync_file(carrier_code):
     """
     يحدّث أسعار World Express من جدولهم الرسمي المخزّن عندنا.
 
@@ -2826,7 +2863,7 @@ def shipping_sync_world():
     from services.carrier_offices import sync_rates_from_file
 
     try:
-        result = sync_rates_from_file("worldexpress")
+        result = sync_rates_from_file(carrier_code)
     except (ValueError, OSError) as e:
         flash(f"🔴 {e}", "error")
         return redirect(url_for("admin.shipping_list"))
@@ -2853,7 +2890,7 @@ def shipping_sync_world():
 
     if result["missing"]:
         flash(
-            f"⚠️ {len(result['missing'])} ولاية ماكانتش فجدول World "
+            f"⚠️ {len(result['missing'])} ولاية ماكانتش فالجدول "
             f"(باقية غير متوفرة): {'، '.join(result['missing'][:8])}",
             "warning",
         )

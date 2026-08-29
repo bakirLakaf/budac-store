@@ -17,6 +17,16 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn-admin">🔄 زامن أسعار ZR</button>
     </form>
+
+    {# نسخة احتياطية: كي الـAPI ما يجاوبش ولا المفاتيح طايحة #}
+    <form method="post"
+          action="{{ url_for('admin.shipping_sync_file', carrier_code='zrexpress') }}"
+          onsubmit="return confirm('ترجّع أسعار ZR للنسخة المحفوظة فالملف؟')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin btn-ghost btn-sm">
+            من الملف الاحتياطي
+        </button>
+    </form>
 </div>
 
 {# World Express: ماكانش API معاهم، فالجدول مخزّن عندنا فملف. #}
@@ -29,7 +39,7 @@
         </small>
     </div>
 
-    <form method="post" action="{{ url_for('admin.shipping_sync_world') }}"
+    <form method="post" action="{{ url_for('admin.shipping_sync_file', carrier_code='worldexpress') }}"
           onsubmit="return confirm('تقارن أسعار World بالجدول الرسمي؟ اللي مختلف راح يتبدّل.')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn-admin">🔄 زامن أسعار World</button>

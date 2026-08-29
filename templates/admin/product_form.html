@@ -252,7 +252,7 @@
                 <span class="uploader-label">زيد صور (تقدر تختار أكثر من وحدة)</span>
                 <input type="file" id="imagePicker" accept="image/*" multiple>
                 <small class="hint">
-                    JPG / PNG / WebP — الحد الأقصى 5 ميغا للصورة.
+                    JPG / PNG / WebP — صور الهاتف عادي، نصغّروها تلقائيًا قبل الرفع.
                     كل صورة تترفع وحدها وتتزاد فورًا للمعرض.
                 </small>
 
@@ -340,7 +340,7 @@
                 <span class="uploader-label">زيد صور توضيحية</span>
                 <input type="file" id="extraPicker" accept="image/*" multiple>
                 <small class="hint">
-                    JPG / PNG / WebP — الحد الأقصى 5 ميغا للصورة.
+                    JPG / PNG / WebP — صور الهاتف عادي، نصغّروها تلقائيًا قبل الرفع.
                 </small>
 
                 <div class="upload-progress" id="extraProgress" hidden>
@@ -1493,7 +1493,7 @@ window.getCsrf = window.getCsrf || function () {
 // ---------- رفع الصور وحدة بوحدة ----------
 /**
  * 🔴 الخلل القديم: كل الصور كانت تتبعث مع الفورم كامل فطلب واحد.
- * `MAX_CONTENT_LENGTH` = 6 ميغا للطلب كامل، والحد لكل صورة 5 ميغا،
+ * المتصفح يصغّر الصورة قبل الرفع، والسيرفر يقبل حتى 25 ميغا كأمان،
  * فـ3 صور متوسطات يقطعو الاتصال (ERR_HTTP2_PROTOCOL_ERROR) وتضيع
  * كل التعديلات اللي درتها فالصفحة.
  *
@@ -1553,11 +1553,73 @@ function initUploader(box) {
         });
     }
 
+    /**
+     * يصغّر الصورة **فالمتصفح** قبل ما ترفع.
+     *
+     * 🔴 علاه؟ صورة الهاتف تجي 8–12 ميغا، والحد القديم (5 ميغا) كان
+     * يرفضها — والحال أن السيرفر أصلاً يصغّرها ويحوّلها WebP. يعني
+     * كنا نمنعو صورة، ونضيّع بيانات الزبون، على حاجة نديروها بعد.
+     *
+     * درك نصغّرو هنا: 8 ميغا تولّي حوالي 300 كيلو. الرفع أسرع بزاف
+     * (مهم فالأنترنت الجزائري)، والحد ما يوصلوش عمرو.
+     *
+     * ⚠️ الجودة 0.9 و2400 بكسل — أكبر من اللي يحتاجو الموقع، باش
+     * السيرفر يبقى هو اللي يقرّر المقاس النهائي بلا خسارة مضاعفة.
+     */
+    function shrinkImage(file) {
+        return new Promise(function (resolve) {
+            // GIF ولا ملف صغير: نرفعوه كيما هو
+            if (file.size < 900 * 1024 || /gif/i.test(file.type)) {
+                resolve(file);
+                return;
+            }
+
+            var url = URL.createObjectURL(file);
+            var img = new Image();
+
+            img.onload = function () {
+                URL.revokeObjectURL(url);
+
+                var MAX = 2400;
+                var w = img.width, h = img.height;
+
+                if (w > MAX || h > MAX) {
+                    var k = Math.min(MAX / w, MAX / h);
+                    w = Math.round(w * k);
+                    h = Math.round(h * k);
+                }
+
+                var canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+                canvas.toBlob(function (blob) {
+                    // ⚠️ إذا التصغير فشل ولا طلع أكبر، نرجعو للأصل
+                    if (!blob || blob.size >= file.size) {
+                        resolve(file);
+                        return;
+                    }
+                    blob.name = file.name;
+                    resolve(blob);
+                }, 'image/webp', 0.9);
+            };
+
+            img.onerror = function () {
+                URL.revokeObjectURL(url);
+                resolve(file);   // ما قدرناش نقراوها — نخليو السيرفر يقرّر
+            };
+
+            img.src = url;
+        });
+    }
+
     /** يرفع ملفًا واحدًا ويرجّع Promise */
-    function uploadOne(file, onProgress) {
+    function uploadOne(rawFile, onProgress) {
+        return shrinkImage(rawFile).then(function (file) {
         return new Promise(function (resolve, reject) {
             var body = new FormData();
-            body.append('image', file);
+            // ⚠️ الاسم يتمرّر يدويًا: Blob ما عندوش اسم ملف
+            body.append('image', file, rawFile.name);
             body.append('csrf_token', getCsrf());
             // صورة منتج ولا توضيحية — السيرفر يفرّق بيهم
             body.append('kind', box.dataset.kind || 'main');
@@ -1591,6 +1653,7 @@ function initUploader(box) {
             });
 
             xhr.send(body);
+        });
         });
     }
 
