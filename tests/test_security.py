@@ -11,7 +11,7 @@ os.environ.setdefault("SECRET_KEY", "test-key-for-testing-only")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 from app import create_app
-from models import db, Product, ProductVariant, Category, AdminUser, Order, Coupon
+from models import db, Product, ProductVariant, Category, AdminUser, Order
 
 OK, BAD, WARN = [], [], []
 

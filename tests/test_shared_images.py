@@ -25,7 +25,7 @@ atexit.register(shutil.rmtree, _TMP, True)
 from PIL import Image
 
 from app import create_app
-from models import db, Product, ProductImage, Category, AdminUser
+from models import db, Product, Category, AdminUser
 
 PASSED, FAILED = [], []
 

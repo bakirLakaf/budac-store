@@ -27,7 +27,7 @@ atexit.register(shutil.rmtree, _TMP_UPLOADS, True)
 from app import create_app
 from models import (db, Product, ProductVariant, Category, ProductImage,
                     VariantPriceTier, VariantPack, AdminUser, Carrier,
-                    ShippingRate, Commune)
+                    ShippingRate)
 
 PASSED, FAILED = [], []
 
@@ -764,7 +764,7 @@ def main():
     check("حقل الوصف موجود", "extra-caption" in adm)
 
     # منتج بلا صور توضيحية: القسم ما يبانش
-    bare_shop = client.get(f"/product/bare").get_data(as_text=True) \
+    bare_shop = client.get("/product/bare").get_data(as_text=True) \
         if client.get("/product/bare").status_code == 200 else ""
     if bare_shop:
         check("منتج بلا توضيحية: القسم مخفي", "extra-shots" not in bare_shop)
