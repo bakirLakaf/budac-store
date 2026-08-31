@@ -2086,3 +2086,50 @@ img.thumb-sm:hover {
     border-right: 1px solid var(--a-border);
     padding-right: 6px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   الاختصارات السريعة فوق قائمة المنتجات
+   ═══════════════════════════════════════════════════════════ */
+.quick-filters {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.quick-filters .qf {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 999px;
+    background: var(--a-surface); border: 1.5px solid var(--a-border);
+    color: var(--a-text-soft); font-size: 13px; text-decoration: none;
+    transition: border-color .15s, color .15s;
+}
+.quick-filters .qf:hover { border-color: var(--a-primary-light); color: var(--a-text); }
+.quick-filters .qf.is-on {
+    background: var(--a-primary); border-color: var(--a-primary); color: #fff;
+}
+.quick-filters .qf-n {
+    background: var(--a-border); color: var(--a-text-soft);
+    padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600;
+}
+.quick-filters .qf.is-on .qf-n { background: rgba(255,255,255,.22); color: #fff; }
+
+/* ═══════════════════════════════════════════════════════════
+   التنقّل بين المنتجات فصفحة التعديل
+   ═══════════════════════════════════════════════════════════ */
+.prod-nav {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--a-surface); border: 1px solid var(--a-border);
+    border-radius: var(--a-radius); padding: 10px 14px; margin-bottom: 18px;
+}
+.prod-nav-count {
+    font-size: 13px; color: var(--a-text-soft); font-weight: 600;
+    white-space: nowrap;
+}
+.prod-nav-peek {
+    font-size: 12px; color: var(--a-text-soft);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 100%; flex: 1 1 160px;
+}
+/* الزر المعطّل: نفس الشكل بلا تفاعل — باش ما يتحرّكش التخطيط
+   كي توصل لأول ولا آخر منتج */
+.btn-admin.is-disabled {
+    opacity: .38; pointer-events: none; cursor: default;
+}
+#saveNextBtn { margin-top: 8px; }

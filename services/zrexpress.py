@@ -645,24 +645,6 @@ def _normalize_arabic(text):
     return text.lower()
 
 
-def _extract_territory_fields(item):
-    """
-    يستخرج (المعرّف، الاسم، رمز الولاية) من عنصر منطقة عند ZR.
-
-    ⚠️ ما نعرفوش بالضبط أسماء الحقول اللي يرجعها ZR، فنجرّبو الاحتمالات
-    المعروفة. هكذا الكود ما يتكسرش إذا بدّلو التسمية.
-    """
-    tid = item.get("id") or item.get("territoryId") or item.get("code")
-
-    name = (item.get("name") or item.get("wilaya") or item.get("label")
-            or item.get("nameAr") or item.get("designation") or "")
-
-    # رمز الولاية (1-58) إذا كان موجود
-    code = (item.get("wilayaCode") or item.get("wilaya_code")
-            or item.get("stateCode") or item.get("number"))
-
-    return tid, name, code
-
 # نخزّنو فهرس المناطق فالذاكرة — 4000 منطقة، ما نجيبوهمش فكل طلبية
 _territory_index = None
 
@@ -1523,7 +1505,6 @@ def lab_dimensions(order, territory_id=None, test_amount=100):
         return (label, p)
 
     variants = []
-    commune = office_commune(order) or order.commune or ""
 
     # 1) 🔴 البُعد الأهم: توصيل للدار — ما جرّبناهش عمرنا
     v = make("توصيل للدار (نفس الوجهة)", deliveryType="home")

@@ -90,6 +90,10 @@
             <div class="success-actions">
                 <a href="{{ url_for('shop.home') }}" class="btn-primary">كمّل التسوق</a>
                 <a href="{{ url_for('cart.my_orders') }}" class="btn-ghost-link">طلبياتي</a>
+                {# ⚠️ هنا بالضبط بلاصتها: الزبون شايف رقم طلبيتو فوق
+                   ونسخو. إذا مسح الكوكيز ولا فتح من هاتف آخر، هاد
+                   الصفحة هي الوحيدة اللي تخدم بالرقم برك. #}
+                <a href="{{ url_for('cart.track_order') }}" class="btn-ghost-link">تتبّع الطلبية</a>
             </div>
         </div>
     </div>

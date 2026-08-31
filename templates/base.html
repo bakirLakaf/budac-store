@@ -240,6 +240,10 @@
                 <h3 class="footer-heading">خدمة الزبائن</h3>
                 <ul class="footer-links">
                     <li><a href="{{ url_for('cart.my_orders') }}">طلبياتي</a></li>
+                    {# ⚠️ «تتبّع طلبية» غير «طلبياتي»: «طلبياتي» تقرا من
+                       متصفح الزبون، فإذا مسح الكوكيز ولا بدّل الهاتف
+                       ما يلقى والو. هنا يكتب رقم الطلبية برك. #}
+                    <li><a href="{{ url_for('cart.track_order') }}">تتبّع طلبية</a></li>
                     <li><a href="{{ url_for('shop.page', slug='shipping') }}">التوصيل والأسعار</a></li>
                     <li><a href="{{ url_for('shop.page', slug='returns') }}">الإرجاع والاستبدال</a></li>
                     <li><a href="{{ url_for('shop.page', slug='about') }}">من نحن</a></li>

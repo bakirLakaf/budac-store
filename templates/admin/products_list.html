@@ -47,16 +47,77 @@
     </div>
 </details>
 
+{# ═══════ اختصارات سريعة ═══════
+   العدّادات توري واش ناقص بلا ما تفلتر وحدة بوحدة. #}
+<div class="quick-filters">
+    <a href="{{ url_for('admin.products_list') }}"
+       class="qf {{ 'is-on' if not (search or active_category or stock_filter or status_filter or price_filter or image_filter) }}">
+        الكل <span class="qf-n">{{ counters.total }}</span>
+    </a>
+    {% if counters.zero_price %}
+    <a href="{{ url_for('admin.products_list', price='zero') }}"
+       class="qf {{ 'is-on' if price_filter == 'zero' }}">
+        بلا سعر <span class="qf-n">{{ counters.zero_price }}</span>
+    </a>
+    {% endif %}
+    {% if counters.inactive %}
+    <a href="{{ url_for('admin.products_list', status='inactive') }}"
+       class="qf {{ 'is-on' if status_filter == 'inactive' }}">
+        معطّلة <span class="qf-n">{{ counters.inactive }}</span>
+    </a>
+    {% endif %}
+    {% if counters.no_image %}
+    <a href="{{ url_for('admin.products_list', image='none') }}"
+       class="qf {{ 'is-on' if image_filter == 'none' }}">
+        بلا صورة <span class="qf-n">{{ counters.no_image }}</span>
+    </a>
+    {% endif %}
+</div>
+
 <form method="get" class="filter-bar">
     <input type="search" name="q" value="{{ search }}" placeholder="بحث بالاسم...">
+
     <select name="category">
         <option value="">كل التصنيفات</option>
         {% for c in categories %}
         <option value="{{ c.id }}" {{ 'selected' if active_category == c.id }}>{{ c.name }}</option>
         {% endfor %}
     </select>
+
+    <select name="status">
+        <option value="">كل الحالات</option>
+        <option value="active" {{ 'selected' if status_filter == 'active' }}>مفعّل</option>
+        <option value="inactive" {{ 'selected' if status_filter == 'inactive' }}>معطّل</option>
+        <option value="featured" {{ 'selected' if status_filter == 'featured' }}>مميّز</option>
+    </select>
+
+    <select name="price">
+        <option value="">كل الأسعار</option>
+        <option value="zero" {{ 'selected' if price_filter == 'zero' }}>بلا سعر (0 دج)</option>
+        <option value="discount" {{ 'selected' if price_filter == 'discount' }}>عليه تخفيض</option>
+    </select>
+
+    <select name="stock">
+        <option value="">كل المخزون</option>
+        <option value="out" {{ 'selected' if stock_filter == 'out' }}>خالص (0)</option>
+        <option value="low" {{ 'selected' if stock_filter == 'low' }}>قليل (≤ 5)</option>
+    </select>
+
+    <select name="image">
+        <option value="">كل الصور</option>
+        <option value="none" {{ 'selected' if image_filter == 'none' }}>بلا صورة</option>
+    </select>
+
+    <select name="sort">
+        <option value="newest" {{ 'selected' if sort == 'newest' }}>الأحدث</option>
+        <option value="oldest" {{ 'selected' if sort == 'oldest' }}>الأقدم</option>
+        <option value="name" {{ 'selected' if sort == 'name' }}>الاسم (أ–ي)</option>
+        <option value="price_asc" {{ 'selected' if sort == 'price_asc' }}>السعر ↑</option>
+        <option value="price_desc" {{ 'selected' if sort == 'price_desc' }}>السعر ↓</option>
+    </select>
+
     <button type="submit" class="btn-admin btn-sm">فلترة</button>
-    {% if search or active_category or stock_filter %}
+    {% if search or active_category or stock_filter or status_filter or price_filter or image_filter or sort != 'newest' %}
         <a href="{{ url_for('admin.products_list') }}" class="btn-admin btn-ghost btn-sm">مسح</a>
     {% endif %}
 </form>
@@ -83,7 +144,7 @@
                     <span class="thumb-sm thumb-empty">؟</span>
                 {% endif %}
             </td>
-            <td><a href="{{ url_for('admin.product_form', product_id=p.id) }}" class="row-link">{{ p.name }}</a></td>
+            <td><a href="{{ url_for('admin.product_form', product_id=p.id, **query_args) }}" class="row-link">{{ p.name }}</a></td>
             <td>{{ p.category.name if p.category else '—' }}</td>
             <td>
                 {{ "{:,}".format(p.price) }} دج
@@ -95,7 +156,7 @@
                 {% else %}<span class="tag">معطّل</span>{% endif %}
             </td>
             <td class="row-actions">
-                <a href="{{ url_for('admin.product_form', product_id=p.id) }}" class="btn-admin btn-sm btn-ghost">تعديل</a>
+                <a href="{{ url_for('admin.product_form', product_id=p.id, **query_args) }}" class="btn-admin btn-sm btn-ghost">تعديل</a>
 
                 {# ⚠️ نسخة كاملة: الصور، الموديلات، أسعار الجملة، العروض.
                    النسخة تجي **معطّلة** — ما تبانش للزبون حتى تراجعها. #}

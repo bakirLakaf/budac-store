@@ -15,9 +15,38 @@
                     title="نسخة كاملة بالموديلات والأسعار">⧉ نسخة</button>
         </form>
         {% endif %}
-        <a href="{{ url_for('admin.products_list') }}" class="btn-admin btn-ghost">← رجوع للقائمة</a>
+        <a href="{{ url_for('admin.products_list', **nav_args) }}" class="btn-admin btn-ghost">← رجوع للقائمة</a>
     </div>
 </div>
+
+{# ═══════ التنقّل بين المنتجات ═══════
+   يخلّيك تعمّر أسعار عشرات المنتجات بلا ما ترجع للقائمة كل مرة.
+   التنقّل يتبع **نفس الفلترة** اللي جيت منها. #}
+{% if product and nav_total %}
+<div class="prod-nav">
+    {% if prev_product %}
+    <a class="btn-admin btn-ghost btn-sm"
+       href="{{ url_for('admin.product_form', product_id=prev_product.id, **nav_args) }}"
+       title="{{ prev_product.name }}">→ السابق</a>
+    {% else %}
+    <span class="btn-admin btn-ghost btn-sm is-disabled">→ السابق</span>
+    {% endif %}
+
+    <span class="prod-nav-count">{{ nav_position }} من {{ nav_total }}</span>
+
+    {% if next_product %}
+    <a class="btn-admin btn-ghost btn-sm"
+       href="{{ url_for('admin.product_form', product_id=next_product.id, **nav_args) }}"
+       title="{{ next_product.name }}">التالي ←</a>
+    {% else %}
+    <span class="btn-admin btn-ghost btn-sm is-disabled">التالي ←</span>
+    {% endif %}
+
+    {% if next_product %}
+    <span class="prod-nav-peek">التالي: {{ next_product.name }}</span>
+    {% endif %}
+</div>
+{% endif %}
 
 <form method="post" enctype="multipart/form-data" class="admin-form" id="productForm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -169,6 +198,24 @@
             </script>
 
             <button type="submit" class="btn-admin btn-block" id="mainSaveBtn">حفظ المنتج</button>
+
+            {# ═══════ حفظ والتالي ═══════
+               الزر اللي يخلّيك تعمّر أسعار عشرات المنتجات وحدة بوحدة
+               بلا ما ترجع للقائمة. يبان غير إذا كان فيه منتج تالي. #}
+            {% if product and next_product %}
+            <button type="submit" name="save_and_next" value="1"
+                    class="btn-admin btn-block btn-ghost" id="saveNextBtn">
+                حفظ والتالي ←
+            </button>
+            <p class="hint hint-sm">التالي: {{ next_product.name }}</p>
+            {% endif %}
+
+            {# ⚠️ الفلاتر تتبعت مع الفورم كحقول مخفية: الـPOST ما فيهش
+               query string، فبلاهم أزرار التنقّل بعد الحفظ تنسى الفلترة
+               وترجع للقائمة الكاملة. #}
+            {% for key, value in nav_args.items() %}
+            <input type="hidden" name="nav_{{ key }}" value="{{ value }}">
+            {% endfor %}
         </div>
 
         <div class="form-col">

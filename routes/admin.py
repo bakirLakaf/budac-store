@@ -18,6 +18,7 @@ from flask import (
     session, flash, abort, jsonify, current_app,
 )
 from sqlalchemy import func
+from werkzeug.datastructures import MultiDict   # ⚠️ باش نبنيو args من حقول الفورم
 
 import os
 
@@ -289,14 +290,23 @@ def dashboard():
 
 # ==================== المنتجات ====================
 
-@admin_bp.route("/products")
-@login_required
-def products_list():
-    """قائمة المنتجات مع بحث وفلترة."""
+def _product_filters(args):
+    """
+    يبني استعلام المنتجات من فلاتر الرابط.
 
-    search = (request.args.get("q") or "").strip()
-    category_id = request.args.get("category", type=int)
-    stock_filter = request.args.get("stock")
+    ⚠️ دالة مشتركة بين قائمة المنتجات وأزرار «السابق/التالي» فالفورم.
+    لازم الزوج يستعملو **نفس** الفلترة ونفس الترتيب، وإلا «التالي»
+    يوديك لمنتج ماشي فالقائمة اللي قدامك — وتحس روحك ضيّعت البلاصة.
+
+    يرجع: (query, filters_dict)
+    """
+    search = (args.get("q") or "").strip()
+    category_id = args.get("category", type=int)
+    stock_filter = args.get("stock")
+    status_filter = args.get("status")
+    price_filter = args.get("price")
+    image_filter = args.get("image")
+    sort = args.get("sort") or "newest"
 
     query = Product.query
 
@@ -304,21 +314,102 @@ def products_list():
         query = query.filter(Product.name.contains(search))
     if category_id:
         query = query.filter_by(category_id=category_id)
+
+    # ---- المخزون ----
     if stock_filter == "out":
         query = query.filter_by(stock_quantity=0)
     elif stock_filter == "low":
         query = query.filter(Product.stock_quantity > 0, Product.stock_quantity <= 5)
 
-    products = query.order_by(Product.created_at.desc()).all()
+    # ---- الحالة ----
+    if status_filter == "active":
+        query = query.filter_by(is_active=True)
+    elif status_filter == "inactive":
+        query = query.filter_by(is_active=False)
+    elif status_filter == "featured":
+        query = query.filter_by(is_featured=True)
+
+    # ---- السعر ----
+    # ⚠️ «بلا سعر» = السعر 0. المنتجات المستوردة تجي هكذا، وهاد
+    #    الفلتر هو اللي يوريك واش باقي تعمّرو.
+    if price_filter == "zero":
+        query = query.filter(Product.price == 0)
+    elif price_filter == "discount":
+        query = query.filter(
+            Product.compare_at_price.isnot(None),
+            Product.compare_at_price > Product.price,
+        )
+
+    # ---- الصورة ----
+    if image_filter == "none":
+        query = query.filter(
+            (Product.image_filename.is_(None)) | (Product.image_filename == "")
+        )
+
+    # ---- الترتيب ----
+    if sort == "name":
+        query = query.order_by(Product.name)
+    elif sort == "price_asc":
+        query = query.order_by(Product.price.asc(), Product.id)
+    elif sort == "price_desc":
+        query = query.order_by(Product.price.desc(), Product.id)
+    elif sort == "oldest":
+        query = query.order_by(Product.created_at.asc(), Product.id)
+    else:
+        sort = "newest"
+        query = query.order_by(Product.created_at.desc(), Product.id.desc())
+
+    filters = {
+        "q": search,
+        "category": category_id,
+        "stock": stock_filter,
+        "status": status_filter,
+        "price": price_filter,
+        "image": image_filter,
+        "sort": sort,
+    }
+
+    return query, filters
+
+
+def _clean_filters(filters):
+    """يحيّد الفلاتر الفارغة — باش الرابط يبقى قصير ومقروء."""
+    return {k: v for k, v in filters.items() if v not in (None, "", "newest")}
+
+
+@admin_bp.route("/products")
+@login_required
+def products_list():
+    """قائمة المنتجات مع بحث وفلترة."""
+
+    query, filters = _product_filters(request.args)
+
+    products = query.all()
     categories = Category.query.order_by(Category.name).all()
+
+    # عدّادات سريعة — تخلّي الأدمن يعرف واش ناقصو بلا ما يفلتر وحدة بوحدة
+    counters = {
+        "total": Product.query.count(),
+        "inactive": Product.query.filter_by(is_active=False).count(),
+        "zero_price": Product.query.filter(Product.price == 0).count(),
+        "no_image": Product.query.filter(
+            (Product.image_filename.is_(None)) | (Product.image_filename == "")
+        ).count(),
+    }
 
     return render_template(
         "admin/products_list.html",
         products=products,
         categories=categories,
-        search=search,
-        active_category=category_id,
-        stock_filter=stock_filter,
+        search=filters["q"],
+        active_category=filters["category"],
+        stock_filter=filters["stock"],
+        status_filter=filters["status"],
+        price_filter=filters["price"],
+        image_filter=filters["image"],
+        sort=filters["sort"],
+        counters=counters,
+        query_args=_clean_filters(filters),
     )
 
 
@@ -360,6 +451,37 @@ def unlinked_variants():
     )
 
 
+def _product_neighbours(product, args):
+    """
+    يلقى المنتج السابق والتالي **داخل نفس الفلترة** اللي جاي منها الأدمن.
+
+    ⚠️ علاه نعاودو نبنيو القائمة كاملة بدل ما نديرو استعلام ذكي؟
+    الترتيب يقدر يكون على created_at ولا الاسم ولا السعر، وكل واحد
+    يحتاج شرط مقارنة مختلف — والقيم المتساوية (سعر 0 عند 26 منتج)
+    تكسر المنطق. القائمة عندك مئات المنتجات ماشي ملايين، فالبساطة
+    تربح على التحسين هنا.
+
+    يرجع: (previous, next_, position, total)
+    """
+    if product is None:
+        return None, None, 0, 0
+
+    query, _ = _product_filters(args)
+    ids = [row.id for row in query.with_entities(Product.id).all()]
+
+    if product.id not in ids:
+        # المنتج برّا الفلترة (مثلاً فلترت «بلا سعر» وعمّرت السعر
+        # وحفظت). ما نوريوش تنقّل غالط — نوريو والو.
+        return None, None, 0, len(ids)
+
+    index = ids.index(product.id)
+
+    previous = Product.query.get(ids[index - 1]) if index > 0 else None
+    next_ = Product.query.get(ids[index + 1]) if index < len(ids) - 1 else None
+
+    return previous, next_, index + 1, len(ids)
+
+
 @admin_bp.route("/products/new", methods=["GET", "POST"])
 @admin_bp.route("/products/<int:product_id>/edit", methods=["GET", "POST"])
 @login_required
@@ -369,6 +491,24 @@ def product_form(product_id=None):
     """
     product = Product.query.get_or_404(product_id) if product_id else None
     categories = Category.query.order_by(Category.name).all()
+
+    # ⚠️ «التالي» يتحسب **قبل** أي تعديل، ماشي بعدو.
+    #
+    # علاه؟ الفلترة الأكثر استعمالاً هي «بلا سعر» ولا «معطّلة»، والحفظ
+    # هو بالضبط اللي يخرّج المنتج منها (عمّرت السعر / فعّلت المنتج).
+    # لو حسبنا بعد الحفظ، المنتج ما يبقاش فالقائمة، و«التالي» يرجع
+    # فارغ — فتنرمى للقائمة من أول منتج. نحسبو قبل، والتنقّل يكمّل
+    # عادي حتى للأخير.
+    pending_next_id = None
+
+    if request.method == "POST" and product and request.form.get("save_and_next"):
+        pre_args = MultiDict({
+            key: request.form.get(f"nav_{key}")
+            for key in ("q", "category", "stock", "status", "price", "image", "sort")
+            if request.form.get(f"nav_{key}")
+        })
+        _prev, pre_next, _pos, _total = _product_neighbours(product, pre_args)
+        pending_next_id = pre_next.id if pre_next else None
 
     if request.method == "POST":
         name = (request.form.get("name") or "").strip()
@@ -465,10 +605,44 @@ def product_form(product_id=None):
 
         db.session.commit()
         flash(f"تم حفظ المنتج «{product.name}»", "success")
-        return redirect(url_for("admin.product_form", product_id=product.id))
+
+        # ⚠️ الفلاتر تجي من الحقول المخفية فالفورم، ماشي من request.args:
+        #    الـPOST يمشي لنفس المسار بلا query string، فلو قرينا args
+        #    نضيّعو الفلترة وأزرار التنقّل تولّي على القائمة الكاملة.
+        nav_args = {
+            key: request.form.get(f"nav_{key}")
+            for key in ("q", "category", "stock", "status", "price", "image", "sort")
+            if request.form.get(f"nav_{key}")
+        }
+
+        # «حفظ والتالي» — الزر اللي يخلّيك تعمّر 26 منتج بلا ما ترجع للقائمة
+        if request.form.get("save_and_next"):
+            if pending_next_id:
+                return redirect(
+                    url_for("admin.product_form", product_id=pending_next_id, **nav_args)
+                )
+
+            flash("وصلت لآخر منتج فالقائمة", "success")
+            return redirect(url_for("admin.products_list", **nav_args))
+
+        return redirect(
+            url_for("admin.product_form", product_id=product.id, **nav_args)
+        )
+
+    previous, next_, position, total = _product_neighbours(product, request.args)
+
+    _query, nav_filters = _product_filters(request.args)
+    nav_args = _clean_filters(nav_filters)
 
     return render_template(
-        "admin/product_form.html", product=product, categories=categories
+        "admin/product_form.html",
+        product=product,
+        categories=categories,
+        prev_product=previous,
+        next_product=next_,
+        nav_position=position,
+        nav_total=total,
+        nav_args=nav_args,
     )
 
 
@@ -813,30 +987,6 @@ def product_delete(product_id):
     db.session.commit()
     flash(f"تم حذف «{name}»", "success")
     return redirect(url_for("admin.products_list"))
-
-
-@admin_bp.route("/products/<int:product_id>/images/<int:image_id>/make-main", methods=["POST"])
-@login_required
-def product_image_make_main(product_id, image_id):
-    """
-    يخلي صورة معينة هي الرئيسية (اللي تبان فبطاقة المنتج وفالسلة).
-
-    ⚠️ نتأكدو أن الصورة تخص هاد المنتج بالضبط — باش حد ما يقدرش يبعث id
-    تاع صورة منتج آخر ويخلط الصور بين المنتجات.
-    """
-    image = ProductImage.query.filter_by(id=image_id, product_id=product_id).first_or_404()
-
-    # ⚠️ الصورة التوضيحية ما تقدرش تكون رئيسية — الرئيسية هي اللي
-    # تبان فبطاقة المنتج وفالسلة، ولازم تكون صورة السلعة نفسها.
-    if image.is_extra:
-        flash("الصور التوضيحية ما تقدرش تكون رئيسية", "error")
-        return redirect(url_for("admin.product_form", product_id=product_id))
-
-    image.product.image_filename = image.image_filename
-    db.session.commit()
-
-    flash("تم تعيين الصورة الرئيسية", "success")
-    return redirect(url_for("admin.product_form", product_id=product_id))
 
 
 @admin_bp.route("/products/<int:product_id>/images/<int:image_id>/delete", methods=["POST"])
