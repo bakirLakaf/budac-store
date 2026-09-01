@@ -2486,7 +2486,13 @@ def _zr_report(order, ctx):
         row("كود الحالة", last.get("status"))
         row("حجم المحتوى", last.get("content_length"))
         lines.append("الرد الخام:")
-        lines.append(str(last.get("response") or "(فارغ)"))
+        # ⚠️ نقصّو على 1500 حرف: رد /hubs/search وحدو 78 كيلو، وكان
+        # يغرق التقرير كامل — الأدمن ينسخ 80 ألف حرف وما يلقى فيهم
+        # المعلومة المهمة. أول 1500 فيهم الخطأ إذا كان.
+        raw = str(last.get("response") or "(فارغ)")
+        if len(raw) > 1500:
+            raw = raw[:1500] + f"\n... [اتقصّ — الطول الكامل {len(raw)} حرف]"
+        lines.append(raw)
         if ctx.get("last_payload"):
             lines.append("اللي بعثناه وقتها:")
             lines.append(ctx["last_payload"])
@@ -2497,12 +2503,18 @@ def _zr_report(order, ctx):
     diag = ctx.get("territory_diag")
     if diag:
         head("بحث المنطقة")
-        row("المطلوب", diag.get("looking_for"))
-        row("النتيجة", diag.get("result") or "ما لقيناهاش")
-        candidates = diag.get("close_matches") or []
+        row("الولاية", diag.get("wilaya_code"))
+        row("البلدية المطلوبة", diag.get("commune_name") or "—")
+        row("بعد التطبيع", diag.get("normalized") or "—")
+        row("الولاية موجودة عند ZR", "إيه" if diag.get("wilaya_found") else "لا")
+        row("المطابقة", diag.get("match") or diag.get("search_match") or "ما لقيناهاش")
+        row("مناطق ZR", diag.get("total_territories"))
+        if diag.get("error"):
+            row("خطأ", diag["error"])
+        candidates = diag.get("wilaya_communes") or []
         if candidates:
-            lines.append("أقرب الأسماء عند ZR:")
-            for name in candidates[:15]:
+            lines.append(f"بلديات هاد الولاية عند ZR ({len(candidates)}):")
+            for name in candidates[:20]:
                 lines.append(f"  - {name}")
 
     if ctx.get("hub_match"):
@@ -2544,11 +2556,16 @@ def order_zr_debug(order_id):
     preview, build_error = None, None
     try:
         import json as _json
-        # ⚠️ نستعملو نفس المعرّف اللي راح يستعملو الإرسال الحقيقي —
-        # قبل، المعاينة كانت توري `territoryId` ناقصًا حتى كي الإرسال
-        # يلقاه. البحث هنا بلا حفظ: المعاينة ما تبدّلش البيانات.
+        # ⚠️ المعاينة لازم تكون **نسخة طبق الأصل** من اللي يبعثو الإرسال
+        # الحقيقي. قبل، كانت تبني الـpayload بلا `hubId` — فتوري طردًا
+        # لمكتب بلا ما تقول أي مكتب، والأدمن يشخّص على معلومة غالطة.
+        # (صرات فعلاً: التشخيص يوري payload ناقص والإرسال يبعث كامل.)
         preview_territory, _why = zr.resolve_territory_id(order)
-        payload = zr.build_parcel_payload(order, preview_territory)
+        preview_hub, _hub_why = (
+            zr.resolve_hub_id(order) if order.delivery_type == "office"
+            else (None, None)
+        )
+        payload = zr.build_parcel_payload(order, preview_territory, preview_hub)
         # ⚠️ ensure_ascii=False باش العربية تبان كيما هي، ماشي \u0627\u0644...
         preview = _json.dumps(payload, ensure_ascii=False, indent=2)
     except Exception as e:
