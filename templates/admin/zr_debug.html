@@ -33,7 +33,13 @@
             كلو قراءة، ما يبدّل والو.
         </span>
     {% endif %}
+
+    {# ⚠️ التقرير مبني فالسيرفر ماشي منسوخ من الصفحة: نسخ من الصفحة
+       يجيب المعروض برك — الجداول تتشوّه والأقسام المطوية ما تتنسخش. #}
+    <button type="button" class="btn-admin btn-sm" id="zrCopyBtn">📋 انسخ التقرير</button>
 </div>
+
+<textarea id="zrReport" hidden aria-hidden="true">{{ report }}</textarea>
 
 <!-- ═════ 1. الإعدادات ═════ -->
 <h2 class="form-section-title">1. الإعدادات</h2>
@@ -426,5 +432,45 @@
     }
     .form-section-title { margin-top: 28px; }
 </style>
+
+<script>
+(function () {
+    'use strict';
+
+    var btn = document.getElementById('zrCopyBtn');
+    var box = document.getElementById('zrReport');
+    if (!btn || !box) { return; }
+
+    function flash(text) {
+        var old = btn.textContent;
+        btn.textContent = text;
+        setTimeout(function () { btn.textContent = old; }, 2000);
+    }
+
+    /* ⚠️ طريقتين قصدًا: navigator.clipboard يخدم غير فـHTTPS ولا
+       localhost. لو اعتمدنا عليه وحدو، الزر يطيح بصمت فأي حالة
+       أخرى — والأدمن يظن أنو نسخ. */
+    function fallback() {
+        box.hidden = false;
+        box.select();
+        box.setSelectionRange(0, box.value.length);   /* للموبايل */
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        box.hidden = true;
+        return ok;
+    }
+
+    btn.addEventListener('click', function () {
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(box.value).then(
+                function () { flash('✓ اتنسخ'); },
+                function () { flash(fallback() ? '✓ اتنسخ' : '✗ ما نجحش'); }
+            );
+        } else {
+            flash(fallback() ? '✓ اتنسخ' : '✗ ما نجحش');
+        }
+    });
+})();
+</script>
 
 {% endblock %}

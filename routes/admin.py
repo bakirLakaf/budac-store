@@ -2436,6 +2436,96 @@ def _safe(fn, *args):
         return None
 
 
+def _zr_report(order, ctx):
+    """
+    يبني تقرير التشخيص كنص عادي — باش الأدمن ينسخو ويبعثو.
+
+    ⚠️ علاه نبنيوه فالسيرفر ماشي بالجافاسكريبت من الصفحة؟
+    نسخ من الصفحة يجيب النص المعروض برك: الجداول تولّي مشوّهة،
+    والأقسام المطوية ما تتنسخش. هنا عندنا البيانات الخام كاملة.
+
+    ⚠️ **ماكانش مفاتيح فالتقرير** — نقولو «معمّرة/ناقصة» برك.
+    التقرير راح يتبعث فواتساب، وأي مفتاح فيه يولّي مكشوف.
+    """
+    lines = []
+
+    def head(title):
+        lines.append("")
+        lines.append("=" * 46)
+        lines.append(title)
+        lines.append("=" * 46)
+
+    def row(label, value):
+        lines.append(f"{label}: {value}")
+
+    head(f"تشخيص ZR — {order.order_number}")
+    row("النسخة", f"{ctx['app_version']} — {ctx['build_note']}")
+    row("المفاتيح", "معمّرة" if ctx["config_ok"] else "ناقصة")
+    row("رابط الـAPI", ctx["base_url"])
+    row("نوع التوصيل", order.delivery_type or "—")
+    row("الولاية", f"{order.wilaya_code} {order.wilaya_name}")
+    row("البلدية", order.commune or "—")
+    row("المكتب", order.pickup_point_name or "—")
+    row("المبلغ", order.total)
+    row("رقم التتبّع", order.tracking_number or "—")
+
+    head("الفحص المحلي")
+    if ctx["problems"]:
+        for problem in ctx["problems"]:
+            lines.append(f"  - {problem}")
+    else:
+        lines.append("سليم من جهتنا")
+
+    head("الـpayload اللي نبعثوه")
+    lines.append(ctx["preview"] or f"(فشل البناء) {ctx['build_error']}")
+
+    last = ctx.get("last") or {}
+    head("آخر رد من ZR")
+    if last.get("status"):
+        row("المسار", f"{last.get('method')} {last.get('path')}")
+        row("كود الحالة", last.get("status"))
+        row("حجم المحتوى", last.get("content_length"))
+        lines.append("الرد الخام:")
+        lines.append(str(last.get("response") or "(فارغ)"))
+        if ctx.get("last_payload"):
+            lines.append("اللي بعثناه وقتها:")
+            lines.append(ctx["last_payload"])
+    else:
+        lines.append("مازال ما بعثنا والو من آخر إعادة تشغيل")
+
+    # ---------- الأقسام اللي تبان غير بعد «شخّص كل شي» ----------
+    diag = ctx.get("territory_diag")
+    if diag:
+        head("بحث المنطقة")
+        row("المطلوب", diag.get("looking_for"))
+        row("النتيجة", diag.get("result") or "ما لقيناهاش")
+        candidates = diag.get("close_matches") or []
+        if candidates:
+            lines.append("أقرب الأسماء عند ZR:")
+            for name in candidates[:15]:
+                lines.append(f"  - {name}")
+
+    if ctx.get("hub_match"):
+        head("مطابقة المكتب")
+        lines.append(str(ctx["hub_match"]))
+
+    if ctx.get("endpoint_probe"):
+        head("مسارات المكاتب")
+        lines.append(str(ctx["endpoint_probe"]))
+
+    if ctx.get("levels"):
+        head("أنواع المناطق")
+        lines.append(str(ctx["levels"]))
+
+    if ctx.get("lab"):
+        head("مختبر الإرسال")
+        for attempt in ctx["lab"]:
+            lines.append(f"  [{attempt.get('status')}] {attempt.get('label')}"
+                         f" — {attempt.get('body') or '(فارغ)'}")
+
+    return "\n".join(str(line) for line in lines)
+
+
 @admin_bp.route("/orders/<int:order_id>/zr-debug")
 @login_required
 def order_zr_debug(order_id):
@@ -2475,8 +2565,10 @@ def order_zr_debug(order_id):
     def wanted(flag):
         return diagnose_all or bool(request.args.get(flag))
 
-    return render_template(
-        "admin/zr_debug.html",
+    # ⚠️ نجمعو الـcontext فقاموس واحد باش التقرير النصّي والقالب
+    # يقراو **نفس البيانات**. لو بنيناهم منفصلين، التقرير يقدر
+    # يقول حاجة والصفحة توري حاجة أخرى — وهذا أسوأ من بلا تقرير.
+    ctx = dict(
         order=order,
         preview=preview,
         build_error=build_error,
@@ -2521,6 +2613,10 @@ def order_zr_debug(order_id):
                        and os.environ.get("ZR_API_KEY", "").strip()),
         base_url=zr.BASE_URL,
     )
+
+    ctx["report"] = _zr_report(order, ctx)
+
+    return render_template("admin/zr_debug.html", **ctx)
 
 
 @admin_bp.route("/orders/<int:order_id>/zr-lab", methods=["POST"])
