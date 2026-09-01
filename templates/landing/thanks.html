@@ -1,3 +1,4 @@
+{% import "partials/fb_pixel.html" as fb %}
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -11,16 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
 
-{% if fb_pixel_id %}
-<script>
-!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
-n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
-document,'script','https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '{{ fb_pixel_id }}');
-fbq('track', 'PageView');
-
+{% call fb.pixel(fb_pixel_id) %}
 {# ⚠️ حدث Purchase هنا فقط — هو اللي يعتمد عليه فيسبوك فتحسين الحملة.
    لازم يتسجّل مرة وحدة لكل طلبية، ولهذا حطّيناه فصفحة الشكر ماشي فالفورم. #}
 {% if order %}
@@ -30,8 +22,7 @@ fbq('track', 'Purchase', {
     content_type: 'product'
 });
 {% endif %}
-</script>
-{% endif %}
+{% endcall %}
 </head>
 
 <body>

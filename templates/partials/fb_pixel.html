@@ -1,0 +1,35 @@
+{#
+   بيكسل فيسبوك — مصدر واحد لكود التحميل.
+
+   ⚠️ علاش ماكرو؟ كود التحميل تاع fbq كان منسوخ حرفيًا فـ3 قوالب
+   (base · landing/page · landing/thanks). أي تبديل من فيسبوك كان
+   لازم يتدار 3 مرات، وأي نسيان يخلّي صفحة تتبّع بطريقة مختلفة عن
+   الباقي — وهاد النوع من الأعطاب ما يبانش فالاختبارات، يبان
+   فأرقام الحملة الغالطة.
+
+   الاستعمال:
+       {% import "partials/fb_pixel.html" as fb %}
+       {{ fb.pixel(fb_pixel_id) }}
+
+   وباش تزيد أحداث خاصة بالصفحة:
+       {% call fb.pixel(fb_pixel_id) %}
+       fbq('track', 'Purchase', { value: 1200, currency: 'DZD' });
+       {% endcall %}
+#}
+
+{% macro pixel(pixel_id) %}
+{% if pixel_id %}
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '{{ pixel_id }}');
+fbq('track', 'PageView');
+{{ caller() if caller else '' }}
+</script>
+<noscript><img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id={{ pixel_id }}&ev=PageView&noscript=1"/></noscript>
+{% endif %}
+{% endmacro %}

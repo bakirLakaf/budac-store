@@ -122,8 +122,6 @@
                 </label>
             </div>
 
-
-
             <label class="field">
                 <span>الوصف</span>
                 <textarea name="description" rows="8"
@@ -336,10 +334,15 @@
             <div class="image-manager extra-manager">
                 {% for img in product.extra_images %}
                 <div class="image-item is-extra" data-id="{{ img.id }}">
-                    <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
-                         alt="" data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}">
+                    {# ⚠️ الصورة والأزرار داخل مربّع مقصوص، والوصف وزر
+                       النقل **برّاه**. قبل، كل شي كان داخل مربّع
+                       aspect-ratio:1 + overflow:hidden — فخانة الوصف
+                       وزر النقل كانو موجودين بصح مقصوصين وما يبانوش. #}
+                    <div class="image-shot">
+                        <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
+                             alt="" data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}">
 
-                    <span class="image-no">{{ loop.index }}</span>
+                        <span class="image-no">{{ loop.index }}</span>
 
                     <div class="image-item-actions">
                         <form method="post" class="img-inline-form"
@@ -367,7 +370,15 @@
                             <button type="submit" class="img-btn img-btn-move"
                                     title="حرّكها لليسار">›</button>
                         </form>
-                    </div>
+                        </div>
+                    </div>{# /image-shot #}
+
+                    {# وصف قصير يبان تحت الصورة فصفحة المنتج #}
+                    <input type="text" class="extra-caption"
+                           value="{{ img.caption or '' }}" maxlength="200"
+                           placeholder="وصف قصير (اختياري)"
+                           aria-label="وصف الصورة"
+                           data-url="{{ url_for('admin.product_image_caption', product_id=product.id, image_id=img.id) }}">
 
                     {# ═══════ نقّلها لصور المنتج ═══════
                        للحالة اللي ترفع فيها صورة موديل بالغلط هنا.
@@ -389,12 +400,7 @@
                                 title="نقّلها لصور المنتج">↑ لصور المنتج</button>
                     </form>
 
-                    {# وصف قصير يبان تحت الصورة فصفحة المنتج #}
-                    <input type="text" class="extra-caption"
-                           value="{{ img.caption or '' }}" maxlength="200"
-                           placeholder="وصف قصير (اختياري)"
-                           aria-label="وصف الصورة"
-                           data-url="{{ url_for('admin.product_image_caption', product_id=product.id, image_id=img.id) }}">
+
                 </div>
                 {% endfor %}
             </div>

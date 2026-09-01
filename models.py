@@ -178,10 +178,6 @@ class ProductVariant(db.Model):
 
         return self.effective_price
 
-    @property
-    def has_tiers(self):
-        return bool(self.price_tiers)
-
     def tiers_payload(self):
         """المجالات بصيغة JSON — يستعملها JavaScript فصفحة المنتج."""
         return [
@@ -1519,11 +1515,6 @@ class Order(db.Model):
         """واش الطلبية مازالت نشطة (ماشي مسلّمة ولا ملغاة)."""
         return (self.status != self.STATUS_DELIVERED
                 and self.status not in self.STATUS_TERMINAL)
-
-    @property
-    def is_sent_to_carrier(self):
-        """واش تبعثات لشركة التوصيل."""
-        return bool(self.tracking_number)
 
 
 class OrderItem(db.Model):
