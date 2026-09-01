@@ -240,7 +240,6 @@ body {
 }
 
 .admin-brand { padding: 0 24px 24px; border-bottom: 1px solid rgba(255,255,255,0.12); }
-.admin-brand-name { display: block; font-size: 22px; font-weight: 700; color: var(--a-gold); }
 .admin-brand-sub { display: block; font-size: 12px; opacity: 0.7; margin-top: 2px; }
 
 .admin-nav { flex: 1; padding: 16px 0; }
@@ -1701,7 +1700,41 @@ body {
 .cat-actions form { margin: 0; }
 
 /* ---------- الصور التوضيحية فاللوحة ---------- */
-.extra-manager .image-item { border-style: dashed; }
+/* ⚠️ بطاقة الصورة التوضيحية ماشي مربّع مقصوص كيما صور المنتج:
+   تحتها خانة وصف وزر نقل لازم يبانو. المربّع ولّى .image-shot
+   داخلها، والباقي برّاه.
+   قبل هاد التصليح، خانة الوصف كانت موجودة فالكود من زمان بصح
+   ما بانت أبدًا — مقصوصة بـoverflow:hidden. */
+.extra-manager .image-item {
+    aspect-ratio: auto;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    border-radius: 0;
+}
+
+.extra-manager .image-shot {
+    position: relative;
+    aspect-ratio: 1;
+    border: 2px dashed var(--a-border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--a-bg);
+}
+
+.extra-manager .image-shot img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+}
+
+/* ⚠️ الأزرار تبان كي تمرّر على **الصورة** برك، ماشي على البطاقة
+   كاملة — وإلا كي تفتح قائمة الموديلات يطلعلك الغطاء الأسود فوق
+   الصورة بلا سبب. */
+.extra-manager .image-item:hover .image-item-actions { opacity: 0; }
+.extra-manager .image-shot:hover .image-item-actions,
+.extra-manager .image-shot:focus-within .image-item-actions { opacity: 1; }
+@media (hover: none) {
+    .extra-manager .image-item .image-item-actions { opacity: 1; }
+}
 .img-inline-form { margin: 0; display: contents; }
 .empty-note { opacity: 0.75; }
 
@@ -1884,7 +1917,6 @@ img.thumb-sm:hover {
 
 /* البطاقة المعطّلة تبان باهتة */
 .variant-card.is-unavailable { opacity: 0.62; }
-.variant-card.is-unavailable .variant-name,
 .variant-card.is-unavailable .vlabel-input { text-decoration: line-through; }
 
 /* ---------- خانات قابلة للنسخ ---------- */

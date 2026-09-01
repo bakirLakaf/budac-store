@@ -501,11 +501,6 @@
         }, 5000);
     }
 
-    function stop() {
-        clearInterval(timer);
-        timer = null;
-    }
-
     // ---------- الأحداث ----------
 
     ['mouseenter', 'focusin', 'touchstart'].forEach(function (ev) {

@@ -2025,12 +2025,6 @@ a:focus-visible, button:focus-visible {
 .cr-main { font-size: 19px; color: var(--color-primary); margin: 0 0 8px; }
 .cr-main strong { color: #2E7D53; font-size: 23px; }
 .cr-detail { font-size: 13px; color: var(--color-ink-soft); margin: 3px 0; }
-.cr-highlight {
-    margin: 12px 0 0; padding-top: 12px;
-    border-top: 1px dashed #D5CEC2;
-    font-size: 15px; color: var(--color-primary);
-}
-.cr-highlight strong { color: var(--color-gold); font-size: 19px; }
 .cr-list { margin: 8px 0; padding-inline-start: 20px; font-size: 13px; color: var(--color-ink-soft); }
 
 @media (max-width: 640px) {

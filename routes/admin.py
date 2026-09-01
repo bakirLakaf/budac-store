@@ -9,6 +9,7 @@
 """
 
 from datetime import datetime
+from time import time
 
 from models import utcnow   # ⚠️ بديل datetime.utcnow المهجورة
 from functools import wraps
@@ -96,8 +97,6 @@ LOCKOUT_SECONDS = 900  # 15 دقيقة
 
 def _login_blocked(ip):
     """واش هاد الـIP محظور مؤقتًا؟ يرجع عدد الثواني الباقية، أو 0."""
-    from time import time
-
     record = _LOGIN_ATTEMPTS.get(ip)
     if not record:
         return 0
@@ -116,8 +115,6 @@ def _login_blocked(ip):
 
 
 def _record_failed_login(ip):
-    from time import time
-
     count, first_try = _LOGIN_ATTEMPTS.get(ip, (0, time()))
     _LOGIN_ATTEMPTS[ip] = (count + 1, first_try)
 

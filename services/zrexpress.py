@@ -649,6 +649,29 @@ def _normalize_arabic(text):
 _territory_index = None
 
 
+def _iter_commune_territories():
+    """
+    يمرّ على مناطق ZR ويرجّع البلديات الصالحة برك: (معرّف، رمز الولاية، العنصر).
+
+    ⚠️ هاد الترشيح كان مكرّر حرفيًا فبلاصتين (بناء الفهرس، ومزامنة
+    المعرّفات الخارجية). التكرار خطر هنا بالذات: لو صلّحت شرط
+    التحقق فوحدة ونسيت الثانية، البلديات يتفلترو بطريقتين مختلفتين
+    والمعرّفات تولّي غالطة — بلا ما يبان خطأ.
+    """
+    for item in get_territories():
+        if (item.get("level") or "").lower() != "commune":
+            continue
+
+        tid = item.get("id")
+        postal = str(item.get("postalCode") or "").strip()
+
+        # الرمز البريدي لازم يبدا برقمين = رمز الولاية
+        if not tid or len(postal) < 2 or not postal[:2].isdigit():
+            continue
+
+        yield str(tid), postal[:2], item
+
+
 def _build_territory_index(force=False):
     """
     يبني فهرس {(رمز الولاية, اسم مطبّع): معرّف ZR} من مناطق ZR.
@@ -662,20 +685,11 @@ def _build_territory_index(force=False):
         return _territory_index
 
     index = {}
-    for item in get_territories():
-        if (item.get("level") or "").lower() != "commune":
-            continue
-
-        tid = item.get("id")
-        postal = str(item.get("postalCode") or "").strip()
-        if not tid or len(postal) < 2 or not postal[:2].isdigit():
-            continue
-
-        wilaya = postal[:2]
+    for tid, wilaya, item in _iter_commune_territories():
         for name in (item.get("nameArabic"), item.get("name")):
             if name:
                 # أول معرّف يكفي — ما نكتبوش فوقو بمنطقة فرعية أخرى
-                index.setdefault((wilaya, _normalize_arabic(name)), str(tid))
+                index.setdefault((wilaya, _normalize_arabic(name)), tid)
 
     _territory_index = index
     return index
@@ -930,23 +944,14 @@ def sync_communes():
             if c.name_fr:
                 index.setdefault((c.wilaya_code, _normalize_arabic(c.name_fr)), c)
 
-        for item in get_territories():
-            if (item.get("level") or "").lower() != "commune":
-                continue
-
-            tid = item.get("id")
-            postal = str(item.get("postalCode") or "").strip()
-            if not tid or len(postal) < 2 or not postal[:2].isdigit():
-                continue
-
-            w = postal[:2]
+        for tid, w, item in _iter_commune_territories():
             commune = (
                 index.get((w, _normalize_arabic(item.get("nameArabic") or "")))
                 or index.get((w, _normalize_arabic(item.get("name") or "")))
             )
             if commune is not None:
                 # أول معرّف يكفي — ما نكتبوش فوقو بمنطقة فرعية أخرى
-                external_ids.setdefault(commune.id, str(tid))
+                external_ids.setdefault(commune.id, tid)
     except Exception as e:
         id_warning = (
             f"ما قدرناش نجيبو معرّفات البلديات من ZR ({e}). "
@@ -1464,6 +1469,36 @@ def inspect_territory_levels():
     }
 
 
+def _try_parcel_variants(variants, headers):
+    """
+    يجرّب أشكال الـpayload وحدة بوحدة ويوقف عند أول نجاح.
+
+    ⚠️ **الوقوف عند أول نجاح إجباري**: كل محاولة ناجحة تنشئ طرد
+    حقيقي عند ZR. لو كمّلنا الحلقة، الزبون يلقى 4 طرود لطلبية وحدة.
+
+    يرجّع قائمة المحاولات، كل وحدة بحالتها وردّها.
+    """
+    attempts = []
+
+    for label, payload in variants:
+        try:
+            response = requests.post(f"{BASE_URL}/parcels", headers=headers,
+                                     json=payload, timeout=TIMEOUT)
+            status, body = response.status_code, (response.text or "")[:600]
+        except Exception as e:
+            attempts.append({"label": label, "status": "—", "body": str(e),
+                             "payload": payload, "ok": False})
+            continue
+
+        ok = 200 <= status < 300
+        attempts.append({"label": label, "status": status, "body": body,
+                         "payload": payload, "ok": ok})
+        if ok:
+            break
+
+    return attempts
+
+
 def lab_dimensions(order, territory_id=None, test_amount=100):
     """
     مختبر الأبعاد — يجرّب **طرودًا تجريبية** يعزل كل بُعد لوحدو.
@@ -1543,25 +1578,7 @@ def lab_dimensions(order, territory_id=None, test_amount=100):
     v[1].pop("hubId", None)
     variants.append(v)
 
-    attempts = []
-
-    for label, payload in variants:
-        try:
-            r = requests.post(f"{BASE_URL}/parcels", headers=headers,
-                              json=payload, timeout=TIMEOUT)
-            status, body = r.status_code, (r.text or "")[:600]
-        except Exception as e:
-            attempts.append({"label": label, "status": "—", "body": str(e),
-                             "payload": payload, "ok": False})
-            continue
-
-        ok = 200 <= status < 300
-        attempts.append({"label": label, "status": status, "body": body,
-                         "payload": payload, "ok": ok})
-        if ok:
-            break
-
-    return attempts
+    return _try_parcel_variants(variants, headers)
 
 
 def send_variants(order, territory_id=None):
@@ -1621,28 +1638,7 @@ def send_variants(order, territory_id=None):
             prod["stockType"] = "warehouse"
         variants.append(("stockType = warehouse", v2))
 
-    attempts = []
-
-    for label, payload in variants:
-        try:
-            r = requests.post(f"{BASE_URL}/parcels", headers=headers,
-                              json=payload, timeout=TIMEOUT)
-            status = r.status_code
-            body = (r.text or "")[:600]
-        except Exception as e:
-            attempts.append({"label": label, "status": "—", "body": str(e),
-                             "payload": payload, "ok": False})
-            continue
-
-        ok = 200 <= status < 300
-        attempts.append({"label": label, "status": status, "body": body,
-                         "payload": payload, "ok": ok})
-
-        if ok:
-            # ⚠️ نوقفو هنا — الطرد اتنشأ فعلاً، ما نعاودوش
-            break
-
-    return attempts
+    return _try_parcel_variants(variants, headers)
 
 
 # ═══════════════════════════════════════════════════════════

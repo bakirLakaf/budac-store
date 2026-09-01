@@ -173,6 +173,42 @@ def main():
     check("صورة ماكانتش → 404",
           client.post(url(pid, 99999), data={"to": "main"}).status_code == 404)
 
+    # ───────── 6) الواجهة: الزر لازم **يبان** ─────────
+    # ⚠️ هاد القسم موجود على قصة حقيقية: الزر كان مكتوب فالقالب
+    # وشغّال، بصح مقصوص بـoverflow:hidden — الأدمن ما يشوفوش.
+    # اختبار «الصفحة ترجع 200» ما يقبضش هاد النوع من الأعطاب.
+    print("\n[6] الواجهة: الزر وخانة الوصف يبانو")
+    pid, _e, _v = build(app)
+    page = client.get(f"/admin/products/{pid}/edit").get_data(as_text=True)
+
+    # ⚠️ نبداو من `<div` نفسو ماشي من اسم الكلاس، وإلا يفوتنا وسم
+    # مفتوح واحد ويطلع العدّ غير متوازن غلط.
+    start = page.find('<div class="image-item is-extra"')
+    end = page.find("زيد صور توضيحية")
+    card = page[start:end] if start >= 0 and end > start else ""
+
+    check("بطاقة الصورة التوضيحية موجودة", card != "")
+    check("المربّع المقصوص .image-shot موجود", "image-shot" in card)
+
+    # الترتيب هو الدليل: الوصف وزر النقل لازم **بعد** المربّع،
+    # ماشي داخلو.
+    pos_actions = card.find("image-item-actions")
+    pos_promote = card.find("img-promote")
+    pos_caption = card.find("extra-caption")
+
+    check("زر النقل موجود", pos_promote > 0)
+    check("خانة الوصف موجودة", pos_caption > 0)
+    check("زر النقل برّا المربّع", 0 < pos_actions < pos_promote)
+    check("خانة الوصف برّا المربّع", pos_promote < pos_caption)
+    check("قائمة الموديلات فيها الموديل",
+          'name="variant_id"' in card and "دوري" in card)
+    check("فيها خيار «بلا موديل»", "بلا موديل" in card)
+
+    # توازن الوسوم — وسم زائد يكسر التخطيط كامل
+    opens = card.count("<div")
+    closes = card.count("</div>")
+    check("وسوم div متوازنة", opens == closes, f"{opens} ⇄ {closes}")
+
     print("\n" + "=" * 60)
     print(f"نجح: {len(PASSED)}  ·  فشل: {len(FAILED)}")
     print("=" * 60)
