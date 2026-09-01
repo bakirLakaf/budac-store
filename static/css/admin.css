@@ -2216,3 +2216,33 @@ img.thumb-sm:hover {
     font-size: 12px;
     padding: 6px 8px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   صفحة تشخيص ZR
+   ═══════════════════════════════════════════════════════════ */
+.zr-run {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--a-surface); border: 1px solid var(--a-border);
+    border-radius: var(--a-radius); padding: 14px 18px; margin-bottom: 22px;
+}
+.zr-run .hint { margin: 0; font-size: 13px; }
+.zr-run-done { color: var(--a-ok); font-weight: 700; }
+
+/* ⚠️ الأدوات اللي تنشئ طرود حقيقية: لون تحذيري ومطوية افتراضيًا،
+   باش ما تنضغطش وحدة منهم بالغلط. */
+.zr-danger {
+    border: 1.5px solid #F3C9C4;
+    background: #FDECEA;
+    border-radius: var(--a-radius);
+    margin: 22px 0;
+}
+.zr-danger > summary {
+    cursor: pointer; padding: 12px 18px;
+    font-weight: 700; color: var(--a-danger);
+    list-style: none;
+}
+.zr-danger > summary::-webkit-details-marker { display: none; }
+.zr-danger > summary::before { content: "▸ "; }
+.zr-danger[open] > summary::before { content: "▾ "; }
+.zr-danger-body { padding: 0 18px 18px; }
+.zr-danger-body .form-section-title { margin-top: 12px; }

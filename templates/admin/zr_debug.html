@@ -12,9 +12,28 @@
 </div>
 {% endif %}
 
-<p style="margin: -8px 0 20px;">
+<p style="margin: -8px 0 16px;">
     <a href="{{ url_for('admin.order_detail', order_id=order.id) }}">← رجوع للطلبية</a>
 </p>
+
+{# ═════ زر واحد يشغّل كل الفحوصات ═════
+   كانو 5 أزرار منفصلة، والأدمن يضغطهم وحدة بوحدة وينسى وحدة فيهم.
+   هاد الزر يشعّلهم كامل مرة وحدة. كلهم **قراءة برك** — ما يبدّلو
+   والو لا عندنا لا عند ZR. #}
+<div class="zr-run">
+    {% if diagnose_all %}
+        <span class="zr-run-done">✓ الفحص الكامل اتشغّل — النتائج تحت</span>
+        <a href="{{ url_for('admin.order_zr_debug', order_id=order.id) }}"
+           class="btn-admin btn-sm btn-ghost">أخفِ النتائج</a>
+    {% else %}
+        <a href="{{ url_for('admin.order_zr_debug', order_id=order.id, all=1) }}"
+           class="btn-admin">🔍 شخّص كل شي</a>
+        <span class="hint">
+            يفحص المنطقة · المكاتب · مخطط الـAPI · المسارات · أنواع المناطق —
+            كلو قراءة، ما يبدّل والو.
+        </span>
+    {% endif %}
+</div>
 
 <!-- ═════ 1. الإعدادات ═════ -->
 <h2 class="form-section-title">1. الإعدادات</h2>
@@ -159,10 +178,9 @@
 {% endif %}
 
 {% else %}
+{# زر «شخّص كل شي» فوق يشغّل هاد الفحص — ما نكرّروش الزر هنا. #}
 <p style="margin-top:14px;">
-    <a href="{{ url_for('admin.order_zr_debug', order_id=order.id, check_territory=1) }}"
-       class="btn-admin btn-sm">🔍 افحص ليش ما لقيناش المعرّف</a>
-    <br><small class="muted">ياخذ 20–40 ثانية — يجيب كل مناطق ZR.</small>
+    <small class="muted">دوس <b>«🔍 شخّص كل شي»</b> فوق الصفحة باش تعرف السبب.</small>
 </p>
 {% endif %}
 
@@ -183,7 +201,14 @@
     <button type="submit" class="btn-admin">⚙️ جهّز الزبون والمنتج</button>
 </form>
 
-<!-- ═════ 3ج. مختبر الإرسال ═════ -->
+<!-- ═════ 3ج. أدوات خطيرة — مطوية قصدًا ═════ -->
+{# ⚠️ هاد الأزرار **تنشئ طرود حقيقية** عند ZR. ما دخلوش فزر
+   «شخّص كل شي»، ومطويين باش ما تنضغطش وحدة منهم بالغلط.
+   ضغطة وحدة على «جرّب كل الأشكال» تقدر تولّد عدة طرود. #}
+<details class="zr-danger">
+    <summary>⚠️ أدوات متقدمة — تنشئ طرود حقيقية عند ZR</summary>
+    <div class="zr-danger-body">
+
 <h2 class="form-section-title">3ج. مختبر الإرسال</h2>
 
 <p class="hint hint-block">
@@ -237,6 +262,10 @@
     </small>
 </form>
 
+
+    </div>
+</details>
+
 <!-- ═════ 3د. استكشاف API ═════ -->
 <h2 class="form-section-title">3د. استكشاف ZR</h2>
 
@@ -246,12 +275,7 @@
     ما ينشئو والو.
 </p>
 
-<p>
-    <a href="{{ url_for('admin.order_zr_debug', order_id=order.id, probe=1) }}"
-       class="btn-admin btn-sm btn-ghost">🔎 دوّر على مسار المكاتب</a>
-    <a href="{{ url_for('admin.order_zr_debug', order_id=order.id, levels=1) }}"
-       class="btn-admin btn-sm btn-ghost">📊 أنواع المناطق عند ZR</a>
-</p>
+
 
 {% if endpoint_probe %}
 <table class="admin-table">
@@ -297,12 +321,7 @@
     ماشي اسمو — وهذا يفسّر الـ400 الفارغ.
 </p>
 
-<p>
-    <a href="{{ url_for('admin.order_zr_debug', order_id=order.id, hubs=1) }}"
-       class="btn-admin btn-sm">🏢 جيب المكاتب وطابقها</a>
-    <a href="{{ url_for('admin.order_zr_debug', order_id=order.id, spec=1) }}"
-       class="btn-admin btn-sm btn-ghost">📘 جيب مخطط الـAPI</a>
-</p>
+
 
 {% if hub_match %}
 <p style="margin-top:10px;">
@@ -370,6 +389,9 @@
 <p class="muted">مازال ما بعثنا والو من آخر إعادة تشغيل. اضغط الزر تحت.</p>
 {% endif %}
 
+<details class="zr-danger">
+    <summary>⚠️ إرسال تجريبي — ينشئ طرد حقيقي</summary>
+    <div class="zr-danger-body">
 <!-- ═════ 5. تجربة ═════ -->
 <h2 class="form-section-title">5. جرّب الإرسال</h2>
 <p class="muted" style="font-size:14px;">
@@ -386,6 +408,8 @@
         جرّب الإرسال وشوف الرد
     </button>
 </form>
+    </div>
+</details>
 
 <style>
     .zr-code {

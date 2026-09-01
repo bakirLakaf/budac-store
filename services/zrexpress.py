@@ -1658,6 +1658,11 @@ def send_variants(order, territory_id=None):
 
 ZR_PRODUCT_SKU = "BUDAC-ACC-001"
 
+# ⚠️ سعر افتراضي فكتالوج ZR — لازم **أكبر من 0** وإلا يرفضو الإنشاء:
+#     400 — "Base price must be greater than 0"
+# ما عندو حتى أثر على الفوترة: كل طرد يحمل مبلغو الحقيقي فـ`amount`.
+ZR_PRODUCT_BASE_PRICE = 100
+
 
 def to_international_phone(raw):
     """
@@ -1801,12 +1806,18 @@ def create_zr_product():
       • ما نكشفوش لشركة التوصيل واش نبيعو بالضبط
       • ما نحتاجوش نزامنو 26 منتجًا وموديلاتهم معاهم
       • المبلغ الحقيقي يمشي فـ`amount` تاع الطرد
+
+    ⚠️ `basePrice` لازم **أكبر من 0**. كنا نبعثو 0 وZR ولّات ترفض:
+        400 — "Base price must be greater than 0"
+    القيمة هنا ما عندها حتى أثر على الفوترة: كل طرد يحمل مبلغو
+    الحقيقي فـ`amount` وفـ`unitPrice`. هذي غير قيمة افتراضية
+    فكتالوجهم باش يقبلو الإنشاء.
     """
     data = _request("POST", "/products", json={
         "name": ZR_PRODUCT_LABEL,
         "sku": ZR_PRODUCT_SKU,
         "localStock": 0,
-        "basePrice": 0,
+        "basePrice": ZR_PRODUCT_BASE_PRICE,
     })
 
     return (data or {}).get("id"), ZR_PRODUCT_SKU

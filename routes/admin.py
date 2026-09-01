@@ -2464,12 +2464,24 @@ def order_zr_debug(order_id):
     except Exception as e:
         build_error = str(e)
 
+    # ⚠️ زر واحد «شخّص كل شي» يشعّل كل الفحوصات اللي **ما تكتبش والو**
+    # عند ZR. كانو 5 أزرار منفصلة، والأدمن لازم يضغطهم وحدة بوحدة
+    # ويقارن — وينسى وحدة فيهم فكل مرة.
+    #
+    # الأزرار اللي **تنشئ طرود حقيقية** (المختبر والإرسال التجريبي)
+    # ما دخلوش هنا قصدًا: ضغطة وحدة كانت تولّد 4 طرود لطلبية وحدة.
+    diagnose_all = bool(request.args.get("all"))
+
+    def wanted(flag):
+        return diagnose_all or bool(request.args.get(flag))
+
     return render_template(
         "admin/zr_debug.html",
         order=order,
         preview=preview,
         build_error=build_error,
         problems=zr._check_parcel_data(order),
+        diagnose_all=diagnose_all,
         # ⚠️ للمكتب نشخّصو على **بلدية المكتب** ماشي على `commune`
         # الفارغة — وإلا التشخيص يقول «ما لقيناش» بلا ما يقول واش دوّر.
         territory_diag=(
@@ -2478,25 +2490,23 @@ def order_zr_debug(order_id):
                 zr.office_commune(order) if order.delivery_type == "office"
                 else order.commune,
             )
-            if request.args.get("check_territory") else None
+            if wanted("check_territory") else None
         ),
         # نتائج مختبر الإرسال (إذا اتشغّل قبل شوية)
         lab=session.pop("zr_lab", None),
         # ⚠️ كل نداء لـZR ملفوف: صفحة **التشخيص** ما لازمش تنهار كي
         # ZR يطيح — هي بالضبط الصفحة اللي نجيو ليها كي يطيح شي حاجة.
         # (طاحت 500 فالإنتاج علاه.)
-        hubs=_safe(zr.search_hubs) if request.args.get("hubs") else None,
+        hubs=_safe(zr.search_hubs) if wanted("hubs") else None,
         hub_match=(
-            _safe(zr.resolve_hub_id, order) if request.args.get("hubs") else None
+            _safe(zr.resolve_hub_id, order) if wanted("hubs") else None
         ),
-        spec=_safe(zr.fetch_openapi_spec) if request.args.get("spec") else None,
+        spec=_safe(zr.fetch_openapi_spec) if wanted("spec") else None,
         endpoint_probe=(
-            _safe(zr.probe_pickup_endpoints)
-            if request.args.get("probe") else None
+            _safe(zr.probe_pickup_endpoints) if wanted("probe") else None
         ),
         levels=(
-            _safe(zr.inspect_territory_levels)
-            if request.args.get("levels") else None
+            _safe(zr.inspect_territory_levels) if wanted("levels") else None
         ),
         diag_error=session.pop("zr_diag_error", None),
         last=zr.LAST_EXCHANGE,
