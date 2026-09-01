@@ -2133,3 +2133,19 @@ img.thumb-sm:hover {
     opacity: .38; pointer-events: none; cursor: default;
 }
 #saveNextBtn { margin-top: 8px; }
+
+/* ═══════════════════════════════════════════════════════════
+   «نقّلها لصور المنتج» — تحت كل صورة توضيحية
+   ═══════════════════════════════════════════════════════════ */
+.img-promote {
+    display: flex; gap: 6px; align-items: center;
+    margin-top: 6px; flex-wrap: wrap;
+}
+.img-promote select {
+    flex: 1 1 90px; min-width: 0;
+    padding: 5px 8px; font-size: 12px;
+    border: 1px solid var(--a-border); border-radius: 8px;
+    background: var(--a-surface); color: var(--a-text);
+    font-family: inherit;
+}
+.img-promote button { white-space: nowrap; flex: 0 0 auto; }

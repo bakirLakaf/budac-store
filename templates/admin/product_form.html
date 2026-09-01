@@ -328,6 +328,8 @@
             <p class="hint">
                 صور تشرح المنتج: كيفاش يتستعمل، وين يتحط، المقاسات…
                 <strong>ما تتربطش بموديل</strong> وما تأثّرش على الترتيب.
+                <br>رفعت صورة موديل هنا بالغلط؟ استعمل <strong>«↑ لصور المنتج»</strong>
+                تحت الصورة، واختار الموديل من القائمة.
             </p>
 
             {% if product.extra_images %}
@@ -366,6 +368,26 @@
                                     title="حرّكها لليسار">›</button>
                         </form>
                     </div>
+
+                    {# ═══════ نقّلها لصور المنتج ═══════
+                       للحالة اللي ترفع فيها صورة موديل بالغلط هنا.
+                       القائمة تخليك تربطها بموديل مباشرة — بلاها
+                       تولّي صورة معرض بلا موديل. #}
+                    <form method="post" class="img-promote"
+                          action="{{ url_for('admin.product_image_regroup', product_id=product.id, image_id=img.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="to" value="main">
+                        {% if product.variants %}
+                        <select name="variant_id" aria-label="اربطها بموديل">
+                            <option value="">بلا موديل</option>
+                            {% for v in product.variants %}
+                            <option value="{{ v.id }}">{{ v.label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% endif %}
+                        <button type="submit" class="btn-admin btn-sm btn-ghost"
+                                title="نقّلها لصور المنتج">↑ لصور المنتج</button>
+                    </form>
 
                     {# وصف قصير يبان تحت الصورة فصفحة المنتج #}
                     <input type="text" class="extra-caption"

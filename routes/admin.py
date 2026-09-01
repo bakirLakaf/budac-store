@@ -3505,6 +3505,88 @@ def product_image_move(product_id, image_id):
     return redirect(url_for("admin.product_form", product_id=product.id))
 
 
+@admin_bp.route("/products/<int:product_id>/images/<int:image_id>/regroup", methods=["POST"])
+@login_required
+def product_image_regroup(product_id, image_id):
+    """
+    ينقّل صورة بين «صور المنتج» و«الصور التوضيحية».
+
+    ⚠️ علاش هاد المسار موجود؟ كي ترفع صورة موديل بالغلط فخانة
+    «توضيحية»، ماكانش طريقة تصلحها: أزرار ‹ › تحرّك الصورة داخل
+    مجموعتها برك. الحل الوحيد كان تمسحها وتعاود ترفعها.
+
+    عند النقل للصور الرئيسية، تقدر تربطها بموديل مباشرة (variant_id) —
+    وإلا تبقى صورة معرض بلا موديل، وهذا مقبول.
+    """
+    product = Product.query.get_or_404(product_id)
+    image = ProductImage.query.filter_by(
+        id=image_id, product_id=product.id
+    ).first_or_404()
+
+    to_extra = request.form.get("to") == "extra"
+
+    if image.is_extra == to_extra:
+        flash("الصورة راهي ديجا فهاد المجموعة", "error")
+        return redirect(url_for("admin.product_form", product_id=product.id))
+
+    # ---------- التوضيحية ما تتربطش بموديل ----------
+    if to_extra:
+        # ⚠️ الموديلات تشير للصورة بالاسم. لو خلّيناها مربوطة وهي
+        # توضيحية، الموديل يبقى يشير لصورة برّا المعرض — الزبون
+        # يختار الموديل وما تتبدّلش الصورة.
+        cleared = (
+            ProductVariant.query
+            .filter_by(product_id=product.id, image_filename=image.image_filename)
+            .update({"image_filename": None}, synchronize_session=False)
+        )
+
+        # وإذا كانت هي الصورة الرئيسية تاع المنتج، نرقّيو وحدة أخرى
+        if product.image_filename == image.image_filename:
+            replacement = next(
+                (i for i in sorted(product.main_images, key=lambda x: (x.sort_order, x.id))
+                 if i.id != image.id),
+                None,
+            )
+            product.image_filename = replacement.image_filename if replacement else None
+    else:
+        cleared = 0
+        image.caption = None   # الوصف خاص بالتوضيحية برك
+
+        variant_id = request.form.get("variant_id", type=int)
+        if variant_id:
+            variant = ProductVariant.query.filter_by(
+                id=variant_id, product_id=product.id
+            ).first()
+            if variant:
+                variant.image_filename = image.image_filename
+
+        # أول صورة منتج؟ تولّي هي الرئيسية
+        if not product.image_filename:
+            product.image_filename = image.image_filename
+
+    image.is_extra = to_extra
+
+    # ⚠️ نحطّوها فآخر مجموعتها الجديدة بترقيم نظيف: البيانات القديمة
+    # ممكن كلها أصفار، وبلا ترقيم الصورة تقفز لبلاصة عشوائية.
+    group = sorted(
+        [i for i in product.images if i.is_extra == to_extra and i.id != image.id],
+        key=lambda i: (i.sort_order, i.id),
+    )
+    for position, img in enumerate(group):
+        img.sort_order = position
+    image.sort_order = len(group)
+
+    db.session.commit()
+
+    where = "الصور التوضيحية" if to_extra else "صور المنتج"
+    if cleared:
+        flash(f"اتنقّلت لـ{where} — واتحيّدت من {cleared} موديل", "success")
+    else:
+        flash(f"اتنقّلت لـ{where}", "success")
+
+    return redirect(url_for("admin.product_form", product_id=product.id))
+
+
 @admin_bp.route("/variants/<int:variant_id>/price", methods=["POST"])
 @login_required
 def variant_price(variant_id):

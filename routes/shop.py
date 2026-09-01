@@ -6,6 +6,10 @@ from sqlalchemy import func
 
 from models import db, Product, Category, Offer, OfferItem, OrderItem, Order, Review
 
+# ⚠️ نفس دالة التقريب اللي يستعملها الشراء — باش الجدول والفاتورة
+#    ما يختلفوش أبدًا. مصدر واحد للقاعدة، ماشي زوج.
+from services.shipping import round_up_to_100
+
 shop_bp = Blueprint("shop", __name__)
 
 
@@ -618,9 +622,14 @@ def shipping_prices():
                 rate.wilaya_code,
                 {"code": rate.wilaya_code, "name": rate.wilaya_name, "prices": {}},
             )
+            # ⚠️ نقرّبو هنا بنفس الدالة تاع الشراء (round_up_to_100).
+            # قبل، الجدول كان يعرض السعر الخام (670) والشراء يحسب
+            # المقرّب (700) — الزبون يشوف رقم ويدفع رقم آخر.
+            # الأرقام الخام تبقى كيما هي فقاعدة البيانات وفلوحة
+            # التحكم، لأنها هي اللي تتفقت عليها مع شركة التوصيل.
             entry["prices"][carrier.code] = {
-                "home": rate.home_price,
-                "office": rate.office_price,
+                "home": round_up_to_100(rate.home_price),
+                "office": round_up_to_100(rate.office_price),
             }
 
     wilayas = sorted(rows.values(), key=lambda r: r["code"])
