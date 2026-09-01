@@ -1705,19 +1705,32 @@ body {
    داخلها، والباقي برّاه.
    قبل هاد التصليح، خانة الوصف كانت موجودة فالكود من زمان بصح
    ما بانت أبدًا — مقصوصة بـoverflow:hidden. */
+/* ═══════════ بطاقة الصورة التوضيحية ═══════════
+   ⚠️ الشبكة الأصلية `minmax(160px, 1fr)` تمدّ العنصر على العرض كامل
+   كي تكون صورة وحدة — الصورة تطلع ضخمة والحقول تتشتّت تحتها.
+   هنا نثبّتو عرض أقصى ونصفّو من اليمين. */
+.extra-manager {
+    grid-template-columns: repeat(auto-fill, minmax(168px, 196px));
+    justify-content: start;
+}
+
+/* البطاقة: سطح واحد يجمع الصورة والوصف وزر النقل */
 .extra-manager .image-item {
     aspect-ratio: auto;
     overflow: visible;
-    border: 0;
-    background: transparent;
-    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--a-border);
+    border-radius: 12px;
+    background: var(--a-surface);
 }
 
 .extra-manager .image-shot {
     position: relative;
     aspect-ratio: 1;
-    border: 2px dashed var(--a-border);
-    border-radius: 12px;
+    border-radius: 8px;
     overflow: hidden;
     background: var(--a-bg);
 }
@@ -1735,13 +1748,21 @@ body {
 @media (hover: none) {
     .extra-manager .image-item .image-item-actions { opacity: 1; }
 }
+
+/* أزرار أصغر — المربّع ولّى 168 بكسل بدل العرض كامل */
+.extra-manager .img-btn { width: 30px; height: 30px; font-size: 14px; }
+.extra-manager .image-item-actions { gap: 6px; padding: 6px; }
+
 .img-inline-form { margin: 0; display: contents; }
 .empty-note { opacity: 0.75; }
 
 .extra-caption {
     width: 100%;
-    margin-top: 6px;
-    padding: 6px 9px;
+    /* ⚠️ ماكانش margin: البطاقة flex column بـgap يتكفّل بالمسافات.
+       margin زائد يكسر التباعد المنتظم بين الصورة والوصف والزر. */
+    margin: 0;
+    padding: 6px 8px;
+    box-sizing: border-box;
     border: 1px solid var(--a-border);
     border-radius: 8px;
     background: var(--a-surface);
@@ -2169,15 +2190,29 @@ img.thumb-sm:hover {
 /* ═══════════════════════════════════════════════════════════
    «نقّلها لصور المنتج» — تحت كل صورة توضيحية
    ═══════════════════════════════════════════════════════════ */
+/* ⚠️ سطرين ماشي سطر واحد: البطاقة 168 بكسل، والقائمة مع الزر
+   فنفس السطر يتزاحمو ويتقصّ اسم الموديل. */
 .img-promote {
-    display: flex; gap: 6px; align-items: center;
-    margin-top: 6px; flex-wrap: wrap;
+    display: flex; flex-direction: column; gap: 6px;
+    margin: 0;
+}
+.img-promote select,
+.img-promote button {
+    width: 100%;
+    box-sizing: border-box;
 }
 .img-promote select {
-    flex: 1 1 90px; min-width: 0;
-    padding: 5px 8px; font-size: 12px;
+    padding: 6px 8px; font-size: 12px;
     border: 1px solid var(--a-border); border-radius: 8px;
     background: var(--a-surface); color: var(--a-text);
     font-family: inherit;
+    /* ⚠️ min-width:0 إجباري: بلاه، اسم الموديل الطويل يوسّع
+       العنصر ويخرج برّا البطاقة. */
+    min-width: 0;
 }
-.img-promote button { white-space: nowrap; flex: 0 0 auto; }
+.img-promote button {
+    white-space: nowrap;
+    justify-content: center;
+    font-size: 12px;
+    padding: 6px 8px;
+}
