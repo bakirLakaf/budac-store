@@ -3610,3 +3610,12 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
 @media (max-width: 560px) {
     .mo-lookup-row { grid-template-columns: 1fr; }
 }
+
+/* وحدة البيع حذا السعر — «30 دج / المتر» */
+.price-unit {
+    font-size: 0.5em;
+    font-weight: 500;
+    color: var(--color-ink-soft);
+    margin-inline-start: 4px;
+    letter-spacing: 0;
+}

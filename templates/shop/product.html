@@ -123,6 +123,9 @@
 
             <p class="product-detail-price" id="productPrice">
                 <span id="priceValue">{{ product.price_display }}</span>
+                {# ⚠️ الوحدة حذا السعر: «30 دج» وحدها غامضة — للمتر؟
+                   للرولو؟ الزبون يشك ويخرج. #}
+                <span class="price-unit">/ {{ product.unit_short }}</span>
                 {% if product.has_discount %}
                     <span class="price-compare" id="priceCompareValue">{{ product.compare_at_price_display }}</span>
                 {% endif %}
@@ -300,7 +303,12 @@
                        ويمنع مفاجأة السعر فالسلة. #}
                     <div class="live-total" id="liveTotal">
                         <div class="live-row">
-                            <span>سعر {{ product.unit_label }}</span>
+                            {# ⚠️ العنوان يتبدّل مع العرض الجاهز: كي يختار
+                               الزبون «رولو فيه 50 متر» بـ600 دج، الصندوق
+                               كان يقول «سعر المتر: 600 دج» — والزبون يحسب
+                               50 × 600 ويظن الطلبية 30 ألف. #}
+                            <span id="liveUnitLabel"
+                                  data-unit="{{ product.unit_short }}">سعر {{ product.unit_label }}</span>
                             <strong id="liveUnit">{{ product.price_display }}</strong>
                         </div>
                         <div class="live-row live-row-sum">
@@ -1279,6 +1287,17 @@
     var packInput = document.getElementById('selectedPackId');
     var basePrice = {{ product.display_price }};
 
+    // ⚠️ لازم يكونو فنفس نطاق refresh() — كانو فـIIFE أخرى
+    // والصفحة تطيح بـ"unitLabelEl is not defined".
+    //
+    // ⚠️ نقراو النصوص من الـDOM ماشي نحقنو تعابير Jinja داخل
+    // تنصيص JS: تعبير وسط نص يكسر مُحلّل اختبار الجافاسكريبت،
+    // والقيمة موجودة أصلاً فالصفحة.
+    var unitLabelEl = document.getElementById('liveUnitLabel');
+    var UNIT_LABEL_DEFAULT = unitLabelEl ? unitLabelEl.textContent : '';
+    var UNIT_AFTER_NUMBER = 'لكل ' +
+        ((unitLabelEl && unitLabelEl.getAttribute('data-unit')) || '');
+
     function money(n) {
         return Number(n).toLocaleString('en-US') + ' دج';
     }
@@ -1308,15 +1327,31 @@
             })[0];
 
             if (pack) {
+                // ⚠️ العنوان **لازم** يتبدّل هنا: pack.price هو سعر
+                // العرض كامل (رولو 50 متر = 600 دج)، ماشي سعر المتر.
+                // بلا هاد السطر، الصندوق يقول «سعر المتر: 600 دج».
+                if (unitLabelEl) unitLabelEl.textContent = 'سعر العرض';
+
                 unitEl.textContent = money(pack.price);
                 sumEl.textContent = money(pack.price * n);
-                noteEl.textContent = '🎁 ' + pack.full_label;
+
+                // ونوريو سعر الوحدة الحقيقي — هو اللي يبيّن الربح
+                var per = pack.unit_price
+                    || (pack.quantity ? pack.price / pack.quantity : null);
+                noteEl.textContent = (per && pack.quantity > 1)
+                    ? '🎁 ' + pack.full_label + ' — ' + money(Math.round(per))
+                      + ' ' + UNIT_AFTER_NUMBER
+                    : '🎁 ' + pack.full_label;
                 noteEl.hidden = false;
                 return;
             }
         }
 
         // ---------- سعر الحبة (مع التدرّج) ----------
+        // ⚠️ نرجّعو العنوان: الزبون يقدر يلغي العرض ويرجع للسعر
+        // بالوحدة، والعنوان لازم يتبع.
+        if (unitLabelEl) unitLabelEl.textContent = UNIT_LABEL_DEFAULT;
+
         var unit = basePrice;
         if (chip && chip.dataset.price) unit = Number(chip.dataset.price) || unit;
 
