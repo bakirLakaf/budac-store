@@ -82,3 +82,36 @@ def slugify(text, fallback="item"):
     cleaned = cleaned.strip("-")
 
     return cleaned or fallback
+
+
+# ══════════════════════════════════════════════════════════════
+# أرقام الهاتف الجزائرية
+# ══════════════════════════════════════════════════════════════
+
+def normalize_algerian_phone(raw):
+    """
+    يوحّد رقم هاتف جزائري لصيغة محلية واحدة: 0XXXXXXXXX.
+
+    يقبل: «0666255200» · «0666 25 52 00» · «+213666255200» · «00213666255200»
+    يرجّع: الرقم الموحّد، أو None إذا ماشي رقمًا جزائريًا صحيحًا.
+
+    ⚠️ علاش دالة وحدة؟
+    كان هاد المنطق مكتوبًا فـroutes/landing.py برك، وباقي المشروع
+    يقارن الأرقام كنصوص خام. النتيجة: نفس الزبون يبان شخصين
+    مختلفين إذا كتب رقمو بصيغتين — والسلة المتروكة تتكرّر وما تتنحّاش.
+    """
+    digits = "".join(c for c in (raw or "") if c.isdigit())
+    if not digits:
+        return None
+
+    # الصيغة الدولية → محلية
+    if digits.startswith("00213"):
+        digits = "0" + digits[5:]
+    elif digits.startswith("213"):
+        digits = "0" + digits[3:]
+
+    # جوال: 10 أرقام تبدا بـ05/06/07 · ثابت: 9 أرقام تبدا بـ02/03/04
+    is_mobile = len(digits) == 10 and digits[:2] in ("05", "06", "07")
+    is_landline = len(digits) == 9 and digits[:2] in ("02", "03", "04")
+
+    return digits if (is_mobile or is_landline) else None

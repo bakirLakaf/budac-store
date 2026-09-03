@@ -46,6 +46,7 @@ def run():
         # المتكرر آمن تمامًا.
         _repair_stale_communes(db)
         _add_missing_columns(db)
+        _add_missing_indexes(db)
         _fix_null_flags(db)
         _relax_review_product(db)
 
@@ -256,7 +257,26 @@ def _repair_stale_communes(db):
         return
 
     print(f"   ⚠️ جدول communes قديم — أعمدة زائدة: {', '.join(sorted(stale))}")
-    print("      نعاودو نبنيوه من الصفر (البلديات تتعمّر من الملف)")
+
+    # 🔴 هاد العملية **مدمّرة**: تمسح جدولين.
+    #
+    # البلديات نفسها تتعمّر من ملف JSON فما تضيعش، لكن
+    # `carrier_communes` فيها **نتيجة مزامنة ZR** (معرّفات البلديات
+    # عندهم، واش فيها توصيل للمنزل، واش فيها مكتب). مسحها يعني
+    # مزامنة يدوية بعد كل نشر يطلق هاد الشرط.
+    #
+    # قبل، كانت تتنفّذ تلقائيًا فكل إقلاع. درك لازم إذن صريح:
+    # حط ALLOW_COMMUNES_REBUILD=yes فمتغيّرات البيئة، شغّل النشر
+    # مرة وحدة، ثم حيّد المتغيّر.
+    #
+    # علاش ماشي Alembic؟ شوف الملاحظة فآخر هاد الملف.
+    if os.environ.get("ALLOW_COMMUNES_REBUILD", "").strip().lower() not in ("yes", "1", "true"):
+        print("      ⏭️  تخطّينا إعادة البناء (عملية مدمّرة).")
+        print("         إذا كنت متأكدًا، حط ALLOW_COMMUNES_REBUILD=yes وأعد النشر،")
+        print("         وخذ نسخة احتياطية من قاعدة البيانات قبل.")
+        return
+
+    print("      ⚠️ ALLOW_COMMUNES_REBUILD مفعّل — نعاودو البناء")
 
     # ⚠️ CASCADE يخدم فقط على PostgreSQL — SQLite (التطوير المحلي) يرفضو.
     # نمسحو carrier_communes أولاً باش ما يبقاش مفتاح أجنبي معلّق.
@@ -302,6 +322,12 @@ def _add_missing_columns(db):
         ("products", "unit", "VARCHAR(40) NOT NULL DEFAULT 'piece'"),
         # توفّر الموديل — القديمة كلها متوفرة
         ("product_variants", "is_available", "BOOLEAN NOT NULL DEFAULT TRUE"),
+        # حالة الإرسال لشركة التوصيل (حماية من الإرسال المزدوج).
+        # ⚠️ DEFAULT 'idle' ضروري: الطلبيات القديمة تولّي NULL بلاه،
+        # وشرط الحجز ما يلقاهمش فيتحبس الإرسال عليهم.
+        ("orders", "send_state", "VARCHAR(20) NOT NULL DEFAULT 'idle'"),
+        ("orders", "send_started_at", "TIMESTAMP"),
+        ("orders", "send_error", "VARCHAR(300)"),
     ]
 
     inspector = inspect(db.engine)
@@ -367,6 +393,101 @@ def _add_missing_columns(db):
 
     if added == 0:
         print("   ✅ كل الأعمدة موجودة")
+
+
+def _add_missing_indexes(db):
+    """
+    يزيد الفهارس اللي تنقص فالأعمدة اللي نفلترو بيها بزاف.
+
+    ⚠️ `db.create_all()` ينشئ الفهارس **فقط** مع الجداول الجديدة —
+    ما يزيدش فهرسًا لجدول موجود من قبل. فنزيدوهم هنا بيدنا.
+
+    آمن تمامًا للتشغيل المتكرر: `CREATE INDEX IF NOT EXISTS` مدعوم
+    عند PostgreSQL وSQLite بجوج، وما يمسّش أي بيانات.
+
+    ══════════════════════════════════════════════════════════
+    علاش هاد الفهارس بالذات؟ (ماشي كل عمود يستاهل فهرسًا —
+    كل فهرس يبطّئ الكتابة ويزيد حجم القاعدة)
+    ══════════════════════════════════════════════════════════
+
+    • site_visits(day, visitor_key) — **الأهم**.
+      كل عرض صفحة يشغّل: filter_by(day=..., visitor_key=...).
+      بلا فهرس = مسح كامل للجدول مع كل زيارة، والجدول ينمو يوميًا.
+      مركّب لأن الاستعلام يستعمل العمودين معًا.
+
+    • orders(status) — `inject_admin_counters` تشغّل 3 استعلامات
+      count() بالحالة **فكل صفحة أدمن**. الحقول قليلة القيم
+      (5 حالات) لكن الجدول يكبر، والعدّ يبقى مسحًا كاملاً بلاه.
+
+    • orders(created_at) — قائمة الطلبيات مرتّبة بالتاريخ + الفلترة
+      بمجال تواريخ.
+
+    • products(is_active) — كل استعلامات المتجر تفلتر بيه.
+      ⚠️ ملاحظة صادقة: هاد العمود قيمتو شبه ثابتة (أغلب المنتجات
+      نشطة)، فالفائدة محدودة على PostgreSQL اللي يفضّل المسح
+      كي تكون النتيجة أغلب الجدول. زدناه لأن التكلفة تافهة
+      والفائدة تكبر كي يكثرو المنتجات المعطّلة.
+
+    • reviews(is_approved) — عدّاد التنبيهات + اختيار الشهادات.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    existing_tables = set(inspector.get_table_names())
+
+    # (اسم الفهرس, الجدول, الأعمدة)
+    wanted = [
+        ("ix_site_visits_day_key", "site_visits", "day, visitor_key"),
+        ("ix_orders_status", "orders", "status"),
+        ("ix_orders_created_at", "orders", "created_at"),
+        ("ix_products_is_active", "products", "is_active"),
+        ("ix_reviews_is_approved", "reviews", "is_approved"),
+    ]
+
+    added = 0
+    for name, table, columns in wanted:
+        if table not in existing_tables:
+            continue
+
+        current = {ix["name"] for ix in inspector.get_indexes(table)}
+        if name in current:
+            continue
+
+        try:
+            db.session.execute(
+                text(f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({columns})")
+            )
+            db.session.commit()
+            print(f"   🔎 زدنا الفهرس {name}")
+            added += 1
+        except Exception as e:
+            db.session.rollback()
+            print(f"   ⚠️ ما قدرناش نزيدو الفهرس {name}: {e}")
+
+    if added == 0:
+        print("   ✅ كل الفهارس موجودة")
+
+
+# ══════════════════════════════════════════════════════════════
+# ملاحظة على الهجرات (migrations)
+# ══════════════════════════════════════════════════════════════
+#
+# هاد الملف هو Alembic مكتوب بيدنا. يخدم مليح للحالة الشائعة
+# (زيادة عمود، زيادة فهرس) وهو **غير مدمّر** بعد إصلاح
+# _repair_stale_communes فوق.
+#
+# محدودياتو الحقيقية: ما يقدرش يبدّل نوع عمود، ولا يمسح عمودًا،
+# ولا يرجّع للوراء (rollback) هجرة فاشلة.
+#
+# الانتقال لـFlask-Migrate/Alembic هو الحل الصحيح على المدى الطويل،
+# لكنو قرار يحتاج تحضيرًا: لازم `alembic stamp head` على قاعدة
+# الإنتاج الموجودة (باش Alembic يفهم أن الجداول موجودة خلاص) قبل
+# أي `upgrade`. لو دارها واحد غلط، `upgrade` على قاعدة بلا ختم
+# يحاول ينشئ جداول موجودة ويفشل — ولا أسوأ، هجرة أوتوماتيكية
+# تولّد DROP لأعمدة يظنها زائدة.
+#
+# فما ديناهاش هنا: عملية تحتاج نسخة احتياطية ونافذة صيانة،
+# ماشي حاجة تتزاد وسط إصلاح أمني.
 
 
 if __name__ == "__main__":

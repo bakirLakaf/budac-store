@@ -1144,6 +1144,35 @@ class Order(db.Model):
     # ---------- التتبّع عند شركة التوصيل ----------
     tracking_number = db.Column(db.String(80), nullable=True)   # رقم التتبّع
     carrier_parcel_id = db.Column(db.String(80), nullable=True)  # معرّف الطرد عندهم
+
+    # ══════════════════════════════════════════════════════════
+    # حالة الإرسال لشركة التوصيل — حماية من الإرسال المزدوج
+    #
+    # ⚠️ المشكل اللي تحلّ: الكود القديم كان يفحص `if tracking_number`
+    # ثم ينادي API ZR (ثواني)، ثم يحفظ الرقم. نقرة مزدوجة (ولا
+    # اتصال بطيء على الجوال) = طلبين متوازيين، الاثنين يشوفو الرقم
+    # فارغًا، الاثنين يخلقو طردًا. طردان حقيقيان، تخليص مرتين.
+    #
+    # الحل: نحجزو الطلبية ذريًا (UPDATE مشروط) قبل ما نمسّو ZR.
+    #
+    # علاش حقل حالة وماشي نكتبو "PENDING" فـtracking_number؟
+    # لأن API يقدر يفشل ولا العامل يموت وسط العملية — ساعتها
+    # الطلبية تبقى عالقة للأبد بحالة وهمية. بحقل منفصل + وقت البداية،
+    # نقدرو نعرفو أن الحجز قديم ونسمحو بإعادة المحاولة.
+    # ══════════════════════════════════════════════════════════
+
+    ZR_IDLE = "idle"            # ما تبعثاتش بعد
+    ZR_SENDING = "sending"      # محجوزة درك، طلب فالطريق
+    ZR_SENT = "sent"            # نجحت — عندها رقم تتبّع
+    ZR_FAILED = "failed"        # فشلت — يقدر يعاود
+
+    # الحجز اللي قعد أكثر من هاد المدة نعتبروه ميتًا ونسمحو بإعادة
+    # المحاولة (العامل طاح ولا الشبكة انقطعت وسط العملية).
+    ZR_CLAIM_TIMEOUT_SECONDS = 180
+
+    send_state = db.Column(db.String(20), nullable=False, default=ZR_IDLE)
+    send_started_at = db.Column(db.DateTime, nullable=True)
+    send_error = db.Column(db.String(300), nullable=True)
     carrier_state = db.Column(db.String(120), nullable=True)     # آخر حالة معروفة
 
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
@@ -1948,3 +1977,74 @@ class VariantPack(db.Model):
 
     def __repr__(self):
         return f"<VariantPack {self.label} {self.price}>"
+
+
+# ==================== سجل أفعال الأدمن ====================
+
+class AdminAction(db.Model):
+    """
+    سجل تدقيق للعمليات الحساسة فلوحة التحكم.
+
+    ⚠️ علاش نحتاجوه؟
+    كي تلقى منتجًا ناقصًا ولا طلبية حالتها تبدّلت، السؤال الأول هو
+    «شكون دارها وامتى؟». بلا سجل، الجواب هو التخمين. وإذا صرا
+    اختراق يومًا ما، هذا هو الشي الوحيد اللي يقولك واش صرا فعلاً.
+
+    ⚠️ ماشي سجل لكل شي — الضجيج يقتل السجل. غير العمليات اللي
+    تبدّل ولا تمسح ولا تكلّف فلوس (شوف ACTION_* تحت).
+
+    🔴 ما نسجّلوش أبدًا: كلمات السر، الكوكيز، توكنات API، ولا بيانات
+    الزبون الكاملة. `details` نص قصير للسياق برك.
+    """
+
+    __tablename__ = "admin_actions"
+
+    # العمليات المسجّلة — الحساسة برك
+    LOGIN = "login"
+    LOGIN_FAILED = "login_failed"
+    LOGOUT = "logout"
+    DELETE = "delete"
+    BULK_DELETE = "bulk_delete"
+    ORDER_STATUS = "order_status"
+    SHIPMENT_SENT = "shipment_sent"
+    COUPON_CHANGE = "coupon_change"
+    SETTINGS_CHANGE = "settings_change"
+    IMPORT = "import"
+    EXPORT = "export"
+    INTEGRATION = "integration"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # ⚠️ نخزّنو الاسم ماشي غير المعرّف: لو تمسح الحساب، السجل يبقى
+    # مقروءًا. سجل تدقيق يشير لحساب ممسوح ما ينفع بوالو.
+    admin_username = db.Column(db.String(80), nullable=True)
+    admin_id = db.Column(db.Integer, nullable=True)
+
+    action = db.Column(db.String(40), nullable=False)
+    resource = db.Column(db.String(60), nullable=True)      # "product" / "order" ...
+    resource_id = db.Column(db.String(60), nullable=True)
+    details = db.Column(db.String(300), nullable=True)       # سياق قصير وآمن
+    success = db.Column(db.Boolean, nullable=False, default=True)
+
+    ip = db.Column(db.String(60), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+
+    def __repr__(self):
+        return f"<AdminAction {self.action} {self.resource}:{self.resource_id}>"
+
+    @property
+    def action_label(self):
+        return {
+            self.LOGIN: "دخول",
+            self.LOGIN_FAILED: "محاولة دخول فاشلة",
+            self.LOGOUT: "خروج",
+            self.DELETE: "حذف",
+            self.BULK_DELETE: "حذف جماعي",
+            self.ORDER_STATUS: "تبديل حالة طلبية",
+            self.SHIPMENT_SENT: "إرسال لشركة التوصيل",
+            self.COUPON_CHANGE: "تعديل كوبون",
+            self.SETTINGS_CHANGE: "تعديل إعدادات",
+            self.IMPORT: "استيراد",
+            self.EXPORT: "تصدير",
+            self.INTEGRATION: "تكامل خارجي",
+        }.get(self.action, self.action)

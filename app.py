@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask, request
 from dotenv import load_dotenv
 
 from config import Config
@@ -16,6 +16,12 @@ from VERSION import VERSION as APP_VERSION
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    # ⚠️ الإعدادات الحرجة تتفحص هنا، قبل أي شي آخر.
+    # Config.validate() ترمي ConfigError برسالة عربية واضحة إذا SECRET_KEY
+    # ناقص ولا ضعيف ولا قيمة افتراضية معروفة. التطبيق ما يقلعش —
+    # وهذا مقصود: مفتاح معروف = أي واحد يزوّر جلسة أدمن.
+    app.config.update(Config.validate())
 
     db.init_app(app)
 
@@ -37,6 +43,12 @@ def create_app():
     # ⚠️ حفظ التقدم: يبعثو JavaScript كـJSON، والتوكن يتبعث فهيدر X-CSRFToken.
     # Flask-WTF يقراه تلقائيًا من الهيدر، فالحماية باقية شغالة — ما نستثنيوهش.
 
+    # ⚠️ تحديد معدّل الطلبات. بلاه، أي واحد يبعث آلاف الطلبيات الوهمية،
+    # ولا يعدّ كل طلبيات المتجر بتجريب الأرقام. شوف services/ratelimit.py
+    # للتفاصيل وللانتقال لـRedis كي يكبر المشروع.
+    from services.ratelimit import init_limiter
+    init_limiter(app)
+
     # تسجيل الروابط (Blueprints) — كل مجموعة روابط فملفها الخاص، منظم وسهل التوسيع
     from routes.shop import shop_bp
     app.register_blueprint(shop_bp)
@@ -49,6 +61,11 @@ def create_app():
 
     from routes.landing import landing_bp
     app.register_blueprint(landing_bp)
+
+    # ⚠️ الحدود تتطبّق **بعد** تسجيل كل المسارات — قبل، app.view_functions
+    # مازالت فارغة وما يتطبّق حتى حد.
+    from services.ratelimit import apply_limits
+    apply_limits(app)
 
     # ⚠️ إذا الصور مخزّنة فقرص دائم (UPLOAD_ROOT)، Flask ما يعرفش يخدمها
     # لأنها برّا مجلد static. نزيدو مسار يخدمها.
@@ -170,6 +187,16 @@ def create_app():
         # على حاجة ما حبهاش.
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
 
+        # ⚠️ HSTS: يجبر المتصفح يستعمل https حتى لو الزائر كتب http.
+        # نزيدوه **فقط** على اتصال آمن فعلاً — لو زدناه على http محلي،
+        # المتصفح يحبس localhost على https ويولّي التطوير مستحيلاً
+        # (والمسح ما يكونش سهلاً).
+        # ماكانش includeSubDomains: الدومينات الفرعية ماشي كلها https مؤكد.
+        if request.is_secure:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000"
+            )
+
         # ما نبعتوش الرابط الكامل لمواقع خارجية (يحمي خصوصية الزبون)
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
 
@@ -229,7 +256,7 @@ def create_app():
             "shop/error.html",
             code=413,
             title="الملف كبير بزاف",
-            message="الحد الأقصى 5 ميغا للصورة.",
+            message="الحد الأقصى 25 ميغا للصورة.",
         ), 413
 
     return app
