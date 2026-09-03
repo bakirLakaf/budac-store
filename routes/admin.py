@@ -8,7 +8,7 @@
 - كل عمليات التعديل/الحذف عبر POST فقط (ما يتنفذوش برابط GET عادي)
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import time
 
 from models import utcnow   # ⚠️ بديل datetime.utcnow المهجورة
@@ -27,8 +27,9 @@ from models import (
     db, Product, Category, ProductImage, ProductVariant,
     Offer, OfferItem, Carrier, ShippingRate, AdminUser, Coupon, Order, OrderItem,
     AbandonedCart, Review, UpsellRule, LandingPage, StoreSetting,
-    VariantPack, VariantPriceTier,
+    VariantPack, VariantPriceTier, AdminAction,
 )
+from services import audit, ratelimit
 from services.cart import CartLine
 from services.orders import restore_stock, reserve_stock, OrderError
 from services.uploads import save_image, delete_image, UploadError
@@ -125,7 +126,40 @@ def _record_failed_login(ip):
             _LOGIN_ATTEMPTS.pop(key, None)
 
 
+def _is_safe_redirect(target):
+    r"""
+    واش هاد الرابط داخلي وآمن للتوجيه؟
+
+    نقبلو غير مسارًا داخليًا يبدا بـ«/» واحدة. كلش آخر مرفوض:
+      /admin/orders     ✅
+      /                 ✅
+      //evil.com        ❌ (المتصفح يقراها https://evil.com)
+      /\evil.com        ❌ (نفس الشي فبعض المتصفحات)
+      https://evil.com  ❌
+      javascript:...    ❌
+
+    ⚠️ نستعملو urlparse ماشي فحص نصوص برك: تحليل الرابط الحقيقي
+    يمسك الحالات اللي ينساها الفحص اليدوي (netloc، scheme، مسافات
+    فالبداية).
+    """
+    from urllib.parse import urlparse
+
+    if not target:
+        return False
+
+    target = target.strip()
+    if not target.startswith("/"):
+        return False
+    if target.startswith("//") or target.startswith("/\\"):
+        return False
+
+    parsed = urlparse(target)
+    # رابط داخلي حقيقي: بلا نطاق وبلا بروتوكول
+    return not parsed.netloc and not parsed.scheme
+
+
 @admin_bp.route("/login", methods=["GET", "POST"])
+@ratelimit.limit("admin_login")
 def login():
     if session.get("admin_id"):
         return redirect(url_for("admin.dashboard"))
@@ -150,20 +184,38 @@ def login():
         # ⚠️ نعرضو نفس الرسالة سواء المستخدم ماكانش موجود ولا كلمة السر غالطة،
         # باش ما نساعدوش أي واحد يخمن أسماء المستخدمين الموجودة
         if user and user.check_password(password):
+            # ⚠️ نظّفو الجلسة القديمة قبل ما نحطّو الهوية —
+            # حماية من تثبيت الجلسة (session fixation).
+            session.clear()
+            # permanent = True باش PERMANENT_SESSION_LIFETIME (12 ساعة)
+            # يطبّق فعلاً. بلاها الجلسة كوكي متصفح ما ينتهي أبدًا.
+            session.permanent = True
             session["admin_id"] = user.id
             session["admin_username"] = user.username
             user.last_login_at = utcnow()
             db.session.commit()
 
             _LOGIN_ATTEMPTS.pop(ip, None)  # دخول ناجح → نصفّرو العداد
+            audit.record_and_commit(AdminAction.LOGIN, resource="admin",
+                                    resource_id=user.id)
 
             next_page = request.args.get("next")
-            # نتأكدو أن الوجهة داخلية فقط (حماية من open redirect)
-            if next_page and next_page.startswith("/"):
+            # ⚠️ الفحص القديم `startswith("/")` كان مثقوبًا:
+            # "//evil.com" و"/\\evil.com" يبداو بـ/ لكن المتصفح
+            # يفسّرهم كروابط خارجية كاملة. مهاجم يبعث للأدمن رابط
+            # /admin/login?next=//evil.com فيلقى روحو عند موقعو
+            # (صفحة دخول مزيفة، مثلاً).
+            if _is_safe_redirect(next_page):
                 return redirect(next_page)
             return redirect(url_for("admin.dashboard"))
 
         _record_failed_login(ip)
+        # ⚠️ نسجّلو اسم المستخدم المُجرَّب برك — أبدًا كلمة السر.
+        # مفيد باش تعرف واش راك تحت هجوم تخمين.
+        audit.record_and_commit(
+            AdminAction.LOGIN_FAILED, resource="admin",
+            details=f"اسم مُجرَّب: {username[:40]}", success=False,
+        )
         flash("اسم المستخدم أو كلمة السر غير صحيحة", "error")
 
     return render_template("admin/login.html")
@@ -171,6 +223,7 @@ def login():
 
 @admin_bp.route("/logout", methods=["POST"])
 def logout():
+    audit.record_and_commit(AdminAction.LOGOUT, resource="admin")
     session.clear()
     flash("تم تسجيل الخروج", "success")
     return redirect(url_for("admin.login"))
@@ -976,6 +1029,7 @@ def product_delete(product_id):
     candidates.append(product.image_filename)
 
     name = product.name
+    audit.record(AdminAction.DELETE, "product", product.id, name)
     db.session.delete(product)
     db.session.flush()
 
@@ -1843,6 +1897,10 @@ def order_update_status(order_id):
         flash("تم خصم المخزون من جديد", "success")
 
     order.status = new_status
+    audit.record(
+        AdminAction.ORDER_STATUS, "order", order.order_number,
+        f"{old_status} ← {new_status}",
+    )
 
     admin_note = request.form.get("admin_note")
     if admin_note is not None:
@@ -2081,6 +2139,73 @@ def upsell_delete(rule_id):
 
 # ==================== تكامل ZR Express ====================
 
+def _claim_order_for_zr(order_id):
+    """
+    يحجز الطلبية للإرسال لـZR — عملية ذرية.
+
+    يرجّع (True, None) إذا نجح الحجز، ولا (False, "رسالة") إذا لا.
+
+    ⚠️ الحجز يمرّ من قاعدة البيانات (UPDATE ... WHERE) ماشي من بايثون،
+    باش خيطان/عمّال متوازيين ما يقدروش يحجزو نفس الطلبية بجوج.
+
+    الحالات المقبولة للحجز:
+      • idle / failed  → إرسال أول ولا إعادة محاولة
+      • sending قديمة  → الحجز السابق مات (العامل طاح، الشبكة قطعت)
+    """
+    from sqlalchemy import or_, update as sa_update
+
+    now = utcnow()
+    stale_before = now - timedelta(seconds=Order.ZR_CLAIM_TIMEOUT_SECONDS)
+
+    stmt = (
+        sa_update(Order)
+        .where(
+            Order.id == order_id,
+            Order.tracking_number.is_(None),
+            or_(
+                Order.send_state.in_([Order.ZR_IDLE, Order.ZR_FAILED]),
+                Order.send_state.is_(None),
+                # حجز قديم = ميت، نسمحو بإعادة المحاولة
+                db.and_(
+                    Order.send_state == Order.ZR_SENDING,
+                    Order.send_started_at < stale_before,
+                ),
+            ),
+        )
+        .values(send_state=Order.ZR_SENDING, send_started_at=now, send_error=None)
+    )
+
+    rowcount = db.session.execute(stmt).rowcount
+    db.session.commit()
+
+    if rowcount:
+        return True, None
+
+    # ما نجحش الحجز — نفهمو علاش باش الرسالة تكون مفيدة
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return False, "الطلبية ما بقاتش موجودة"
+    if order.tracking_number:
+        return False, f"هاد الطلبية تبعثات من قبل — رقم التتبّع: {order.tracking_number}"
+    return False, "الطلبية راهي فطريق الإرسال درك. استنى شوية وشوف من جديد."
+
+
+def _release_zr_claim(order_id, reason):
+    """
+    يحرّر الحجز بعد فشل، باش إعادة المحاولة تخدم فورًا.
+    نسجّلو السبب باش يبان للأدمن فصفحة الطلبية.
+    """
+    from sqlalchemy import update as sa_update
+
+    db.session.rollback()   # ننظّفو أي جلسة معطّلة من الفشل
+    db.session.execute(
+        sa_update(Order)
+        .where(Order.id == order_id, Order.tracking_number.is_(None))
+        .values(send_state=Order.ZR_FAILED, send_error=(reason or "")[:300])
+    )
+    db.session.commit()
+
+
 @admin_bp.route("/orders/<int:order_id>/send-to-carrier", methods=["POST"])
 @login_required
 def order_send_to_carrier(order_id):
@@ -2104,9 +2229,21 @@ def order_send_to_carrier(order_id):
         )
         return redirect(url_for("admin.order_detail", order_id=order.id))
 
-    if order.tracking_number:
-        flash(f"هاد الطلبية تبعثات من قبل — رقم التتبّع: {order.tracking_number}", "warning")
-        return redirect(url_for("admin.order_detail", order_id=order.id))
+    # 🔴 حماية من الإرسال المزدوج (كان يخلق طردين حقيقيين عند ZR).
+    #
+    # الفحص القديم `if order.tracking_number` كان نمط «افحص ثم نفّذ»:
+    # بين الفحص وحفظ الرقم كاين نداء API يدوم ثواني. gunicorn يخدم
+    # بـ4 خيوط، فنقرة مزدوجة تعطي طلبين يعدّيو الفحص بجوج.
+    #
+    # درك نحجزو الطلبية بـUPDATE مشروط عند قاعدة البيانات: طلب واحد
+    # برك ينجح (rowcount=1)، والثاني يلقى rowcount=0 ويتوقف.
+    claimed, claim_message = _claim_order_for_zr(order_id)
+    if not claimed:
+        flash(claim_message, "warning")
+        return redirect(url_for("admin.order_detail", order_id=order_id))
+
+    # نعاودو نقراو الطلبية بعد الحجز — الحالة تبدّلت فقاعدة البيانات
+    db.session.expire(order)
 
     # ⚠️ معرّف البلدية عند ZR (territoryId) يسهّل الأمور، لكن **ماشي إجباري**:
     # ZR يقبل الطرد بالاسم كذلك. قبل، كنّا نمنعو الإرسال بلا معرّف — وهذا
@@ -2150,11 +2287,23 @@ def order_send_to_carrier(order_id):
     try:
         result = create_parcel(order, territory_id=territory_id, hub_id=hub_id)
     except ZRError as e:
+        # ⚠️ نحرّرو الحجز باش الأدمن يقدر يعاود المحاولة فورًا،
+        # بدل ما تبقى الطلبية عالقة فحالة "sending" للأبد.
+        _release_zr_claim(order_id, str(e))
         flash(f"ما قدرناش نبعثو الطلبية: {e}", "error")
-        return redirect(url_for("admin.order_detail", order_id=order.id))
+        return redirect(url_for("admin.order_detail", order_id=order_id))
+    except Exception:
+        _release_zr_claim(order_id, "خطأ غير متوقّع")
+        current_app.logger.exception("فشل غير متوقّع فإرسال الطلبية %s لـZR", order_id)
+        flash("صرا خطأ غير متوقّع فالإرسال. شوف السجلات وعاود جرّب.", "error")
+        return redirect(url_for("admin.order_detail", order_id=order_id))
 
     order.tracking_number = result["tracking_number"]
     order.carrier_parcel_id = result.get("parcel_id")
+    order.send_state = Order.ZR_SENT
+    audit.record(AdminAction.SHIPMENT_SENT, "order", order.order_number,
+                 f"تتبّع: {result['tracking_number']}")
+    order.send_error = None
 
     # نرقّيو الحالة تلقائيًا — الطلبية ولّات فعلاً عند الشركة
     if order.status == Order.STATUS_PENDING:
@@ -2894,6 +3043,14 @@ def orders_bulk_delete():
         for item in list(order.items):
             db.session.delete(item)
         db.session.delete(order)
+
+    # ⚠️ نسجّلو أرقام الطلبيات برك — ماشي أسماء الزبائن ولا هواتفهم.
+    # السجل لازم يجاوب «شكون مسح واش»، ماشي يولّي نسخة ثانية من
+    # بيانات الزبائن.
+    audit.record(
+        AdminAction.BULK_DELETE, "order", None,
+        f"{len(orders)} طلبية: " + ", ".join(o.order_number for o in orders[:15]),
+    )
 
     db.session.commit()
 
@@ -3884,9 +4041,17 @@ def products_import():
     except ValueError as e:
         flash(str(e), "error")
         return redirect(url_for("admin.products_list"))
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        flash(f"فشل الاستيراد: {e}", "error")
+        # ⚠️ رسالة SQLAlchemy فيها جملة SQL كاملة بأسماء الجداول
+        # والقيم. حتى للأدمن، عرضها فالمتصفح ماشي فكرة مليحة —
+        # تنسخ فسكرينشوت وتتبعث فمحادثة دعم. التفاصيل للسجلات.
+        current_app.logger.exception("فشل استيراد ملف Excel")
+        flash(
+            "فشل الاستيراد. تأكد أن الملف مبني على ملف التصدير، "
+            "وشوف السجلات للتفاصيل.",
+            "error",
+        )
         return redirect(url_for("admin.products_list"))
 
     parts = []

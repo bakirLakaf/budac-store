@@ -58,7 +58,49 @@ def _headers():
 
 # ⚠️ نخزّنو آخر طلب ورد لـZR فالذاكرة باش صفحة التشخيص تعرضهم.
 # ماشي فقاعدة البيانات: بيانات مؤقتة، وتتمسح مع إعادة التشغيل.
+#
+# 🔴 ملاحظتان أمنيتان على هاد المتغيّر العام:
+#
+# 1) **بيانات شخصية**: الـpayload اللي يتبعث لـZR فيه اسم الزبون
+#    وهاتفو وعنوانو. الاحتفاظ بيهم فالذاكرة بلا حد يعني أنهم
+#    يبقاو موجودين ساعات بعد ما تسالى العملية. نخبّيوهم درك.
+#
+# 2) **مشترك بين الخيوط**: gunicorn يخدم بـ4 خيوط، فأدمنان يشوفو
+#    نفس السطر. عندنا أدمن واحد فالواقع، فالأثر تشخيصي برك
+#    (تشوف تبادلاً ماشي تاعك)، ماشي تسريبًا لطرف خارجي.
+#    زدنا الوقت باش يبان بوضوح واش هاد التبادل قديم.
 LAST_EXCHANGE = {}
+
+# الحقول اللي ما نخزّنوهاش نص صريح — بيانات الزبون
+_PII_FIELDS = {
+    "clientName", "clientPhone", "clientPhone2", "phone", "phone2",
+    "name", "address", "addressLine", "customerName", "customerPhone",
+    "recipientName", "recipientPhone", "note", "comment",
+}
+
+
+def _redact_payload(payload):
+    """
+    ينسخ الـpayload ويخبّي بيانات الزبون قبل ما يتخزّن للتشخيص.
+
+    ⚠️ نخلّيو **طول** القيمة بدل ما نمسحوها كليًا: التشخيص عادةً
+    يدور على «واش الحقل معمّر؟ واش طولو صحيح؟» ماشي على القيمة
+    نفسها. هكذا نحلّو المشكل بلا ما نخسرو فائدة الصفحة.
+    """
+    if not isinstance(payload, dict):
+        return payload
+
+    clean = {}
+    for key, value in payload.items():
+        if key in _PII_FIELDS and value:
+            clean[key] = f"‹مخفي · {len(str(value))} حرف›"
+        elif isinstance(value, dict):
+            clean[key] = _redact_payload(value)
+        elif isinstance(value, list):
+            clean[key] = [_redact_payload(v) for v in value]
+        else:
+            clean[key] = value
+    return clean
 
 
 def _request(method, path, **kwargs):
@@ -97,10 +139,13 @@ def _request(method, path, **kwargs):
     except Exception:
         headers = {}
 
+    from datetime import datetime as _dt
+
     LAST_EXCHANGE.update({
         "method": method,
         "path": path,
-        "payload": kwargs.get("json"),
+        "at": _dt.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "payload": _redact_payload(kwargs.get("json")),
         "status": response.status_code,
         "response": body_preview,
         "headers": headers,

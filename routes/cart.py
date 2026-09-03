@@ -9,10 +9,15 @@ from flask import (
 
 from models import db, Coupon, Order, ShippingRate, utcnow
 from services import cart as cart_service
+from services import ratelimit
+from services.order_access import (
+    remember_order, session_owns_order, find_order_by_phone,
+)
 from services.marketing import (
     save_abandoned_cart, mark_cart_recovered, get_upsell_suggestions,
 )
 from services.orders import create_order, find_coupon, OrderError
+from utils import normalize_algerian_phone
 from services.shipping import (
     calculate_shipping, get_active_carriers, STATUS_OK, STATUS_FREE,
 )
@@ -311,6 +316,7 @@ def _get_session_coupon(subtotal):
 # ==================== الدفع (Checkout) ====================
 
 @cart_bp.route("/checkout", methods=["GET", "POST"])
+@ratelimit.limit("checkout")
 def checkout():
     lines = cart_service.get_cart_lines()
 
@@ -386,11 +392,17 @@ def checkout():
                 carriers=carriers, wilayas=wilayas, coupon=coupon, form=form,
             )
 
-        # الزبون كمّل — نعلّمو سلاتو المتروكة باش الأدمن ما يتصلش بيه بلا فايدة
-        mark_cart_recovered(form["phone"])
+        # الزبون كمّل — نعلّمو سلاتو المتروكة باش الأدمن ما يتصلش بيه بلا فايدة.
+        # ⚠️ المطابقة بآخر 9 أرقام (ماشي نصية): الرقم يتكتب بأشكال
+        # مختلفة، والمقارنة الحرفية كانت تخلّي سلات مفتوحة رغم إتمام الطلبية.
+        mark_cart_recovered(form["phone"], order.order_number)
 
         cart_service.clear_cart()
-        session["last_order_number"] = order.order_number
+
+        # ⚠️ الملكية تتسجّل عبر دالة وحدة (services/order_access.py)
+        # باش كل مسار يعرض طلبية يستعمل نفس القاعدة. قبل، كل مسار
+        # كان يكتب المنطق بنفسو — وواحد منهم نساه كليًا.
+        remember_order(order.order_number)
 
         return redirect(url_for("cart.order_success", order_number=order.order_number))
 
@@ -402,6 +414,7 @@ def checkout():
 
 
 @cart_bp.route("/api/save-progress", methods=["POST"])
+@ratelimit.limit("save_progress")
 def api_save_progress():
     """
     يسجّل بيانات الزبون بمجرد ما يكتبها فالـcheckout — قبل ما يضغط "أكّد".
@@ -413,11 +426,15 @@ def api_save_progress():
     """
     data = request.get_json(silent=True) or {}
 
-    phone = (data.get("phone") or "").strip()
-    phone_digits = "".join(c for c in phone if c.isdigit())
-
-    # ما نسجّلوش أرقام ناقصة — تولّي بيانات بلا فايدة عند الأدمن
-    if len(phone_digits) < 9:
+    # ⚠️ هاد المسار يتنادى **وقت الكتابة**. الفحص القديم كان يقبل
+    # 9 أرقام — يعني رقم جوال ناقص حرفًا. النتيجة: سطر يتسجّل
+    # بـ«066625520»، الزبون يكمّل الرقم، ويتسجّل سطر ثانٍ. زبون
+    # واحد يولّد سطرين، وكي يكمّل الطلبية واحد برك يتنحّى.
+    #
+    # درك نقبلو غير الرقم الكامل والصحيح — ورقم ناقص ما ينفع
+    # الأدمن أصلاً، ما يقدرش يعيّط بيه.
+    phone = normalize_algerian_phone(data.get("phone"))
+    if not phone:
         return jsonify({"saved": False})
 
     lines = cart_service.get_cart_lines()
@@ -427,7 +444,7 @@ def api_save_progress():
     save_abandoned_cart(
         {
             "name": (data.get("name") or "").strip(),
-            "phone": phone,
+            "phone": phone,   # موحّد: 0XXXXXXXXX
             "wilaya_name": (data.get("wilaya_name") or "").strip(),
             "commune": (data.get("commune") or "").strip(),
         },
@@ -464,7 +481,7 @@ def order_success(order_number):
     صفحة تأكيد الطلبية. متاحة فقط للطلبية اللي تسجلت فهاد الجلسة —
     باش حد ما يقدرش يشوف طلبيات الناس بتجريب أرقام.
     """
-    if session.get("last_order_number") != order_number:
+    if not session_owns_order(order_number):
         abort(404)
 
     order = Order.query.filter_by(order_number=order_number).first_or_404()
@@ -472,6 +489,7 @@ def order_success(order_number):
 
 
 @cart_bp.route("/track", methods=["GET", "POST"])
+@ratelimit.limit("order_lookup")
 def track_order():
     """
     تتبع الطلبية برقمها + رقم الهاتف.
@@ -486,9 +504,11 @@ def track_order():
         if not number or not phone:
             flash("اكتب رقم الطلبية ورقم الهاتف", "error")
         else:
-            order = Order.query.filter_by(
-                order_number=number, customer_phone=phone
-            ).first()
+            # ⚠️ كان هنا مقارنة حرفية `customer_phone=phone` — يعني
+            # الزبون اللي كتب رقمو بصيغة أخرى («0666 25 52 00») ما
+            # يلقاش طلبيتو رغم أنها موجودة. نستعملو نفس الدالة تاع
+            # «طلبياتي» اللي تقارن الأرقام برك.
+            order = find_order_by_phone(number, phone)
 
             if not order:
                 # رسالة وحدة للحالتين، باش ما نكشفوش واش الرقم موجود
@@ -510,27 +530,14 @@ def track_order():
 # ══════════════════════════════════════════════════════════════
 
 def _find_order(number, phone):
-    """يلقى طلبية بالرقم + الهاتف. يرجّع None إذا ما توافقوش."""
-    number = (number or "").strip().upper()
-    phone = (phone or "").strip()
-    if not number or not phone:
-        return None
+    """
+    يلقى طلبية بالرقم + الهاتف.
 
-    # ⚠️ نقارنو الهاتف بالأرقام برك — الزبون يقدر يكتبو بصيغة أخرى
-    # (0555-11-22-33 ولا +213...) وهو نفس الرقم.
-    digits = "".join(ch for ch in phone if ch.isdigit())
-    if not digits:
-        return None
-
-    order = Order.query.filter_by(order_number=number).first()
-    if order is None:
-        return None
-
-    saved = "".join(ch for ch in (order.customer_phone or "") if ch.isdigit())
-    if saved[-9:] != digits[-9:]:
-        return None
-
-    return order
+    ⚠️ المنطق انتقل لـservices/order_access.py باش يكون مصدرًا وحيدًا
+    يستعملوه كل المسارات (التتبّع، طلبياتي، الإلغاء). نخلّيو هاد
+    الغلاف باش ما نبدّلوش كل نداء فالملف.
+    """
+    return find_order_by_phone(number, phone)
 
 
 @cart_bp.route("/my-orders")
@@ -543,6 +550,7 @@ def my_orders():
 
 
 @cart_bp.route("/my-orders/lookup", methods=["POST"])
+@ratelimit.limit("order_lookup")
 def my_orders_lookup():
     """
     يرجّع تفاصيل طلبية بالرقم + الهاتف (JSON).
@@ -585,6 +593,7 @@ def my_orders_lookup():
 
 
 @cart_bp.route("/my-orders/<number>/cancel", methods=["POST"])
+@ratelimit.limit("order_modify")
 def my_order_cancel(number):
     """الزبون يلغي طلبيتو — غير قبل ما تخرج للتوصيل."""
     order = _find_order(number, request.form.get("phone"))
@@ -604,6 +613,7 @@ def my_order_cancel(number):
 
 
 @cart_bp.route("/my-orders/<number>/note", methods=["POST"])
+@ratelimit.limit("order_modify")
 def my_order_note(number):
     """
     الزبون يبعث ملاحظة على طلبيتو (زيادة، نقصان، تبديل موديل).
@@ -690,24 +700,20 @@ def _validate_checkout_form(form):
     # الأرقام الجزائرية الصحيحة:
     #   جوال : 05/06/07 + 8 أرقام  (مثال 0666255200)
     #   ثابت : 02/03/04 + 7 أرقام  (مثال 032123456)
-    phone_digits = "".join(c for c in form["phone"] if c.isdigit())
+    #
+    # ⚠️ كان هاد المنطق مكتوبًا هنا، ومكرّرًا حرفيًا فـroutes/landing.py،
+    # بينما السلات المتروكة تقارن الأرقام بطريقة ثالثة. ثلاث نسخ لنفس
+    # القاعدة = نفس صنف البق اللي عطّل صفحات الهبوط.
+    # درك مصدر وحيد: utils.normalize_algerian_phone
+    normalized_phone = normalize_algerian_phone(form["phone"])
 
-    # نحيّدو رمز الدولة إذا كتبو (+213 ولا 00213)
-    if phone_digits.startswith("00213"):
-        phone_digits = "0" + phone_digits[5:]
-    elif phone_digits.startswith("213"):
-        phone_digits = "0" + phone_digits[3:]
-
-    is_mobile = len(phone_digits) == 10 and phone_digits[:2] in ("05", "06", "07")
-    is_landline = len(phone_digits) == 9 and phone_digits[:2] in ("02", "03", "04")
-
-    if not (is_mobile or is_landline):
+    if not normalized_phone:
         errors.append(
             "رقم الهاتف غير صحيح — لازم يبدا بـ05 ولا 06 ولا 07 (مثال: 0666255200)"
         )
     else:
         # نخزّنو الرقم منظّف — بلا مسافات ولا رموز
-        form["phone"] = phone_digits
+        form["phone"] = normalized_phone
 
     if not form["wilaya_code"]:
         errors.append("اختر الولاية")

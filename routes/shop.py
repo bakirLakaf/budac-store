@@ -1,10 +1,14 @@
-from flask import Blueprint, render_template, abort, request, jsonify, url_for, redirect, flash, Response
+from flask import (
+    Blueprint, render_template, abort, request, jsonify, url_for,
+    redirect, flash, Response, current_app,
+)
 
 from sqlalchemy.orm import joinedload
 
 from sqlalchemy import func
 
 from models import db, Product, Category, Offer, OfferItem, OrderItem, Order, Review
+from services import ratelimit
 
 # ⚠️ نفس دالة التقريب اللي يستعملها الشراء — باش الجدول والفاتورة
 #    ما يختلفوش أبدًا. مصدر واحد للقاعدة، ماشي زوج.
@@ -13,9 +17,46 @@ from services.shipping import round_up_to_100
 shop_bp = Blueprint("shop", __name__)
 
 
+# ⚠️ 9 منتجات فالصفحة = 3 صفوف × 3 أعمدة فالحاسوب، وصف واحد
+# منظّم فالهاتف. رقم يقسم على 3 مليح — بلاه الصف الأخير يبقى ناقصًا
+# ويبان الشبكة مكسورة.
+PRODUCTS_PER_PAGE = 9
+
+
+def _category_counts():
+    """
+    عدد المنتجات النشطة فكل تصنيف + المجموع.
+
+    ⚠️ استعلام GROUP BY واحد بدل ما نجيبو كل المنتجات ونعدّوهم
+    فالقالب. قبل، الشريط الجانبي كان يجبر السيرفر يحمّل **كل**
+    الكتالوج فكل زيارة باش يطبع أرقامًا صغيرة — وهذا هو بالضبط
+    السبب اللي خلّى الصفحة الرئيسية تبطّئ مع نموّ المنتجات.
+
+    يرجّع (قاموس {slug: عدد}, المجموع)
+    """
+    rows = (
+        db.session.query(Category.slug, func.count(Product.id))
+        .join(Product, Product.category_id == Category.id)
+        .filter(Product.is_active.is_(True))
+        .group_by(Category.slug)
+        .all()
+    )
+    counts = {slug: count for slug, count in rows}
+
+    # ⚠️ المجموع يتحسب لوحدو — منتج بلا تصنيف ما يبانش فالـJOIN فوق،
+    # لكنو يبان فـ«كل المنتجات». جمع الأعداد يعطي رقمًا أقل من الحقيقة.
+    total = Product.query.filter_by(is_active=True).count()
+
+    return counts, total
+
+
 @shop_bp.route("/")
 def home():
     category_slug = request.args.get("category")
+
+    # ⚠️ رقم صفحة غالط (نص، سالب، ضخم) ما يخصّوش يطيّح الصفحة.
+    # type=int يرجّع None إذا ماشي رقمًا، وmax(1, ...) يمسك السالب.
+    page_number = max(1, request.args.get("page", 1, type=int) or 1)
 
     query = Product.query.options(
         joinedload(Product.category), joinedload(Product.variants)
@@ -23,26 +64,32 @@ def home():
     if category_slug:
         query = query.join(Category).filter(Category.slug == category_slug)
 
-    products = query.order_by(Product.created_at.desc()).all()
-
-    # ⚠️ للفلترة الفورية بلا إعادة تحميل: نبعثو **كل** المنتجات للقالب،
-    # والجافاسكريبت يخبّي/يبيّن حسب التصنيف. الفلترة من السيرفر (?category=)
-    # تبقى تخدم للروابط المباشرة ولمحركات البحث.
-    all_products = (
-        Product.query
-        .options(joinedload(Product.category), joinedload(Product.variants))
-        .filter_by(is_active=True)
-        .order_by(Product.created_at.desc())
-        .all()
+    # ⚠️ الترقيم من السيرفر: نجيبو 9 منتجات برك بدل الكتالوج كامل.
+    # قبل، الصفحة الرئيسية كانت تحمّل **كل** المنتجات النشطة (مرتين!)
+    # وتبعثهم للمتصفح باش JavaScript يخبّي اللي ماشي من التصنيف.
+    # مع 45 منتج يخدم؛ مع 500 يولّي أبطأ صفحة فالموقع.
+    #
+    # error_out=False مهم: صفحة رقم 99 على كتالوج فيه 5 صفحات ترجع
+    # قائمة فارغة بدل خطأ 404 — أحسن للزبون وللزواحف.
+    pagination = query.order_by(Product.created_at.desc()).paginate(
+        page=page_number, per_page=PRODUCTS_PER_PAGE, error_out=False
     )
+    products = pagination.items
 
     categories = Category.query.filter_by(is_active=True).order_by(Category.name).all()
+    category_counts, products_total = _category_counts()
 
     # العروض الخاصة تبان فوق فالصفحة الرئيسية — غير اللي شغالة فعليًا:
     # مفعّلة + داخل مدتها + عندها منتجات + كل منتجاتها متوفرة.
     # نفلترو فبايثون ماشي فSQL لأن الشروط تعتمد على خصائص محسوبة (is_running/is_available).
+    #
+    # ⚠️ الأقسام الزائدة (عروض، جديد، الأكثر مبيعًا، تقييمات) تبان
+    # **غير فالصفحة الأولى بلا تصنيف**. كي الزبون يفلتر ولا يتصفّح،
+    # هو راه يدور على منتج معيّن — ما نعرضوش عليه صفحة كاملة مرة أخرى.
+    is_landing_view = not category_slug and page_number == 1
+
     offers = []
-    if not category_slug:  # ما نعرضوهمش كي الزبون يفلتر بتصنيف معين
+    if is_landing_view:
         # joinedload يجيب العروض ومنتجاتها وتنويعاتها فاستعلام واحد.
         # بلاه، صفحة فيها 5 عروض × 3 منتجات = عشرات الاستعلامات (مشكلة N+1).
         candidates = (
@@ -53,24 +100,36 @@ def home():
         )
         offers = [o for o in candidates if o.is_running and o.items and o.is_available]
 
-    # الأقسام الإضافية تبان غير فالصفحة الكاملة (ماشي كي يفلتر بتصنيف)
     newest, best_sellers = [], []
-    if not category_slug:
-        newest = [p for p in products if p.is_in_stock][:8]
+    if is_landing_view:
+        # ⚠️ استعلام مستقل بحدّو: قبل كان ياخذ من `products`، واللي
+        # ولّات درك 9 منتجات برك — فقسم «الجديد» كان يفرغ.
+        newest = [
+            p for p in (
+                Product.query
+                .options(joinedload(Product.category), joinedload(Product.variants))
+                .filter_by(is_active=True)
+                .order_by(Product.created_at.desc())
+                .limit(16).all()
+            )
+            if p.is_in_stock
+        ][:8]
         best_sellers = _find_best_sellers(limit=8)
 
     # العرض المميّز (قسم الصورة الكبيرة) — واحد فقط، فوق أو تحت
     spotlight = _find_spotlight_offer()
 
     # تقييمات الزبائن — تبان فوق التذييل
-    testimonials = _find_testimonials() if not category_slug else []
+    testimonials = _find_testimonials() if is_landing_view else []
 
     return render_template(
         "shop/home.html",
         testimonials=testimonials,
         products=products,
-        all_products=all_products,
+        pagination=pagination,
         categories=categories,
+        category_counts=category_counts,
+        products_total=products_total,
         active_category=category_slug,
         offers=offers,
         newest=newest,
@@ -248,6 +307,7 @@ def store_reviews():
 
 
 @shop_bp.route("/reviews", methods=["POST"])
+@ratelimit.limit("review")
 def add_store_review():
     """
     استقبال تقييم للمتجر.
@@ -277,6 +337,7 @@ def add_store_review():
 
 
 @shop_bp.route("/product/<slug>/review", methods=["POST"])
+@ratelimit.limit("review")
 def add_review(slug):
     """
     استقبال تقييم من زبون.
@@ -333,8 +394,17 @@ def sitemap():
 
     xml = ['<?xml version="1.0" encoding="UTF-8"?>',
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    # ⚠️ نهرّبو الرابط قبل ما ندخّلوه فالـXML. الروابط تتولّد من
+    # slug المنتج، وslug فيه & ولا < يكسر الملف كامل فعين جوجل
+    # (خريطة موقع غير صالحة = صفحاتك ما تتفهرسش).
+    from xml.sax.saxutils import escape as xml_escape
+
     for loc, freq, priority in pages:
-        xml.append(f"  <url><loc>{loc}</loc><changefreq>{freq}</changefreq><priority>{priority}</priority></url>")
+        xml.append(
+            f"  <url><loc>{xml_escape(loc)}</loc>"
+            f"<changefreq>{freq}</changefreq>"
+            f"<priority>{priority}</priority></url>"
+        )
     xml.append("</urlset>")
 
     return Response("\n".join(xml), mimetype="application/xml")
@@ -463,9 +533,12 @@ def api_search_suggest():
 
 
 @shop_bp.route("/search")
+@ratelimit.limit("search")
 def search():
     """بحث فالمنتجات بالاسم والوصف."""
-    query_text = (request.args.get("q") or "").strip()
+    # ⚠️ نقصّو النص: ILIKE '%...%' على نص طويل بزاف يكلّف بلا فايدة،
+    # وماكانش زبون يكتب 200 حرف فخانة البحث.
+    query_text = (request.args.get("q") or "").strip()[:80]
 
     results = []
     if query_text:
@@ -539,7 +612,7 @@ def api_products_by_slug():
                 url_for("static", filename="img/products/" + _thumb(p.image_filename))
                 if p.image_filename else None
             ),
-            "letter": p.name[0],
+            "letter": (p.name or "؟")[0],   # ⚠️ اسم فارغ كان يرمي IndexError ويطيّح الـAPI كامل
         }
         for p in ordered
     ])
@@ -589,6 +662,9 @@ def api_calculate(slug):
     except CalculationError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception:
+        # ⚠️ ما نبلعوش الخطأ بصمت: نسجّلوه باش نعرفو إذا الحاسبة
+        # مكسورة، لكن الزبون يشوف رسالة عامة برك.
+        current_app.logger.exception("فشل حساب الكمية للمنتج %s", product.id)
         return jsonify({"ok": False, "error": "صار خطأ فالحساب — راجع المدخلات"}), 400
 
     return jsonify({"ok": True, "result": result, "type": product.calculator_type})

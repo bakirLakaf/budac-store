@@ -6,10 +6,15 @@
 """
 
 from flask import (
-    Blueprint, render_template, abort, request, redirect, url_for,
+    Blueprint, render_template, abort, request, redirect, url_for, session,
 )
 
 from models import db, LandingPage, Carrier
+from services import ratelimit
+from services import stock as stock_service
+from services.order_access import remember_order, session_owns_order
+from utils import normalize_algerian_phone
+from services.marketing import mark_cart_recovered
 from services.orders import create_order, OrderError
 from services.shipping import calculate_shipping, get_active_carriers
 from routes.cart import _get_all_wilayas
@@ -69,6 +74,7 @@ def view(slug):
 
 
 @landing_bp.route("/lp/<slug>", methods=["POST"])
+@ratelimit.limit("landing_submit")
 def submit(slug):
     """يستقبل الطلبية من صفحة الهبوط."""
     page = LandingPage.query.filter_by(slug=slug, is_active=True).first()
@@ -155,13 +161,25 @@ def submit(slug):
         order.admin_note = f"{tag} {order.admin_note or ''}".strip()
 
     page.order_count = (page.order_count or 0) + 1
+
+    # ⚠️ صفحات الهبوط كانت ما تنحّيش السلات المتروكة إطلاقًا: زبون
+    # يبدا فالمتجر (تتسجّل سلة)، يشوف إعلانًا، ويكمّل من صفحة الهبوط —
+    # والسلة تبقى فقائمة المتابعة رغم أنو خلّص.
+    mark_cart_recovered(form["phone"], order.order_number)
+
     db.session.commit()
+
+    # ⚠️ نسجّلو الملكية فالجلسة **قبل** التوجيه لصفحة الشكر.
+    # بلاها، صفحة الشكر ما تعرفش أن هاد المتصفح هو صاحب الطلبية،
+    # وما تعرضش التفاصيل (وهذا هو المطلوب من غيرو).
+    remember_order(order.order_number)
 
     return redirect(url_for("landing.thanks", slug=slug, order=order.order_number))
 
 
 @landing_bp.route("/lp/<slug>/شكرا")
 @landing_bp.route("/lp/<slug>/thanks")
+@ratelimit.limit("landing_thanks")
 def thanks(slug):
     """صفحة الشكر — هنا يتسجّل حدث Purchase فالبكسل."""
     page = LandingPage.query.filter_by(slug=slug).first()
@@ -169,9 +187,24 @@ def thanks(slug):
         abort(404)
 
     from models import Order
-    order_number = (request.args.get("order") or "").strip()
-    order = Order.query.filter_by(order_number=order_number).first() if order_number else None
 
+    # 🔴 إصلاح ثغرة مؤكدة (IDOR): كان هنا
+    #     Order.query.filter_by(order_number=...).first()
+    # بلا أي تحقق من الملكية. رقم الطلبية 6 أرقام برك، وماكانش حد
+    # للطلبات — فأي واحد يلوپ على مليون رقم ويقرا مبالغ **كل**
+    # طلبيات المتجر (رقم أعمالك اليومي، متوسط الطلبية، سرعة النموّ).
+    #
+    # درك نفس قاعدة /order/success: الطلبية تبان فقط للمتصفح اللي
+    # دارها. الرقم معرّف، ماشي صلاحية.
+    order_number = (request.args.get("order") or "").strip().upper()
+    order = None
+
+    if order_number and session_owns_order(order_number):
+        order = Order.query.filter_by(order_number=order_number).first()
+
+    # ⚠️ ما نديروش abort(404) كي الملكية ما تثبتش: صفحة الشكر تبقى
+    # تبان بلا تفاصيل. بلا هذا، الرد نفسو يولّي مؤشرًا (404 = الرقم
+    # ماكانش، 200 = موجود) وترجع نفس ثغرة التعداد من باب آخر.
     return render_template("landing/thanks.html", page=page, order=order)
 
 
@@ -215,28 +248,32 @@ def _validate(form, page):
         errors.append("اكتب اسمك ولقبك كاملين")
 
     # ---------- الهاتف ----------
-    digits = "".join(c for c in form["phone"] if c.isdigit())
-    if digits.startswith("00213"):
-        digits = "0" + digits[5:]
-    elif digits.startswith("213"):
-        digits = "0" + digits[3:]
-
-    is_mobile = len(digits) == 10 and digits[:2] in ("05", "06", "07")
-    is_landline = len(digits) == 9 and digits[:2] in ("02", "03", "04")
-
-    if not (is_mobile or is_landline):
+    # ⚠️ المنطق انتقل لـutils.normalize_algerian_phone باش يكون مصدرًا
+    # وحيدًا: السلات المتروكة كانت تقارن الأرقام بطريقة أخرى، فنفس
+    # الزبون يبان شخصين ما داموش يكتبو الرقم بنفس الصيغة.
+    normalized = normalize_algerian_phone(form["phone"])
+    if not normalized:
         errors.append("رقم الهاتف غير صحيح — لازم يبدا بـ05 ولا 06 ولا 07")
     else:
-        form["phone"] = digits
+        form["phone"] = normalized
 
     # ---------- الكمية ----------
     if form["quantity"] > page.max_quantity:
         errors.append(f"أقصى كمية {page.max_quantity}")
 
-    stock = (page.variant.stock_quantity if page.variant
-             else page.product.stock_quantity)
-    if stock is not None and form["quantity"] > stock:
-        errors.append(f"المخزون المتوفر: {stock} فقط")
+    # 🔴 إصلاح حرج: كان هنا فحص يقرا stock_quantity مباشرة ويتجاهل أن
+    # تتبّع المخزون مطفي عالميًا. القيمة 0 لكل المنتجات، فالشرط
+    # `1 > 0` كان صحيحًا دائمًا و**كل** طلبية من صفحة الهبوط تترفض
+    # برسالة «المخزون المتوفر: 0 فقط» — يعني الإعلانات تخلّص والزبون
+    # يشوف خطأ.
+    #
+    # درك نستعملو نفس الدالة اللي تستعملها السلة والطلبيات
+    # (services/stock.py) — قاعدة وحدة، ما تتناقضش.
+    stock_error = stock_service.check_availability(
+        page.product, page.variant, form["quantity"]
+    )
+    if stock_error:
+        errors.append(stock_error)
 
     # ---------- التوصيل ----------
     if not form["wilaya_code"]:

@@ -4,8 +4,49 @@
  * وكلشي هنا يقدر يتعمل بـ40 سطر جافاسكريبت عادي.
  */
 
+/* ═══════════════════════════════════════════════════════════════
+ * أدوات أمان مشتركة — يستعملوها كل الأجزاء تحت.
+ *
+ * ⚠️ علاش فوق برّا الوحدات (IIFE)؟ لأنها كانت مكرّرة فكل وحدة،
+ * ووحدة وحدة (منتجات «شفتها مؤخرًا») نسيتها كليًا — وهذا كان
+ * منفذ XSS حقيقي. نسخة وحدة = ما تتنساش.
+ * ═══════════════════════════════════════════════════════════════ */
+var BudacSafe = (function () {
+    "use strict";
+
+    /**
+     * يهرّب النص باش ما يتفسّرش كـHTML.
+     * ⚠️ هاذي للنصوص والخصائص (attributes) — ماشي للروابط:
+     * "javascript:alert(1)" ماكانش فيها حتى حرف يتهرّب، فتعدّي سالمة.
+     */
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str == null ? '' : str;
+        return div.innerHTML;
+    }
+
+    /**
+     * ينظّف رابطًا قبل ما يدخل فـhref ولا src.
+     *
+     * القاعدة: نقبلو غير الروابط الداخلية (تبدا بـ/ وماشي //).
+     * كل روابطنا داخلية أصلاً (url_for يولّدهم)، فالتشديد ما يكلّف والو،
+     * ويسدّ javascript: وdata: و//evil.com دفعة وحدة.
+     */
+    function safeUrl(url) {
+        if (typeof url !== 'string') return '#';
+        var trimmed = url.trim();
+        if (trimmed.charAt(0) !== '/' || trimmed.charAt(1) === '/') return '#';
+        return escapeHtml(trimmed);
+    }
+
+    return { escapeHtml: escapeHtml, safeUrl: safeUrl };
+})();
+
 (function () {
     "use strict";
+
+    var escapeHtml = BudacSafe.escapeHtml;
+    var safeUrl    = BudacSafe.safeUrl;
 
     // واش المستخدم طالب تقليل الحركة (إعداد فالنظام)؟ نحترموه.
     var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -138,16 +179,24 @@
             .then(function (products) {
                 if (!products.length) return;
 
+                // 🔴 إصلاح: كانت البيانات تدخل innerHTML خام بلا تهريب —
+                // وحدها فالمشروع كامل (كل باقي الأماكن تستعمل escapeHtml).
+                // اسم المنتج يجي من استيراد YouCan/Excel، يعني بيانات
+                // خارجية: اسم فيه <img src=x onerror=...> كان يتنفّذ عند
+                // كل زائر. وCSP فيه 'unsafe-inline' فما كانش يوقفو.
+                //
+                // ⚠️ كل قيمة حسب سياقها: النصوص بـescapeHtml،
+                // والروابط بـsafeUrl (تمنع javascript: وroot-relative مزوّر).
                 grid.innerHTML = products.map(function (p) {
                     var media = p.image
-                        ? '<img src="' + p.image + '" alt="" loading="lazy">'
-                        : '<span class="ph-monogram">' + p.letter + "</span>";
+                        ? '<img src="' + safeUrl(p.image) + '" alt="" loading="lazy">'
+                        : '<span class="ph-monogram">' + escapeHtml(p.letter) + "</span>";
 
-                    return '<a href="' + p.url + '" class="product-card">' +
+                    return '<a href="' + safeUrl(p.url) + '" class="product-card">' +
                         '<div class="product-card-image">' + media + "</div>" +
                         '<div class="product-card-body">' +
-                        '<h3 class="product-card-name">' + p.name + "</h3>" +
-                        '<p class="product-card-price">' + p.price + "</p>" +
+                        '<h3 class="product-card-name">' + escapeHtml(p.name) + "</h3>" +
+                        '<p class="product-card-price">' + escapeHtml(p.price) + "</p>" +
                         "</div></a>";
                 }).join("");
 
@@ -197,6 +246,8 @@
    ما نحسبو والو فالمتصفح باش الزبون ما يقدرش يبدّلهم.
    ════════════════════════════════════════════════════════════ */
 (function () {
+    var escapeHtml = BudacSafe.escapeHtml;
+
     var btn      = document.getElementById('cartFloatBtn');
     var drawer   = document.getElementById('cartDrawer');
     var overlay  = document.getElementById('cartOverlay');
@@ -233,12 +284,6 @@
         setTimeout(function () {
             if (!isOpen) { overlay.hidden = true; drawer.hidden = true; }
         }, 250);
-    }
-
-    function escapeHtml(str) {
-        var div = document.createElement('div');
-        div.textContent = str == null ? '' : str;
-        return div.innerHTML;
     }
 
     function render(data) {
@@ -337,74 +382,26 @@
 })();
 
 /* ════════════════════════════════════════════════════════════
-   الفلترة الفورية حسب التصنيف (v17)
-   كل المنتجات مطبوعة فالصفحة، والفلترة تصرا فالمتصفح — بلا إعادة تحميل.
-   الرابط يتحدّث بـhistory.pushState باش الزبون يقدر يشاركو ويرجع للخلف.
+   تمرير سلس لقسم المنتجات
+   ⚠️ كانت هنا فلترة فورية بـJavaScript: كل المنتجات مطبوعة فالصفحة
+   والفلتر يخبّي اللي ماشي من التصنيف. هاد الطريقة ماتت مع الترقيم —
+   الصفحة درك فيها 9 منتجات برك، فما نقدروش نفلترو على شي ماشي موجود.
+   الفلترة والترقيم ولّاو من السيرفر (روابط عادية + ?page=)،
+   وهذا أحسن كذلك لمحركات البحث ولمشاركة الروابط.
+   ما بقا لJavaScript غير التمرير السلس.
    ════════════════════════════════════════════════════════════ */
 (function () {
-    var grid = document.getElementById('shopGrid');
-    if (!grid) return;
+    var section = document.getElementById('products');
+    if (!section || !window.location.hash) return;
 
-    var cards      = Array.prototype.slice.call(grid.querySelectorAll('.product-card'));
-    var countEl    = document.getElementById('shopResultCount');
-    var emptyEl    = document.getElementById('shopEmptyFilter');
-    var triggers   = document.querySelectorAll('.side-cat[data-cat], .category-card[data-cat]');
-    var section    = document.getElementById('products');
-
-    function applyFilter(slug, pushUrl) {
-        var visible = 0;
-
-        cards.forEach(function (card) {
-            var match = (slug === 'all') || (card.getAttribute('data-cat') === slug);
-            card.classList.toggle('is-filtered-out', !match);
-            if (match) visible++;
+    if (window.location.hash === '#products') {
+        // المتصفح يقفز مباشرة للمرساة؛ نصحّحوها بتمرير سلس مع
+        // هامش صغير باش العنوان ما يتخبّاش تحت الشريط العلوي.
+        requestAnimationFrame(function () {
+            var top = section.getBoundingClientRect().top + window.scrollY - 20;
+            window.scrollTo({ top: top, behavior: 'smooth' });
         });
-
-        // نحدّثو حالة الأزرار فالجهتين (الشريط الجانبي وأزرار الهاتف)
-        triggers.forEach(function (el) {
-            el.classList.toggle('is-active', el.getAttribute('data-cat') === slug);
-        });
-
-        if (countEl) {
-            if (visible === 0)      countEl.textContent = '';
-            else if (visible === 1)  countEl.textContent = 'منتج واحد';
-            else if (visible === 2)  countEl.textContent = 'منتجان';
-            else if (visible <= 10)  countEl.textContent = visible + ' منتجات';
-            else                     countEl.textContent = visible + ' منتج';
-        }
-        if (emptyEl) emptyEl.hidden = visible !== 0;
-
-        if (pushUrl) {
-            var url = (slug === 'all')
-                ? window.location.pathname
-                : window.location.pathname + '?category=' + encodeURIComponent(slug);
-            history.pushState({ cat: slug }, '', url);
-        }
     }
-
-    triggers.forEach(function (el) {
-        el.addEventListener('click', function (e) {
-            e.preventDefault();
-            var slug = el.getAttribute('data-cat');
-            applyFilter(slug, true);
-
-            // نمرّرو لقسم المنتجات باش الزبون يشوف النتيجة فورًا
-            if (section) {
-                var top = section.getBoundingClientRect().top + window.scrollY - 20;
-                window.scrollTo({ top: top, behavior: 'smooth' });
-            }
-        });
-    });
-
-    // زر "رجوع" فالمتصفح يرجّع الفلتر السابق
-    window.addEventListener('popstate', function () {
-        var params = new URLSearchParams(window.location.search);
-        applyFilter(params.get('category') || 'all', false);
-    });
-
-    // الحالة الأولى: من الرابط
-    var initial = new URLSearchParams(window.location.search).get('category') || 'all';
-    applyFilter(initial, false);
 })();
 
 

@@ -66,14 +66,82 @@ def _visitor_key(today):
     نخلطو المفتاح السري باش حتى لو تسرّبت قاعدة البيانات، ما يقدرش
     حد يعاود يبني البصمة من IP معروف.
     """
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
-    ip = ip.split(",")[0].strip()
+    # 🔴 إصلاح: كان هنا قراءة خام لـX-Forwarded-For.
+    # هاد الهيدر **يتحكم فيه العميل**: يقدر يبعث قيمة مختلفة فكل
+    # طلب، فتتولّد بصمة جديدة فكل مرة، فيتزاد صف جديد فـsite_visits
+    # مع كل طلب — تضخّم جدول بلا حد + أرقام زوّار مزوّرة.
+    #
+    # ProxyFix (فـapp.py، x_for=1) خلاص عالج المشكل: ياخذ العنوان
+    # الصحيح حسب عدد البروكسيات الموثوقة ويحطّو فـremote_addr.
+    # فنثقو فيه هو، ماشي فالهيدر الخام.
+    ip = request.remote_addr or ""
 
     agent = request.headers.get("User-Agent", "")
     secret = os.environ.get("SECRET_KEY", "budac")
 
     raw = f"{ip}|{agent}|{today.isoformat()}|{secret}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:40]
+
+
+# ══════════════════════════════════════════════════════════════
+# تجميع الزيارات فالذاكرة
+# ══════════════════════════════════════════════════════════════
+#
+# لكل بصمة زائر نحتفظو بـ(وقت آخر كتابة، زيارات مازال ما تكتبتش).
+# الكتابة تصرا كل FLUSH_SECONDS على الأكثر، وما تضيع حتى زيارة:
+# اللي تجمّع فالذاكرة يتزاد للعدّاد وقت الكتابة الجاية.
+#
+# ⚠️ محدودية معروفة: عامل جديد (بعد نشر ولا إعادة تشغيل) يبدا
+# بذاكرة فارغة، فيمكن تضيع زيارات ما تكتبتش بعد. مقبول تمامًا —
+# هاذي إحصائيات تقريبية، ماشي محاسبة.
+
+_PENDING = {}
+FLUSH_SECONDS = 300          # 5 دقايق
+_MAX_PENDING_KEYS = 5000     # سقف الذاكرة
+
+
+def _take_pending(key):
+    """
+    يرجّع عدد الزيارات اللي لازم تتكتب درك، أو None إذا مازال بكري.
+    """
+    from time import time as _now
+
+    now = _now()
+    last_write, buffered = _PENDING.get(key, (0.0, 0))
+    buffered += 1
+
+    if now - last_write < FLUSH_SECONDS:
+        _PENDING[key] = (last_write, buffered)
+        return None
+
+    _PENDING[key] = (now, 0)
+    _prune_pending(now)
+    return buffered
+
+
+def reset_pending():
+    """
+    يفرّغ ذاكرة التجميع.
+
+    ⚠️ للاختبارات: كل اختبار عندو قاعدة بيانات جديدة، لكن هاد
+    القاموس عام على مستوى الوحدة فيعيش بينهم — فالاختبار الثاني
+    يظن أن الزيارة اتكتبت خلاص وما يكتبش والو.
+    (فالإنتاج ماكانش المشكل: قاعدة البيانات ما تتفرّغش، والمفتاح
+    يتبدّل كل يوم مع التاريخ.)
+    """
+    _PENDING.clear()
+
+
+def _prune_pending(now):
+    """تنظيف: ما نخلّيوش القاموس يكبر بلا حدود."""
+    if len(_PENDING) <= _MAX_PENDING_KEYS:
+        return
+    stale = [k for k, (ts, _) in _PENDING.items() if now - ts > 86400]
+    for k in stale:
+        _PENDING.pop(k, None)
+    # مازال كبير؟ نفرّغوه — أحسن من تسريب ذاكرة
+    if len(_PENDING) > _MAX_PENDING_KEYS:
+        _PENDING.clear()
 
 
 def track_response(response):
@@ -126,10 +194,23 @@ def track_response(response):
         today = date.today()
         key = _visitor_key(today)
 
+        # ⚠️ ما نكتبوش لقاعدة البيانات فكل عرض صفحة.
+        # قبل: SELECT + UPDATE + COMMIT مع **كل** صفحة HTML — يعني
+        # رحلة زيادة لقاعدة البيانات على المسار الحرج، وتزاحم على
+        # نفس الصف كي عدة زبائن يشاركو نفس العنوان (شائع بزاف
+        # فبيانات الجوال).
+        #
+        # درك نجمّعو الزيارات فالذاكرة ونكتبوهم دفعة. ما نستعملوش
+        # الجلسة لهذا: الجلسة كوكي موقّع يتبعث مع **كل** طلب،
+        # فتكبيرها يكلّف كل زائر بايتات زيادة فكل صورة وملف.
+        pending = _take_pending(key)
+        if pending is None:
+            return response          # مازال بكري — تجمّعت فالذاكرة برك
+
         visit = SiteVisit.query.filter_by(day=today, visitor_key=key).first()
 
         if visit:
-            visit.views = (visit.views or 0) + 1
+            visit.views = (visit.views or 0) + pending
         else:
             referrer = (request.referrer or "")[:300]
 
@@ -140,7 +221,7 @@ def track_response(response):
             visit = SiteVisit(
                 day=today,
                 visitor_key=key,
-                views=1,
+                views=pending,
                 first_page=path[:300],
                 referrer=referrer or None,
             )

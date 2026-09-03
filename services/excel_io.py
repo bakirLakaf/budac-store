@@ -29,7 +29,11 @@
 import io
 from datetime import datetime
 
+import logging
+
 from openpyxl import Workbook, load_workbook
+
+logger = logging.getLogger(__name__)
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -68,6 +72,33 @@ KEY_FILL = PatternFill("solid", fgColor="FFF6E5")   # أعمدة الربط
 BODY_FONT = Font(name="Arial", size=11)
 THIN = Side(style="thin", color="D9D2C5")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+
+
+# ⚠️ Excel يعتبر أي خانة تبدا بـ= أو + أو - أو @ **صيغة** وينفّذها
+# عند الفتح. أسماء المنتجات عندنا تجي من استيراد YouCan — يعني
+# بيانات خارجية. اسم كيما "=HYPERLINK(...)" ولا "=cmd|..." يولّي
+# هجومًا على جهاز الأدمن كي يفتح ملف التصدير.
+#
+# الحل المعياري: بادئة اقتباس مفردة. Excel يعرضها كنص عادي
+# (الاقتباس ما يبانش فالخانة) وما ينفّذ والو.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _safe_cell(value):
+    """
+    ينظّف قيمة قبل ما تتكتب فخانة Excel.
+
+    ⚠️ الأرقام والتواريخ والمنطقيات تعدّي كيما هي — لو حوّلناهم لنص
+    باش «نحميهم»، تنكسر الحسابات والفرز فالملف، وينكسر الاستيراد
+    (اللي يقرا أرقامًا). الحماية تخصّ النصوص برك.
+    """
+    if not isinstance(value, str) or not value:
+        return value
+
+    if value.lstrip()[:1] in _FORMULA_PREFIXES:
+        return "'" + value
+
+    return value
 
 
 def _bool_out(value):
@@ -198,7 +229,7 @@ def export_workbook():
             product.description or "",
         ]
         for col, value in enumerate(values, start=1):
-            cell = products_sheet.cell(row=row, column=col, value=value)
+            cell = products_sheet.cell(row=row, column=col, value=_safe_cell(value))
             cell.font = BODY_FONT
             cell.border = BORDER
             cell.alignment = Alignment(vertical="top", wrap_text=(col == 10))
@@ -219,7 +250,7 @@ def export_workbook():
                 _bool_out(variant.is_default),
             ]
             for col, value in enumerate(values, start=1):
-                cell = variants_sheet.cell(row=row, column=col, value=value)
+                cell = variants_sheet.cell(row=row, column=col, value=_safe_cell(value))
                 cell.font = BODY_FONT
                 cell.border = BORDER
             row += 1
@@ -238,7 +269,7 @@ def export_workbook():
                     tier.min_quantity, tier.max_quantity, tier.unit_price,
                 ]
                 for col, value in enumerate(values, start=1):
-                    cell = tiers_sheet.cell(row=row, column=col, value=value)
+                    cell = tiers_sheet.cell(row=row, column=col, value=_safe_cell(value))
                     cell.font = BODY_FONT
                     cell.border = BORDER
                 row += 1
@@ -257,7 +288,7 @@ def export_workbook():
                     pack.quantity, pack.label, pack.price,
                 ]
                 for col, value in enumerate(values, start=1):
-                    cell = packs_sheet.cell(row=row, column=col, value=value)
+                    cell = packs_sheet.cell(row=row, column=col, value=_safe_cell(value))
                     cell.font = BODY_FONT
                     cell.border = BORDER
                 row += 1
@@ -275,6 +306,11 @@ def export_workbook():
 # الاستيراد
 # ═══════════════════════════════════════════
 
+# حدود الاستيراد — تمنع ملفًا ضخمًا من استنزاف الذاكرة والوقت
+MAX_SHEETS = 12
+MAX_ROWS_PER_SHEET = 20000
+
+
 def _rows(sheet, headers):
     """
     يقرا الصفحة كقواميس {اسم العمود: القيمة}.
@@ -285,13 +321,31 @@ def _rows(sheet, headers):
     if sheet is None:
         return []
 
-    header_row = [
-        str(c.value).strip() if c.value is not None else ""
-        for c in sheet[1]
-    ]
-
+    # ⚠️ فوضع read_only ما نقدروش نديرو sheet[1] (الفهرسة بالسطر غير
+    # مدعومة — الصفحة تتقرا بالبثّ). نمرّو مرة وحدة ونعتبرو أول سطر
+    # هو الرأس.
     out = []
-    for row in sheet.iter_rows(min_row=2):
+    header_row = None
+    scanned = 0
+
+    for row in sheet.iter_rows():
+        scanned += 1
+
+        # ⚠️ سقف صريح: ملف فيه ملايين الصفوف يحبس السيرفر حتى لو
+        # read_only يحمي الذاكرة. نوقفو بدل ما نعلّقو النشر.
+        if scanned > MAX_ROWS_PER_SHEET:
+            raise ValueError(
+                f"الصفحة «{sheet.title}» فيها أكثر من {MAX_ROWS_PER_SHEET:,} سطر — "
+                "قسّم الملف لأجزاء أصغر."
+            )
+
+        if header_row is None:
+            header_row = [
+                str(c.value).strip() if c.value is not None else ""
+                for c in row
+            ]
+            continue
+
         values = {}
         empty = True
         for index, cell in enumerate(row):
@@ -305,6 +359,7 @@ def _rows(sheet, headers):
                 empty = False
         if not empty:
             out.append(values)
+
     return out
 
 
@@ -314,10 +369,30 @@ def import_workbook(file_storage):
 
     يرجع تقريرًا مفصّلاً: واش تنشأ، واش تحدّث، وواش تجاوزناه وليش.
     """
+    # ⚠️ read_only=True يقرا بالبثّ بدل ما يحمّل الملف كامل فالذاكرة.
+    # ملف .xlsx هو أرشيف ZIP: 5 ميغا مضغوطة تقدر تتفكّك لجيغابايتات
+    # (قنبلة ضغط)، وMAX_CONTENT_LENGTH يفحص الحجم **المضغوط** برك
+    # فما يوقفهاش.
+    #
+    # ⚠️ read_only وحدو ماشي حماية كاملة — يقلّل الذاكرة، ما يمنعش
+    # ملفًا فيه ملايين الصفوف من استهلاك الوقت. فنزيدو حدودًا صريحة
+    # تحت (عدد الصفحات وعدد الصفوف).
     try:
-        workbook = load_workbook(file_storage, data_only=True)
-    except Exception as e:
-        raise ValueError(f"ما قدرناش نقراو الملف: {e}")
+        workbook = load_workbook(file_storage, data_only=True, read_only=True)
+    except Exception:
+        logger.exception("فشل فتح ملف Excel للاستيراد")
+        # ⚠️ ما نعرضوش رسالة المكتبة: تقدر تكشف مسارات داخلية
+        raise ValueError(
+            "ما قدرناش نقراو الملف. تأكد أنو ملف Excel صحيح (.xlsx) وماشي معطوب."
+        )
+
+    # ⚠️ حدود عاقلة: ملف تصدير حقيقي عندو 5 صفحات وبضعة آلاف صف.
+    # أي شي أكبر بزاف = غلطة ولا محاولة استنزاف.
+    if len(workbook.sheetnames) > MAX_SHEETS:
+        raise ValueError(
+            f"الملف فيه {len(workbook.sheetnames)} صفحة — الحد {MAX_SHEETS}. "
+            "استعمل ملف التصدير كقالب."
+        )
 
     report = {
         "products_new": 0, "products_updated": 0,

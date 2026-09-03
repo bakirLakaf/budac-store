@@ -12,6 +12,40 @@
 import json
 
 from models import db, AbandonedCart, UpsellRule
+from utils import normalize_algerian_phone
+
+
+def phone_key(phone):
+    """
+    مفتاح مطابقة الهاتف: الرقم الموحّد (0XXXXXXXXX).
+
+    ⚠️ علاش ماشي النص كيما هو؟
+    نفس الزبون يكتب رقمو بأشكال مختلفة فنفس الجلسة:
+      «0666255200» · «0666 25 52 00» · «+213666255200»
+    والمقارنة النصية تشوفهم 3 أشخاص مختلفين — فالسلة تتكرّر،
+    وكي يكمّل الطلبية وحدة برك تتنحّى والباقي يبقى فقائمة المتابعة.
+
+    نرجّعو None للأرقام الناقصة ولا الغالطة: رقم نصّو ما ينفع لا
+    للمطابقة ولا للاتصال بيه.
+    """
+    return normalize_algerian_phone(phone)
+
+
+def _find_open_carts_by_phone(phone):
+    """السلات المفتوحة (جديدة/تواصلنا) تاع هاد الرقم."""
+    key = phone_key(phone)
+    if not key:
+        return []
+
+    candidates = (
+        AbandonedCart.query
+        .filter(AbandonedCart.status.in_([
+            AbandonedCart.STATUS_NEW,
+            AbandonedCart.STATUS_CONTACTED,
+        ]))
+        .all()
+    )
+    return [c for c in candidates if phone_key(c.customer_phone) == key]
 
 
 def save_abandoned_cart(customer_data, lines, total):
@@ -37,14 +71,16 @@ def save_abandoned_cart(customer_data, lines, total):
         for line in lines
     ]
 
-    existing = (
-        AbandonedCart.query
-        .filter_by(customer_phone=phone)
-        .filter(AbandonedCart.status.in_([AbandonedCart.STATUS_NEW, AbandonedCart.STATUS_CONTACTED]))
-        .first()
-    )
+    # ⚠️ كانت المقارنة نصية حرفية هنا — وهي سبب تكرار الأسطر:
+    # الحفظ يتنادى وقت الكتابة، فكل صيغة تاع الرقم تولّد سطرًا جديدًا.
+    open_carts = _find_open_carts_by_phone(phone)
+    existing = open_carts[0] if open_carts else None
 
     if existing:
+        # لو تولّدو أسطر مكرّرة من قبل (بيانات قديمة)، ندمجوهم درك
+        for duplicate in open_carts[1:]:
+            db.session.delete(duplicate)
+
         existing.customer_name = customer_data.get("name") or existing.customer_name
         existing.wilaya_name = customer_data.get("wilaya_name") or existing.wilaya_name
         existing.commune = customer_data.get("commune") or existing.commune
@@ -67,28 +103,6 @@ def save_abandoned_cart(customer_data, lines, total):
     db.session.add(cart)
     db.session.commit()
     return cart
-
-
-def mark_cart_recovered(phone):
-    """
-    كي الزبون يكمّل الطلب، نعلّمو سلاتو المتروكة كـ"استُرجعت".
-    هكذا الأدمن ما يتصلش بواحد خلّص أصلاً.
-    """
-    if not phone:
-        return
-
-    carts = (
-        AbandonedCart.query
-        .filter_by(customer_phone=phone.strip())
-        .filter(AbandonedCart.status.in_([AbandonedCart.STATUS_NEW, AbandonedCart.STATUS_CONTACTED]))
-        .all()
-    )
-
-    for cart in carts:
-        cart.status = AbandonedCart.STATUS_RECOVERED
-
-    if carts:
-        db.session.commit()
 
 
 def get_upsell_suggestions(cart_lines, limit=3):
@@ -157,3 +171,38 @@ def get_upsell_suggestions(cart_lines, limit=3):
     add_rules(general)
 
     return suggestions
+
+
+def mark_cart_recovered(phone, order_number=None):
+    """
+    ينحّي السلة المتروكة كي يكمّل صاحبها الطلبية.
+
+    ⚠️ المشكل اللي تحلّ: الزبون يعمّر اسمو وهاتفو → تتسجّل سلة متروكة
+    → يكمّل الطلبية بعد ثانيتين → **السلة تبقى فقائمة المتابعة**.
+    الأدمن يتصل بيه ويقولو «كمّل طلبك» وهو خلاص كمّلو. محرج للاثنين،
+    ووقت ضائع فقائمة نصفها وهمي.
+
+    ⚠️ علاش نعلّموها «استُرجعت» بدل ما نمسحوها؟
+    المسح يخسّر إحصائية مفيدة: كم سلة تحوّلت لطلبية فعلاً. وقائمة
+    الأدمن تعرض «الجديدة» افتراضيًا، فالسلة تختفي من نظرو على أي حال —
+    وهذا هو المطلوب. لو حبيت المسح النهائي، الزر موجود فاللوحة.
+
+    نعلّمو **كل** السلات المفتوحة تاع هاد الرقم، ماشي وحدة: ممكن
+    تكون عندو سلة قديمة «تواصلنا معه» وأخرى جديدة.
+
+    يرجّع عدد السلات اللي اتعلّمو.
+    """
+    open_carts = _find_open_carts_by_phone(phone)
+
+    marked = 0
+    for cart in open_carts:
+        cart.status = AbandonedCart.STATUS_RECOVERED
+        if order_number:
+            note = f"كمّل الطلبية {order_number}"
+            cart.admin_note = f"{cart.admin_note}\n{note}" if cart.admin_note else note
+        marked += 1
+
+    if marked:
+        db.session.commit()
+
+    return marked

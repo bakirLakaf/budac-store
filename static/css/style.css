@@ -3619,3 +3619,81 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
     margin-inline-start: 4px;
     letter-spacing: 0;
 }
+
+/* ════════════════════════════════════════════════════════════
+   أرقام الصفحات (الترقيم)
+   ⚠️ الموقع RTL — الترتيب يتقلب تلقائيًا مع direction تاع الصفحة.
+   ما نستعملوش row-reverse: يكسر ترتيب التنقل بالكيبورد.
+   ════════════════════════════════════════════════════════════ */
+.pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    margin: 2.5rem 0 .75rem;
+}
+
+.pager-num,
+.pager-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* ⚠️ 44px = الحد الأدنى اللي توصي بيه إرشادات اللمس.
+       أصغر من هذا والإصبع يخطئ الرقم على الهاتف. */
+    min-width: 44px;
+    height: 44px;
+    padding: 0 .6rem;
+    border: 1px solid var(--line, #e6e1da);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ink, #2b2622);
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.pager-num:hover,
+.pager-btn:hover {
+    background: var(--sand, #f6f2ec);
+    border-color: var(--gold, #b8893b);
+}
+
+.pager-num:focus-visible,
+.pager-btn:focus-visible {
+    outline: 2px solid var(--gold, #b8893b);
+    outline-offset: 2px;
+}
+
+.pager-num.is-current {
+    background: var(--plum, #4a1d3d);
+    border-color: var(--plum, #4a1d3d);
+    color: #fff;
+    cursor: default;
+}
+
+.pager-btn.is-disabled {
+    opacity: .35;
+    cursor: not-allowed;
+}
+
+.pager-gap {
+    padding: 0 .25rem;
+    color: var(--muted, #8b8179);
+    user-select: none;
+}
+
+.pager-info {
+    margin: 0 0 2rem;
+    text-align: center;
+    font-size: .9rem;
+    color: var(--muted, #8b8179);
+}
+
+@media (max-width: 480px) {
+    .pager { gap: .3rem; }
+    .pager-num,
+    .pager-btn { min-width: 40px; height: 40px; padding: 0 .4rem; font-size: .95rem; }
+}

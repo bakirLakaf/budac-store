@@ -10,6 +10,7 @@
 from flask import session
 
 from models import db, Product, ProductVariant, Offer, VariantPack
+from services import stock as stock_service
 
 CART_KEY = "cart"
 # ⚠️ السقف كان 50 — وهذا كان يكسر عروض الجملة: زبون يطلب 300 حبة
@@ -113,28 +114,26 @@ def add_to_cart(kind, item_id, variant_id=None, quantity=1, pack_id=None):
 
     if kind == "offer":
         offer = db.session.get(Offer, item_id)
-        if not offer or not offer.is_running:
-            return False, "هذا العرض غير متوفر"
-        if not offer.is_available:
-            return False, "أحد منتجات هذه الباقة نفذ من المخزون"
 
-        # نتأكدو أن الكمية المطلوبة من الباقة متاحة فعليًا
+        # ⚠️ نحسبو الكمية الإجمالية (اللي فالسلة + الجديدة) — الفحص
+        # على الكمية الجديدة وحدها يخلّي الزبون يزيد 1 عشر مرات
+        # ويتخطّى الحد.
         existing = _get_raw_cart().get(_make_key(kind, item_id), 0)
-        if offer.max_orderable < existing + quantity:
-            return False, f"متوفر غير {offer.max_orderable} من هذه الباقة"
+        error = stock_service.check_offer_availability(offer, existing + quantity)
+        if error:
+            return False, error
     else:
         product = Product.query.filter_by(id=item_id, is_active=True).first()
         if not product:
             return False, "هذا المنتج غير متوفر"
 
+        variant = None
         if variant_id:
             variant = ProductVariant.query.filter_by(
                 id=variant_id, product_id=product.id
             ).first()
             if not variant:
                 return False, "التنويعة المختارة غير موجودة"
-            if not variant.is_in_stock:
-                return False, f"التنويعة «{variant.label}» نفذت من المخزون"
 
             # ⚠️ نتحققو أن العرض ينتمي لهاد الموديل — بلا هذا، أي واحد
             # يبعث pack_id من موديل أرخص ويشري بسعرو
@@ -146,8 +145,17 @@ def add_to_cart(kind, item_id, variant_id=None, quantity=1, pack_id=None):
                     return False, "هاد العرض ماشي متاح لهاد الموديل"
         elif pack_id:
             return False, "اختر الموديل أولاً باش تختار العرض"
-        elif not product.is_in_stock:
-            return False, "هذا المنتج نفذ من المخزون"
+
+        # فحص التوفّر بدالة وحدة (services/stock.py) — نفس القاعدة
+        # اللي تستعملها الطلبيات وصفحات الهبوط
+        existing = _get_raw_cart().get(
+            _make_key(kind, item_id, variant_id, pack_id), 0
+        )
+        error = stock_service.check_availability(
+            product, variant, existing + quantity
+        )
+        if error:
+            return False, error
 
     cart = _get_raw_cart()
     key = _make_key(kind, item_id, variant_id, pack_id)
@@ -257,15 +265,9 @@ def get_cart_lines():
             else:
                 unit_price = product.price
 
-            # 🔴 إصلاح حرج: التنويعة كانت تقرا stock_quantity مباشرة وتتجاهل
-            # النظام المفتوح. المنتجات المستوردة كميتها 0، فأي طلبية بتنويعة
-            # كانت تُرفض ("عدّل الكميات المعلّمة") وزر الطلب يبقى مقفول.
-            if not Product.is_stock_tracked:
-                stock = None                 # None = بلا حد
-            elif variant:
-                stock = variant.stock_quantity
-            else:
-                stock = product.available_quantity
+            # الكمية المتاحة — دالة وحدة لكل المشروع.
+            # None = بلا حد (تتبّع المخزون مطفي).
+            stock = stock_service.available_for(product, variant)
             image = (variant.image_filename if variant and variant.image_filename
                      else product.image_filename)
 

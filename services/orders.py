@@ -8,13 +8,19 @@
 3. كل شي يتم فمعاملة (transaction) وحدة — يا يتم كامل يا ما يتم والو
 """
 
-import random
+import logging
+import secrets
 import string
+
+from sqlalchemy import update
 
 from models import (
     utcnow,   # ⚠️ بديل datetime.utcnow المهجورة فـPython 3.12
     db, Order, OrderItem, Product, ProductVariant, Offer, Coupon,
 )
+from services import stock as stock_service
+
+logger = logging.getLogger(__name__)
 
 
 class OrderError(Exception):
@@ -22,19 +28,36 @@ class OrderError(Exception):
     pass
 
 
+# ⚠️ 8 أرقام بدل 6: الفضاء يكبر من مليون لمئة مليون، فالتصادم يبقى
+# شبه مستحيل حتى بعد عشرات الآلاف من الطلبيات.
+# مازال سهل القراءة فالتلفون (زوج أرقام زيادة برك).
+ORDER_NUMBER_DIGITS = 8
+
+
 def generate_order_number():
     """
-    رقم طلبية سهل القراءة والنطق فالتلفون: BD-XXXXXX
-    نتأكدو أنو فريد قبل ما نرجعوه.
+    رقم طلبية سهل القراءة والنطق فالتلفون: BD-XXXXXXXX
+
+    ⚠️ نستعملو `secrets` ماشي `random`. `random` هو Mersenne Twister:
+    مصمّم للمحاكاة ماشي للأمان، وحالتو الداخلية تتخمّن من مخرجات كافية
+    (يعني واحد شاف بزاف أرقام طلبيات يقدر يتوقّع الجايين).
+
+    🔴 **لكن الأهم**: الرقم ماشي كلمة سر. الصلاحية تجي من الجلسة ولا
+    من (الرقم + الهاتف) — شوف services/order_access.py. طول الرقم
+    طبقة ثانية، ماشي الحماية نفسها.
+
+    الأرقام القديمة (BD-XXXXXX) تبقى تخدم عادي — ما نلمسوهمش.
     """
     for _ in range(20):
-        suffix = "".join(random.choices(string.digits, k=6))
+        suffix = "".join(secrets.choice(string.digits)
+                         for _ in range(ORDER_NUMBER_DIGITS))
         number = f"BD-{suffix}"
         if not Order.query.filter_by(order_number=number).first():
             return number
 
     # احتياط شبه مستحيل يوصلو، لكن أحسن من فشل صامت
-    return f"BD-{int(utcnow().timestamp())}"
+    logger.warning("تعذّر توليد رقم طلبية فريد بعد 20 محاولة")
+    return f"BD-{secrets.token_hex(5).upper()}"
 
 
 def reserve_stock(lines):
@@ -63,31 +86,33 @@ def reserve_stock(lines):
                     )
             continue
 
-        # منتج عادي بتنويعة محددة
-        if line.variant_id:
-            variant = db.session.get(ProductVariant, line.variant_id)
-            if not variant:
-                raise OrderError(f"التنويعة تاع «{line.name}» ما بقاتش موجودة")
+        # منتج عادي (بتنويعة أو بلاها)
+        product = db.session.get(Product, line.product_id) if line.product_id else None
+        variant = (db.session.get(ProductVariant, line.variant_id)
+                   if line.variant_id else None)
 
-            # 🔴 إصلاح حرج: فالنظام المفتوح (is_stock_tracked = False) ما
-            # نتبعوش الكميات أصلاً. هاد السطر كان يقارن مع stock_quantity
-            # (=0 للمنتجات المستوردة) ويرفض **كل** طلبية فيها تنويعة.
-            if not Product.is_stock_tracked:
-                continue
+        if line.variant_id and variant is None:
+            raise OrderError(f"التنويعة تاع «{line.name}» ما بقاتش موجودة")
+        if product is None:
+            raise OrderError(f"«{line.name}» ما بقاش موجود")
 
-            if variant.stock_quantity < line.quantity:
-                raise OrderError(
-                    f"«{line.name} — {variant.label}» متوفر منو غير {variant.stock_quantity}"
-                )
+        # فحص التوفّر بنفس الدالة تاع السلة وصفحات الهبوط
+        error = stock_service.check_availability(
+            product, variant, line.quantity, label=line.name
+        )
+        if error:
+            raise OrderError(error)
+
+        # الخصم يصرا غير كي يكون التتبّع مفعّلاً
+        if not stock_service.tracking_enabled():
+            continue
+
+        if variant is not None:
             variant.stock_quantity -= line.quantity
-        else:
-            product = db.session.get(Product, line.product_id)
-            if not product:
-                raise OrderError(f"«{line.name}» ما بقاش موجود")
-            if not product.consume_stock(line.quantity):
-                raise OrderError(
-                    f"«{line.name}» متوفر منو غير {product.available_quantity}"
-                )
+        elif not product.consume_stock(line.quantity):
+            raise OrderError(
+                f"«{line.name}» متوفر منو غير {product.available_quantity}"
+            )
 
 
 def restore_stock(order):
@@ -186,7 +211,21 @@ def create_order(lines, customer_data, shipping_info, coupon=None, customer_note
             ))
 
         if coupon:
-            coupon.used_count += 1
+            # ⚠️ الزيادة تصرا **عند قاعدة البيانات** مع الشرط فنفس
+            # الجملة. الطريقة القديمة (coupon.used_count += 1) تقرا
+            # ثم تكتب: 20 طلبية متوازية تقرا كلها 99 وتكتب 100،
+            # فالكوبون بحد 100 يتستعمل 119 مرة.
+            #
+            # نفس الـtransaction تاع الطلبية، فأي فشل بعدها يرجّع
+            # العدّاد تلقائيًا مع الـrollback — ما يزيدش بلا طلبية.
+            stmt = update(Coupon).where(Coupon.id == coupon.id)
+            if coupon.usage_limit is not None:
+                stmt = stmt.where(Coupon.used_count < coupon.usage_limit)
+            stmt = stmt.values(used_count=Coupon.used_count + 1)
+
+            if db.session.execute(stmt).rowcount == 0:
+                # سبقونا — الكوبون كمل بين الفحص والحجز
+                raise OrderError("هذا الكوبون استُعمل بالكامل")
 
         db.session.commit()
         return order
@@ -194,9 +233,19 @@ def create_order(lines, customer_data, shipping_info, coupon=None, customer_note
     except OrderError:
         db.session.rollback()
         raise
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        raise OrderError(f"صار خطأ أثناء تسجيل الطلبية: {e}")
+        # ⚠️ التفاصيل للسجلات ماشي للزبون: رسالة SQLAlchemy تحتوي على
+        # جملة SQL كاملة بأسماء الجداول والأعمدة وأحيانًا القيم —
+        # يعني خريطة قاعدة بياناتك تتعرض لأي واحد يطيّح الطلب عمدًا.
+        logger.exception(
+            "فشل إنشاء الطلبية | عدد الأسطر=%s | المجموع=%s",
+            len(lines), total,
+        )
+        raise OrderError(
+            "ما قدرناش نسجّلو الطلبية درك. عاود جرّب، "
+            "وإذا عاود المشكل راسلنا فالواتساب ونكملوها معاك."
+        )
 
 
 def find_coupon(code, subtotal):
