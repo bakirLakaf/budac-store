@@ -46,54 +46,82 @@ def test_homepage_category_filter_still_works(client, app, seed):
     assert "شريط كريستال" in body
 
 
-def test_homepage_loads_a_bounded_number_of_product_rows(app, seed):
+def test_homepage_stays_bounded_on_a_huge_catalog(app, seed):
     """
-    ⚠️ هاد الاختبار كان يعدّ **الاستعلامات** (ولازم تكون ≤2).
-    بعد الترقيم ولّى المقياس غالطًا: الصفحة درك تشغّل 5 استعلامات
-    (عدّ الترقيم + 9 منتجات + GROUP BY للعدّادات + المجموع + «الجديد»)
-    وهذا **أحسن** من قبل، ماشي أسوأ:
+    ⚠️ هاد الاختبار تبدّل مرتين مع الطراز، وهذا مقصود — يقيس
+    السلوك اللي يهمّ حقًّا، ماشي تفاصيل التنفيذ:
 
-        قبل:  استعلامان يحمّلو الكتالوج **كامل** مرتين
-        بعد:  5 استعلامات محدودة، أكبر واحد فيهم 16 سطر
+      v139: استعلامان يحمّلو الكتالوج **كامل** مرتين
+      v141: ترقيم من السيرفر — 9 منتجات، لكن كل نقرة إعادة تحميل
+      v142: ترقيم فالمتصفح — الكتالوج كامل مرة وحدة، تبديل فوري
+            **مع حارس**: فوق MAX_CLIENT_PAGINATION نرجعو للسيرفر
 
-    عدد الاستعلامات ما يهمّش — **عدد الأسطر المحمّلة** هو اللي
-    يقرّر واش الصفحة تكبر مع الكتالوج ولا لا. فنقيسو هذا.
+    اللي نحميوه درك: كتالوج ضخم ما يخصّوش يبعث كلشي للمتصفح.
     """
-    from models import db, Product
+    from models import Product
+    from routes.shop import MAX_CLIENT_PAGINATION, PRODUCTS_PER_PAGE
+    from flask import template_rendered
 
     with app.app_context():
-        # كتالوج كبير نسبيًا — لو الصفحة تحمّلو كامل، نشوفوها
-        for i in range(60):
+        for i in range(MAX_CLIENT_PAGINATION + 20):
             db.session.add(Product(
                 name=f"منتج ضخم {i}", slug=f"bulk-{i}",
                 price=100, is_active=True,
             ))
         db.session.commit()
-        total = Product.query.count()
+        total = Product.query.filter_by(is_active=True).count()
 
-    loaded = []
+    captured = []
 
-    from sqlalchemy import event
+    def record(sender, template, context, **extra):
+        if template.name == "shop/home.html":
+            captured.append(context)
 
-    def after(conn, cursor, statement, parameters, context, executemany):
-        if "FROM products" in statement and cursor.rowcount and cursor.rowcount > 0:
-            loaded.append(cursor.rowcount)
+    template_rendered.connect(record, app)
+    try:
+        app.test_client().get("/")
+    finally:
+        template_rendered.disconnect(record, app)
+
+    context = captured[0]
+    assert total > MAX_CLIENT_PAGINATION
+    assert context["client_paginated"] is False, "الحارس ما اشتغلش"
+    assert len(context["products"]) == PRODUCTS_PER_PAGE, (
+        "كتالوج ضخم مازال يتبعث كامل للمتصفح"
+    )
+
+
+def test_small_catalog_is_sent_whole_for_instant_switching(app, seed):
+    """
+    الوجه الثاني: كتالوج صغير (الوضع العادي) يتبعث كامل — هو
+    اللي يخلّي تبديل الصفحات فوريًا بلا إعادة تحميل.
+    """
+    from models import Product
+    from flask import template_rendered
 
     with app.app_context():
-        event.listen(db.engine, "after_cursor_execute", after)
-        try:
-            app.test_client().get("/")
-        finally:
-            event.remove(db.engine, "after_cursor_execute", after)
+        for i in range(30):
+            db.session.add(Product(
+                name=f"منتج {i}", slug=f"small-{i}", price=100, is_active=True,
+            ))
+        db.session.commit()
+        total = Product.query.filter_by(is_active=True).count()
 
-    biggest = max(loaded) if loaded else 0
+    captured = []
 
-    # ⚠️ الحد 30: أكبر استعلام هو «الجديد» (16 سطر) + هامش.
-    # لو رجع تحميل الكتالوج كامل، القيمة توصل 61+ ويفشل الاختبار.
-    assert biggest <= 30, (
-        f"استعلام حمّل {biggest} سطر من {total} — "
-        "يبان أن الكتالوج كامل رجع يتحمّل"
-    )
+    def record(sender, template, context, **extra):
+        if template.name == "shop/home.html":
+            captured.append(context)
+
+    template_rendered.connect(record, app)
+    try:
+        app.test_client().get("/")
+    finally:
+        template_rendered.disconnect(record, app)
+
+    context = captured[0]
+    assert context["client_paginated"] is True
+    assert len(context["products"]) == total
 
 
 # ══════════════════════════════════════════════════════════════

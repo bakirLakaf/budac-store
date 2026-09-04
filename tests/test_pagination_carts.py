@@ -26,110 +26,109 @@ def catalog(app, seed):
 
 
 # ══════════════════════════════════════════════════════════════
-# الترقيم
+# الترقيم — فالمتصفح
 # ══════════════════════════════════════════════════════════════
+#
+# ⚠️ الطراز تبدّل: الترقيم انتقل من السيرفر للمتصفح باش تبديل
+# الصفحات يولّي فوريًا (بلا إعادة تحميل، بلا قفزة تمرير).
+#
+# يعني الاختبارات القديمة اللي كانت تفحص «9 بطاقات فالـHTML»
+# ولّات غالطة: السيرفر درك يبعث **كل** المنتجات وJavaScript يخبّي
+# اللي ماشي فالصفحة الحالية.
+#
+# ما نقدروش نشغّلو JavaScript هنا، فنختبرو:
+#   • السيرفر يبعث كل المنتجات (المادة الخام)
+#   • الإعدادات اللي يقرا منها السكريبت موجودة وصحيحة
+#   • الحارس تاع الكتالوج الضخم يخدم
+#   • الاحتياط بلا JavaScript سليم
 
-def _cards_in_grid(html):
-    """
-    عدد بطاقات المنتجات داخل شبكة الترقيم برك.
 
-    ⚠️ الصفحة فيها أقسام أخرى تستعمل نفس الكلاس («الجديد»، «الأكثر
-    مبيعًا»). نقصّو من فتح shopGrid حتى بداية الترقيم/الحالة الفارغة
-    باش نعدّو الشبكة وحدها.
-    """
-    start = html.find('id="shopGrid"')
-    if start == -1:
+def _grid_cards(html):
+    """عدد بطاقات المنتجات داخل شبكة المتجر برك."""
+    start_index = html.find('id="shopGrid"')
+    if start_index == -1:
         return 0
 
-    for marker in ('<nav class="pager"', 'class="pager-info"', '</section>'):
-        end = html.find(marker, start)
-        if end != -1:
+    for marker in ('id="shopPager"', '<nav class="pager"', 'class="pager-info"', '</section>'):
+        end_index = html.find(marker, start_index)
+        if end_index != -1:
             break
     else:
-        end = len(html)
+        end_index = len(html)
 
-    return html[start:end].count('class="product-card"')
+    return html[start_index:end_index].count('class="product-card"')
 
 
-def test_first_page_shows_exactly_nine_products(client, catalog):
+def test_server_sends_the_whole_catalog_for_client_pagination(client, catalog):
+    """
+    ⚠️ هذا هو التبديل الأساسي: الصفحة تحمل كل المنتجات مرة وحدة،
+    وJavaScript يقسّمهم. بلا هذا، تبديل الصفحة يرجع لإعادة تحميل.
+    """
+    body = client.get("/").get_data(as_text=True)
+    assert _grid_cards(body) == 23, (
+        "السيرفر ما بعثش الكتالوج كامل — التبديل الفوري ما يخدمش"
+    )
+
+
+def test_grid_carries_the_settings_the_script_reads(client, catalog):
+    """
+    السكريبت يقرا `data-per-page` و`data-client-paginated` من الشبكة.
+    لو تنحاو، الترقيم ما يبانش إطلاقًا والزائر يشوف 23 منتج دفعة.
+    """
     from routes.shop import PRODUCTS_PER_PAGE
 
     body = client.get("/").get_data(as_text=True)
-    assert _cards_in_grid(body) == PRODUCTS_PER_PAGE
+    assert f'data-per-page="{PRODUCTS_PER_PAGE}"' in body
+    assert 'data-client-paginated="1"' in body
+    assert 'id="shopPager"' in body
+    assert 'id="shopResultCount"' in body
 
 
-def test_pages_two_and_three_work(client, catalog):
-    for page in (2, 3):
-        response = client.get(f"/?page={page}")
-        assert response.status_code == 200
-        body = response.get_data(as_text=True)
-        assert f"صفحة {page} من 3" in body
-
-
-def test_last_page_holds_the_remainder(client, catalog):
-    """23 منتج ÷ 9 = صفحتان كاملتان + 5 فالثالثة."""
-    body = client.get("/?page=3").get_data(as_text=True)
-    assert _cards_in_grid(body) == 5
-
-
-def test_pager_links_are_rendered_with_anchor(client, catalog):
+def test_every_card_carries_its_category_for_instant_filtering(client, catalog):
     """
-    ⚠️ الروابط لازم تحمل #products — بلاها الزبون يرجع لفوق الصفحة
-    فكل نقرة ويلزمو يمرّر لتحت من جديد.
+    الفلترة الفورية تعتمد على data-cat فكل بطاقة. بلاها، النقر على
+    تصنيف يخبّي كلشي.
     """
+    body = client.get("/").get_data(as_text=True)
+    assert body.count('data-cat="decor"') >= 12
+
+
+def test_huge_catalog_falls_back_to_server_pagination(client, app, seed):
+    """
+    ⚠️ الحارس: فوق MAX_CLIENT_PAGINATION، بعث الكتالوج كامل يولّي
+    مكلفًا على اتصال الجوال. السيرفر يرجع للترقيم تاعو تلقائيًا —
+    الموقع يبطّئ شوية فالتبديل، لكنو ما ينكسرش.
+    """
+    from routes.shop import MAX_CLIENT_PAGINATION, PRODUCTS_PER_PAGE
+
+    with app.app_context():
+        for i in range(MAX_CLIENT_PAGINATION + 10):
+            db.session.add(Product(
+                name=f"ضخم {i}", slug=f"huge-{i}", price=100, is_active=True,
+            ))
+        db.session.commit()
+
+    body = client.get("/").get_data(as_text=True)
+
+    assert 'data-client-paginated="0"' in body, "الحارس ما اشتغلش"
+    assert _grid_cards(body) == PRODUCTS_PER_PAGE
+    # وروابط السيرفر ترجع مع مرساتها
+    assert "#products" in body
+
+
+def test_server_pagination_fallback_still_paginates(client, app, seed):
+    """الاحتياط لازم يخدم فعلاً، ماشي غير يبان."""
+    from routes.shop import MAX_CLIENT_PAGINATION
+
+    with app.app_context():
+        for i in range(MAX_CLIENT_PAGINATION + 10):
+            db.session.add(Product(
+                name=f"ضخم {i}", slug=f"huge-{i}", price=100, is_active=True,
+            ))
+        db.session.commit()
+
     body = client.get("/?page=2").get_data(as_text=True)
-    pager = re.search(r'<nav class="pager".*?</nav>', body, re.S).group(0)
-
-    assert 'href="/?page=1#products"' in pager
-    assert 'href="/?page=3#products"' in pager
-    assert 'rel="prev"' in pager and 'rel="next"' in pager
-    assert 'aria-current="page"' in pager
-
-
-def test_first_page_has_no_prev_link(client, catalog):
-    pager = re.search(
-        r'<nav class="pager".*?</nav>', client.get("/").get_data(as_text=True), re.S
-    ).group(0)
-    assert 'rel="prev"' not in pager
-    assert "pager-btn is-disabled" in pager
-
-
-def test_pagination_preserves_the_category(client, catalog):
-    """
-    ⚠️ أهم اختبار هنا: لو الترقيم ينسى التصنيف، الزبون يفلتر ثم
-    ينقر «2» ويلقى روحو فكل المنتجات — بق يبان تافهًا ويحرق الثقة.
-    """
-    body = client.get("/?category=decor").get_data(as_text=True)
-
-    pager = re.search(r'<nav class="pager".*?</nav>', body, re.S)
-    # ⚠️ بلا هاد التأكيد، الاختبار يمرّ بصمت لو الترقيم ما بانش
-    # أصلاً — وهذا بالضبط اللي صرا: اختبار طفرة كشف أن `if pager:`
-    # كان يخلّيه يعدّي على كود مكسور.
-    assert pager is not None, (
-        "الترقيم ما بانش — 12 منتج فالتصنيف لازم يعطيو صفحتين"
-    )
-
-    links = re.findall(r'href="([^"]+)"', pager.group(0))
-    assert links, "ماكانش روابط فالترقيم"
-    for link in links:
-        assert "category=decor" in link, (
-            f"رابط الترقيم نسي التصنيف: {link} — "
-            "الزبون يفلتر، ينقر «2»، ويلقى روحو فكل المنتجات"
-        )
-
-
-def test_pagination_within_a_category_stays_in_that_category(client, catalog):
-    """
-    الوجه العملي: نتبّعو الرابط فعليًا ونتأكدو أن الصفحة 2 مازالت
-    مفلترة — ماشي غير أن الرابط مكتوب صح.
-    """
-    body = client.get("/?category=decor&page=2").get_data(as_text=True)
-
-    # الحالة النشطة تبقى على التصنيف
-    assert re.search(r'side-cat is-active"[^>]*data-cat="decor"', body) \
-        or 'data-cat="decor"' in body
-    # وعدد النتائج يبقى تاع التصنيف (12) ماشي المجموع (23)
-    assert "12 منتج" in body, "الصفحة 2 خرجت من التصنيف"
+    assert "صفحة 2 من" in body
 
 
 @pytest.mark.parametrize("query", [
@@ -140,10 +139,13 @@ def test_invalid_page_numbers_do_not_crash(client, catalog, query):
     assert client.get("/" + query).status_code == 200
 
 
-def test_out_of_range_page_shows_empty_not_error(client, catalog):
-    body = client.get("/?page=999")
-    assert body.status_code == 200
-    assert _cards_in_grid(body.get_data(as_text=True)) == 0
+def test_direct_category_link_still_filters_server_side(client, catalog):
+    """
+    ⚠️ الزواحف (جوجل) والروابط المشاركة ماكانش عندهم JavaScript —
+    ?category= لازم يبقى يخدم من السيرفر.
+    """
+    body = client.get("/?category=decor").get_data(as_text=True)
+    assert _grid_cards(body) == 12, "الفلترة من السيرفر ما خدماتش"
 
 
 def test_unknown_category_shows_helpful_empty_state(client, catalog):
@@ -152,20 +154,15 @@ def test_unknown_category_shows_helpful_empty_state(client, catalog):
     assert "شوف كل المنتجات" in body
 
 
-def test_sidebar_counts_are_real_totals_not_page_counts(client, catalog):
+def test_sidebar_counts_are_real_totals(client, catalog):
     """
-    ⚠️ العدّاد لازم يعرض مجموع التصنيف كامل (12: منتج الـseed + 11
-    من الـfixture)، ماشي عدد اللي بان فالصفحة (9). هاد الفرق هو
-    السبب اللي خلّانا نحسبوه بـGROUP BY بدل ما نعدّو البطاقات.
+    العدّاد يعرض مجموع التصنيف، ماشي عدد اللي بان فالصفحة.
     """
     counts = re.findall(
         r'side-cat-count">(\d+)<', client.get("/").get_data(as_text=True)
     )
-    # 23 منتج كامل · 12 منهم فتصنيف decor (11 من هاد الاختبار + 1 من seed)
     assert counts[0] == "23", f"مجموع المنتجات غالط: {counts}"
     assert "12" in counts, f"عدد التصنيف غالط: {counts}"
-    # ⚠️ الأهم: العدّاد ماشي 9 (عدد اللي بان فالصفحة)
-    assert "9" not in counts, "العدّاد يعرض عدد الصفحة بدل مجموع التصنيف"
 
 
 def test_total_count_includes_products_without_category(app, catalog):
@@ -181,31 +178,56 @@ def test_total_count_includes_products_without_category(app, catalog):
         assert sum(counts.values()) < total
 
 
-def test_homepage_loads_only_one_page_of_products(app, catalog):
-    """
-    الهدف تاع الترقيم: السيرفر ما يحمّلش الكتالوج كامل.
-    نتأكدو أن السياق فيه 9 منتجات برك.
-    """
-    from flask import template_rendered
+# ---------- سلوك السكريبت (فحص بنيوي) ----------
 
-    captured = []
-
-    def record(sender, template, context, **extra):
-        if template.name == "shop/home.html":
-            captured.append(context)
-
-    template_rendered.connect(record, app)
-    try:
-        app.test_client().get("/")
-    finally:
-        template_rendered.disconnect(record, app)
-
-    assert captured, "القالب ما اترسمش"
-    context = captured[0]
-    assert len(context["products"]) == 9
-    assert "all_products" not in context, (
-        "all_products رجع — الكتالوج كامل يتحمّل من جديد"
+def _site_js():
+    import os
+    path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "js", "site.js",
     )
+    return open(path, encoding="utf-8").read()
+
+
+def test_script_respects_the_server_fallback_flag():
+    """
+    ⚠️ لو السكريبت تجاهل data-client-paginated، على كتالوج ضخم
+    راح يرقّم الـ9 اللي بعثهم السيرفر ويعرض «صفحة 1 من 1» —
+    والزائر ما يشوف أبدًا باقي المنتجات.
+    """
+    source = _site_js()
+    assert "data-client-paginated" in source
+    assert "!== '1') return" in source
+
+
+def test_script_updates_the_url_without_reloading():
+    """
+    زر الرجوع تاع المتصفح ونسخ الرابط لازم يبقاو يخدمو رغم أن
+    ماكانش إعادة تحميل.
+    """
+    source = _site_js()
+    assert "history.pushState" in source
+    assert "history.replaceState" in source
+    assert "popstate" in source
+
+
+def test_script_does_not_hijack_ctrl_click():
+    """
+    ⚠️ preventDefault على كل نقرة يكسر «فتح فتبويب جديد» —
+    عادة شائعة عند الزوار، وكسرها يبان كأن الموقع معطّل.
+    """
+    source = _site_js()
+    assert "event.metaKey || event.ctrlKey" in source
+
+
+def test_pager_is_hidden_when_script_does_not_run(client, catalog):
+    """
+    ⚠️ حاوية الترقيم تبدا hidden ويعمّرها JavaScript. لو السكريبت
+    ما حمّلش، الزائر يشوف كل المنتجات — طويل، لكن سليم. المهم
+    ما يشوفش ترقيم فارغ ولا مكسور.
+    """
+    body = client.get("/").get_data(as_text=True)
+    assert re.search(r'<nav class="pager" id="shopPager"[^>]*hidden', body)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -388,3 +410,63 @@ def test_mark_cart_recovered_ignores_blank_phone(app):
         assert mark_cart_recovered("") == 0
         assert mark_cart_recovered(None) == 0
         assert mark_cart_recovered("abc") == 0
+
+
+# ══════════════════════════════════════════════════════════════
+# «شفتها مؤخرًا» — إشارة الاستقرار
+# ══════════════════════════════════════════════════════════════
+#
+# ⚠️ هاد القسم جالس فوق شبكة المنتجات ويتعمّر بعد fetch، فيدفع
+# كلشي لتحت. مع الترقيم فالمتصفح ماكانش إعادة تحميل، فالمشكل
+# خفّ بزاف — لكن الإشارة تبقى مفيدة لأي كود يحتاج يعرف كي
+# يستقرّ تخطيط الصفحة.
+
+def test_recently_viewed_signals_on_every_exit_path():
+    """
+    `settled()` لازم تتنادى فـ**كل** طريق خروج — نجاح، فشل شبكة،
+    نتيجة فارغة، ماكانش القسم، localStorage معطوب.
+    """
+    source = _site_js()
+    start = source.index("function initRecentlyViewed")
+    body = source[start:source.index("\n    }", start)]
+
+    lines = body.split("\n")
+    unguarded = []
+
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if "return;" not in stripped:
+            continue
+        window = stripped + " " + (lines[index - 1].strip() if index else "")
+        if "settled()" not in window:
+            unguarded.append(stripped)
+
+    assert not unguarded, f"طرق خروج بلا إشارة استقرار: {unguarded}"
+    assert ".catch(" in body and body.count("settled();") >= 5
+    assert "budac:recent-settled" in body
+
+
+def test_products_anchor_has_css_scroll_margin():
+    """شبكة أمان بلا JavaScript للروابط اللي فيها #products."""
+    import os
+    path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "css", "style.css",
+    )
+    css = open(path, encoding="utf-8").read()
+    assert "#products {" in css
+    assert "scroll-margin-top" in css
+
+
+def test_hidden_cards_are_actually_hidden_in_css():
+    """
+    ⚠️ الشبكة display:grid تغلب display:none تاع [hidden] فبعض
+    المتصفحات — فالبطاقات «المخبّية» تبقى بانة والترقيم يبان مكسور.
+    """
+    import os
+    path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "css", "style.css",
+    )
+    css = open(path, encoding="utf-8").read()
+    assert ".product-card[hidden]" in css

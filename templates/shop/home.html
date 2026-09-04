@@ -278,17 +278,19 @@
             {# ⚠️ العدد يتطبع من السيرفر درك. JavaScript كان يحسبو من
                البطاقات البانة — وهذا ما يخدمش مع الترقيم: الصفحة فيها
                9 بطاقات بينما التصنيف فيه 45 منتج. #}
-            {% if pagination.total %}
-            <p class="shop-result-count">
-                {%- if pagination.total == 1 %}منتج واحد
-                {%- elif pagination.total == 2 %}منتجان
-                {%- elif pagination.total <= 10 %}{{ pagination.total }} منتجات
-                {%- else %}{{ pagination.total }} منتج{% endif %}
+            {% set shown_total = pagination.total if pagination else products|length %}
+            {% if shown_total %}
+            {# ⚠️ JavaScript يحدّث هاد الرقم عند الفلترة الفورية.
+               السيرفر يطبع القيمة الأولى باش تبان قبل ما يشتغل السكريبت. #}
+            <p class="shop-result-count" id="shopResultCount">
+                {{ shown_total }} منتج
             </p>
             {% endif %}
 
             {% if products %}
-            <div class="product-grid" id="shopGrid">
+            <div class="product-grid" id="shopGrid"
+                 data-per-page="{{ per_page }}"
+                 data-client-paginated="{{ '1' if client_paginated else '0' }}">
                 {# ⚠️ الترقيم من السيرفر: هاد الشبكة فيها 9 منتجات برك،
                    ماشي الكتالوج كامل. الفلترة بالتصنيف ولّات كذلك من
                    السيرفر (روابط عادية) — الفلترة الفورية بـJavaScript
@@ -326,10 +328,23 @@
             </div>
 
             {# ---------- أرقام الصفحات ---------- #}
-            {% if pagination.pages > 1 %}
-            <nav class="pager" aria-label="صفحات المنتجات">
+            {#
+              ⚠️ حالتان:
+              1) الكتالوج صغير (الوضع العادي): السيرفر بعث كل المنتجات،
+                 وJavaScript يبني الترقيم ويبدّل الصفحات **فورًا** —
+                 بلا إعادة تحميل وبلا قفزة تمرير.
+              2) الكتالوج ضخم (فوق MAX_CLIENT_PAGINATION): السيرفر
+                 يرجع للترقيم تاعو، والروابط عادية.
+            #}
+            {% if client_paginated %}
 
-                {# ⚠️ الموقع RTL: السهم › يشير لليمين = السابق فالعربية #}
+            {# يعمّرها JavaScript. تبقى فارغة إذا السكريبت ما حمّلش —
+               وساعتها كل المنتجات بانة، وهذا سلوك سليم ماشي صفحة مكسورة. #}
+            <nav class="pager" id="shopPager" aria-label="صفحات المنتجات" hidden></nav>
+            <p class="pager-info" id="shopPagerInfo" hidden></p>
+
+            {% elif pagination and pagination.pages > 1 %}
+            <nav class="pager" aria-label="صفحات المنتجات">
                 {% if pagination.has_prev %}
                     <a class="pager-btn" rel="prev" aria-label="الصفحة السابقة"
                        href="{{ url_for('shop.home', category=active_category, page=pagination.prev_num) }}#products">›</a>
@@ -337,8 +352,6 @@
                     <span class="pager-btn is-disabled" aria-hidden="true">›</span>
                 {% endif %}
 
-                {# نافذة أرقام حوالي الصفحة الحالية بدل ما نطبعو 50 رقمًا.
-                   Flask-SQLAlchemy يرجّع None مكان الفجوات. #}
                 {% for num in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
                     {% if num %}
                         {% if num == pagination.page %}
@@ -364,6 +377,11 @@
                 صفحة {{ pagination.page }} من {{ pagination.pages }} · {{ pagination.total }} منتج
             </p>
             {% endif %}
+
+            {# رسالة الفلتر الفارغ — JavaScript يبيّنها عند الحاجة #}
+            <p class="shop-empty-filter" id="shopEmptyFilter" hidden>
+                ماكاين حتى منتج فهاد التصنيف درك.
+            </p>
 
             {% elif active_category %}
             {# تصنيف فارغ ولا صفحة خارج المدى — ماشي متجر فارغ #}

@@ -3697,3 +3697,43 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
     .pager-num,
     .pager-btn { min-width: 40px; height: 40px; padding: 0 .4rem; font-size: .95rem; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   مرساة قسم المنتجات
+   ⚠️ روابط الترقيم تنتهي بـ#products. بلا هامش، العنوان يتخبّى
+   تحت الشريط العلوي الملتصق والزائر يظن أن الصفحة طاحت.
+   scroll-margin-top يخدم كذلك بلا JavaScript إطلاقًا — فهو
+   شبكة الأمان لو السكريبت ما حمّلش.
+   ════════════════════════════════════════════════════════════ */
+#products {
+    /* ⚠️ 20px برك: الشريط العلوي ماشي ملتصقًا فهاد الموقع.
+       هامش أكبر يرجّع الزائر لفوق القسم بدل ما يوقّفو عليه. */
+    scroll-margin-top: 20px;
+}
+
+/* ⚠️ قسم «شفتها مؤخرًا» جالس فوق المنتجات ويتعمّر بعد تحميل
+   الصفحة. نحجزو ارتفاعًا أدنى كي يبان باش القفزة تكون أصغر
+   (JavaScript يعيد ضبط التمرير، وهذا يقلّل الاهتزاز البصري). */
+.recently-viewed:not([hidden]) {
+    min-block-size: 320px;
+}
+
+/* أزرار الترقيم اللي يبنيها JavaScript هي <button> ماشي <a> —
+   نصفّرو ستايل المتصفح الافتراضي باش تبان كيف تاع السيرفر */
+button.pager-num,
+button.pager-btn {
+    font-family: inherit;
+    cursor: pointer;
+    appearance: none;
+}
+
+button.pager-btn.is-disabled,
+button.pager-num.is-disabled {
+    cursor: not-allowed;
+}
+
+/* ⚠️ البطاقة المخبّية بـ[hidden] لازم تختفي فعلاً: قواعد الشبكة
+   (display: grid/flex) تغلب display:none تاع hidden فبعض المتصفحات. */
+.product-grid .product-card[hidden] {
+    display: none !important;
+}

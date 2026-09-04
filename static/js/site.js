@@ -161,7 +161,24 @@ var BudacSafe = (function () {
     function initRecentlyViewed() {
         var section = document.getElementById("recentlyViewed");
         var grid = document.getElementById("recentlyViewedGrid");
-        if (!section || !grid) return;
+
+        /*
+         * ⚠️ هاد القسم جالس **فوق** شبكة المنتجات، ويبدا مخفيًا ثم
+         * يتعمّر بعد fetch. يعني ارتفاع الصفحة يتبدّل بعد ما يكون
+         * الزائر خلاص وصل لمكانو — وكلشي تحت ينزل.
+         *
+         * هذا كان يكسر الترقيم: تنقر «3»، الصفحة ترجع، المتصفح
+         * يوقّفك عند #products صح... ثم هاد القسم يبان ويدفعك
+         * لفوق، فتلقى روحك عند «شفتها مؤخرًا» بدل المنتجات.
+         *
+         * الحل: نعلمو الآخرين كي نستقرّو (نجحنا ولا فشلنا ولا
+         * ماكانش شي نعرضو)، وتمرير المرساة يستنّى هاد الإشارة.
+         */
+        function settled() {
+            document.dispatchEvent(new CustomEvent("budac:recent-settled"));
+        }
+
+        if (!section || !grid) { settled(); return; }
 
         var KEY = "budac_recent";
         var slugs;
@@ -169,15 +186,16 @@ var BudacSafe = (function () {
         try {
             slugs = JSON.parse(localStorage.getItem(KEY) || "[]");
         } catch (e) {
+            settled();
             return;
         }
 
-        if (!slugs.length) return;
+        if (!slugs.length) { settled(); return; }
 
         fetch("/api/products-by-slug?slugs=" + encodeURIComponent(slugs.join(",")))
             .then(function (r) { return r.json(); })
             .then(function (products) {
-                if (!products.length) return;
+                if (!products.length) { settled(); return; }
 
                 // 🔴 إصلاح: كانت البيانات تدخل innerHTML خام بلا تهريب —
                 // وحدها فالمشروع كامل (كل باقي الأماكن تستعمل escapeHtml).
@@ -201,8 +219,13 @@ var BudacSafe = (function () {
                 }).join("");
 
                 section.hidden = false;
+                settled();
             })
-            .catch(function () { /* فشل الشبكة — نخليو القسم مخفي */ });
+            .catch(function () {
+                /* فشل الشبكة — نخليو القسم مخفي، لكن لازم نعلمو
+                   باش التمرير ما يبقاش يستنّى للأبد */
+                settled();
+            });
 
         var clearBtn = document.getElementById("clearRecent");
         if (clearBtn) {
@@ -382,26 +405,251 @@ var BudacSafe = (function () {
 })();
 
 /* ════════════════════════════════════════════════════════════
-   تمرير سلس لقسم المنتجات
-   ⚠️ كانت هنا فلترة فورية بـJavaScript: كل المنتجات مطبوعة فالصفحة
-   والفلتر يخبّي اللي ماشي من التصنيف. هاد الطريقة ماتت مع الترقيم —
-   الصفحة درك فيها 9 منتجات برك، فما نقدروش نفلترو على شي ماشي موجود.
-   الفلترة والترقيم ولّاو من السيرفر (روابط عادية + ?page=)،
-   وهذا أحسن كذلك لمحركات البحث ولمشاركة الروابط.
-   ما بقا لJavaScript غير التمرير السلس.
+   ترقيم وفلترة المنتجات — فالمتصفح، بلا إعادة تحميل
+   ────────────────────────────────────────────────────────────
+   السيرفر يبعث كل المنتجات مرة وحدة، وهاد الوحدة تعرض 9 فكل مرة.
+
+   ⚠️ علاش رجعنا للمتصفح بعد ما كان الترقيم فالسيرفر؟
+   كل نقرة على رقم صفحة كانت تعيد تحميل الصفحة كاملة: انتظار
+   الشبكة، وميض أبيض، وقفزة تمرير (قسم «شفتها مؤخرًا» يبان
+   متأخرًا ويدفع كلشي لتحت). درك التبديل فوري.
+
+   ⚠️ التنازل: الصفحة تحمل كل المنتجات فالـHTML. فوق ~300 منتج
+   السيرفر يرجع للترقيم تاعو تلقائيًا (data-client-paginated="0")
+   وهاد الوحدة تتنحّى من الطريق.
    ════════════════════════════════════════════════════════════ */
 (function () {
-    var section = document.getElementById('products');
-    if (!section || !window.location.hash) return;
+    "use strict";
 
-    if (window.location.hash === '#products') {
-        // المتصفح يقفز مباشرة للمرساة؛ نصحّحوها بتمرير سلس مع
-        // هامش صغير باش العنوان ما يتخبّاش تحت الشريط العلوي.
-        requestAnimationFrame(function () {
-            var top = section.getBoundingClientRect().top + window.scrollY - 20;
-            window.scrollTo({ top: top, behavior: 'smooth' });
+    var grid = document.getElementById('shopGrid');
+    if (!grid || grid.getAttribute('data-client-paginated') !== '1') return;
+
+    var pager    = document.getElementById('shopPager');
+    var pagerInf = document.getElementById('shopPagerInfo');
+    var countEl  = document.getElementById('shopResultCount');
+    var emptyEl  = document.getElementById('shopEmptyFilter');
+    var section  = document.getElementById('products');
+
+    var cards   = Array.prototype.slice.call(grid.querySelectorAll('.product-card'));
+    var perPage = parseInt(grid.getAttribute('data-per-page'), 10) || 9;
+
+    if (!cards.length) return;
+
+    var currentCat  = null;   // null = كل المنتجات
+    var currentPage = 1;
+
+    /* ---------- الحالة من الرابط ---------- */
+    function readUrl() {
+        var params = new URLSearchParams(window.location.search);
+        currentCat = params.get('category') || null;
+        currentPage = Math.max(1, parseInt(params.get('page'), 10) || 1);
+    }
+
+    /* ⚠️ نحدّثو الرابط بلا إعادة تحميل باش:
+         • زر الرجوع تاع المتصفح يخدم
+         • الزائر يقدر ينسخ الرابط ويشاركو
+       replace=true للحالة الأولى باش ما نزيدوش سطرًا فالتاريخ. */
+    function writeUrl(replace) {
+        var params = new URLSearchParams(window.location.search);
+
+        if (currentCat) { params.set('category', currentCat); }
+        else { params.delete('category'); }
+
+        if (currentPage > 1) { params.set('page', currentPage); }
+        else { params.delete('page'); }
+
+        var query = params.toString();
+        var url = window.location.pathname + (query ? '?' + query : '');
+
+        if (replace) { history.replaceState(null, '', url); }
+        else { history.pushState(null, '', url); }
+    }
+
+    function matching() {
+        if (!currentCat) return cards;
+        return cards.filter(function (card) {
+            return card.getAttribute('data-cat') === currentCat;
         });
     }
+
+    function plural(n) {
+        if (n === 1) return 'منتج واحد';
+        if (n === 2) return 'منتجان';
+        if (n <= 10) return n + ' منتجات';
+        return n + ' منتج';
+    }
+
+    /* ---------- بناء أزرار الترقيم ---------- */
+    function pageNumbers(total, current) {
+        // نافذة صغيرة حوالي الصفحة الحالية + الأولى والأخيرة.
+        // null = فجوة (…)
+        if (total <= 7) {
+            var all = [];
+            for (var i = 1; i <= total; i++) all.push(i);
+            return all;
+        }
+
+        var out = [1];
+        var from = Math.max(2, current - 1);
+        var to   = Math.min(total - 1, current + 1);
+
+        if (from > 2) out.push(null);
+        for (var j = from; j <= to; j++) out.push(j);
+        if (to < total - 1) out.push(null);
+        out.push(total);
+
+        return out;
+    }
+
+    function button(label, page, extraClass, ariaLabel) {
+        var el = document.createElement('button');
+        el.type = 'button';
+        el.className = extraClass;
+        el.textContent = label;
+        if (ariaLabel) el.setAttribute('aria-label', ariaLabel);
+
+        if (page === null) {
+            el.disabled = true;
+            el.classList.add('is-disabled');
+        } else {
+            el.addEventListener('click', function () { goTo(page, true); });
+        }
+        return el;
+    }
+
+    function renderPager(totalPages) {
+        pager.innerHTML = '';
+
+        if (totalPages <= 1) {
+            pager.hidden = true;
+            pagerInf.hidden = true;
+            return;
+        }
+
+        // ⚠️ RTL: السهم › = السابق، ‹ = التالي
+        pager.appendChild(button('›',
+            currentPage > 1 ? currentPage - 1 : null,
+            'pager-btn', 'الصفحة السابقة'));
+
+        pageNumbers(totalPages, currentPage).forEach(function (num) {
+            if (num === null) {
+                var gap = document.createElement('span');
+                gap.className = 'pager-gap';
+                gap.setAttribute('aria-hidden', 'true');
+                gap.textContent = '…';
+                pager.appendChild(gap);
+                return;
+            }
+
+            if (num === currentPage) {
+                var cur = document.createElement('span');
+                cur.className = 'pager-num is-current';
+                cur.setAttribute('aria-current', 'page');
+                cur.textContent = num;
+                pager.appendChild(cur);
+            } else {
+                pager.appendChild(button(num, num, 'pager-num'));
+            }
+        });
+
+        pager.appendChild(button('‹',
+            currentPage < totalPages ? currentPage + 1 : null,
+            'pager-btn', 'الصفحة التالية'));
+
+        pager.hidden = false;
+
+        pagerInf.textContent = 'صفحة ' + currentPage + ' من ' + totalPages;
+        pagerInf.hidden = false;
+    }
+
+    /* ---------- العرض ---------- */
+    function render() {
+        var visible = matching();
+        var totalPages = Math.max(1, Math.ceil(visible.length / perPage));
+
+        if (currentPage > totalPages) currentPage = totalPages;
+
+        var first = (currentPage - 1) * perPage;
+        var last  = first + perPage;
+
+        // ⚠️ نخبّيو بـhidden ماشي بـdisplay فالـstyle: نخلّيو
+        // التحكم للـCSS وما نكسروش أي تخطيط (grid).
+        cards.forEach(function (card) { card.hidden = true; });
+        visible.slice(first, last).forEach(function (card) { card.hidden = false; });
+
+        if (countEl) countEl.textContent = plural(visible.length);
+        if (emptyEl) emptyEl.hidden = visible.length > 0;
+
+        renderPager(totalPages);
+    }
+
+    function goTo(page, scroll) {
+        currentPage = page;
+        writeUrl(false);
+        render();
+
+        if (scroll && section) {
+            // ⚠️ ماكانش إعادة تحميل، فالصفحة ما تقفزش. نمرّرو غير
+            // إذا كان رأس القسم فوق الشاشة — باش الزائر يشوف بداية
+            // الصفحة الجديدة بدل ما يقعد فوسط الشبكة.
+            var top = section.getBoundingClientRect().top;
+            if (top < 0) {
+                window.scrollTo({
+                    top: section.getBoundingClientRect().top + window.scrollY - 20,
+                    behavior: 'smooth'
+                });
+            }
+        }
+    }
+
+    function setCategory(slug) {
+        currentCat = slug || null;
+        currentPage = 1;
+        writeUrl(false);
+        render();
+
+        document.querySelectorAll('.side-cat[data-cat], .category-card[data-cat]')
+            .forEach(function (el) {
+                var value = el.getAttribute('data-cat');
+                var active = (value === (currentCat || 'all'));
+                el.classList.toggle('is-active', active);
+            });
+    }
+
+    /* ---------- روابط التصنيفات ---------- */
+    document.querySelectorAll('.side-cat[data-cat], .category-card[data-cat]')
+        .forEach(function (el) {
+            el.addEventListener('click', function (event) {
+                // ⚠️ نحترمو النقر بالوسط/Ctrl (فتح فتبويب جديد) —
+                // preventDefault عليه يكسر عادة شائعة عند الزوار.
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+
+                event.preventDefault();
+                var slug = el.getAttribute('data-cat');
+                setCategory(slug === 'all' ? null : slug);
+
+                if (section) {
+                    var top = section.getBoundingClientRect().top;
+                    if (top < 0) {
+                        window.scrollTo({
+                            top: top + window.scrollY - 20,
+                            behavior: 'smooth'
+                        });
+                    }
+                }
+            });
+        });
+
+    /* ---------- زر الرجوع تاع المتصفح ---------- */
+    window.addEventListener('popstate', function () {
+        readUrl();
+        render();
+    });
+
+    /* ---------- الإقلاع ---------- */
+    readUrl();
+    render();
+    writeUrl(true);
 })();
 
 

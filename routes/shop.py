@@ -22,6 +22,12 @@ shop_bp = Blueprint("shop", __name__)
 # ويبان الشبكة مكسورة.
 PRODUCTS_PER_PAGE = 9
 
+# ⚠️ فوق هاد العدد، بعث الكتالوج كامل للمتصفح يولّي مكلفًا (كل بطاقة
+# ~700 بايت HTML + صورة). 300 منتج ≈ 240 كيلوبايت HTML — مازال
+# مقبول على 4G، لكنو السقف. فوقها السيرفر يرجع للترقيم تاعو تلقائيًا،
+# فالموقع ما ينكسرش كي يكبر الكتالوج — يولّي غير أبطأ شوية فالتبديل.
+MAX_CLIENT_PAGINATION = 300
+
 
 def _category_counts():
     """
@@ -55,29 +61,49 @@ def home():
     category_slug = request.args.get("category")
 
     # ⚠️ رقم صفحة غالط (نص، سالب، ضخم) ما يخصّوش يطيّح الصفحة.
-    # type=int يرجّع None إذا ماشي رقمًا، وmax(1, ...) يمسك السالب.
     page_number = max(1, request.args.get("page", 1, type=int) or 1)
 
+    # ══════════════════════════════════════════════════════════
+    # الترقيم يصرا فالمتصفح، ماشي فالسيرفر
+    # ══════════════════════════════════════════════════════════
+    #
+    # نبعثو **كل** المنتجات النشطة مرة وحدة، وJavaScript يعرض 9
+    # فكل مرة. النتيجة: تبديل الصفحات فوري — بلا إعادة تحميل،
+    # بلا انتظار الشبكة، وبلا قفزة تمرير. ونربحو معاها رجوع
+    # الفلترة الفورية بالتصنيف.
+    #
+    # ⚠️ التنازل بصراحة: الصفحة تحمل كل المنتجات فالـHTML.
+    # مع 45 منتج (الوضع الحالي) الفرق تافه. الحد المعقول حوالي
+    # **300 منتج**؛ فوقها الصفحة تولّي تقيلة على اتصال الجوال،
+    # ولازم نرجعو للترقيم من السيرفر أو نديرو AJAX.
+    # `MAX_CLIENT_PAGINATION` تحت هي الحارس: كي يتعدّى العدد،
+    # السيرفر يرجع للترقيم تاعو تلقائيًا.
+    #
+    # ⚠️ ?page= و?category= يبقاو يخدمو من السيرفر: الروابط
+    # المشاركة والزواحف (جوجل) ما عندهمش JavaScript.
     query = Product.query.options(
         joinedload(Product.category), joinedload(Product.variants)
     ).filter_by(is_active=True)
     if category_slug:
         query = query.join(Category).filter(Category.slug == category_slug)
 
-    # ⚠️ الترقيم من السيرفر: نجيبو 9 منتجات برك بدل الكتالوج كامل.
-    # قبل، الصفحة الرئيسية كانت تحمّل **كل** المنتجات النشطة (مرتين!)
-    # وتبعثهم للمتصفح باش JavaScript يخبّي اللي ماشي من التصنيف.
-    # مع 45 منتج يخدم؛ مع 500 يولّي أبطأ صفحة فالموقع.
-    #
-    # error_out=False مهم: صفحة رقم 99 على كتالوج فيه 5 صفحات ترجع
-    # قائمة فارغة بدل خطأ 404 — أحسن للزبون وللزواحف.
-    pagination = query.order_by(Product.created_at.desc()).paginate(
-        page=page_number, per_page=PRODUCTS_PER_PAGE, error_out=False
-    )
-    products = pagination.items
+    query = query.order_by(Product.created_at.desc())
 
     categories = Category.query.filter_by(is_active=True).order_by(Category.name).all()
     category_counts, products_total = _category_counts()
+
+    # الحارس: كتالوج ضخم يرجع للترقيم من السيرفر بلا ما نلمسو والو
+    client_paginated = products_total <= MAX_CLIENT_PAGINATION
+
+    if client_paginated:
+        # كل المنتجات فالصفحة — JavaScript يقسّمهم
+        products = query.all()
+        pagination = None
+    else:
+        pagination = query.paginate(
+            page=page_number, per_page=PRODUCTS_PER_PAGE, error_out=False
+        )
+        products = pagination.items
 
     # العروض الخاصة تبان فوق فالصفحة الرئيسية — غير اللي شغالة فعليًا:
     # مفعّلة + داخل مدتها + عندها منتجات + كل منتجاتها متوفرة.
@@ -127,6 +153,8 @@ def home():
         testimonials=testimonials,
         products=products,
         pagination=pagination,
+        client_paginated=client_paginated,
+        per_page=PRODUCTS_PER_PAGE,
         categories=categories,
         category_counts=category_counts,
         products_total=products_total,
