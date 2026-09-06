@@ -118,11 +118,20 @@ def run():
     app = create_app()
 
     with app.app_context():
-        carrier = Carrier.query.filter_by(code="zr").first()
+        # ⚠️ الرمز الصحيح «zrexpress» ماشي «zr» — باقي المشروع كامل
+        # يستعملو (services/zrexpress.py · routes/admin.py). نجرّبو
+        # البدائل باش السكريبت ما يطيحش لو تبدّل الرمز.
+        carrier = None
+        for code in ("zrexpress", "zr", "zr_express"):
+            carrier = Carrier.query.filter_by(code=code).first()
+            if carrier:
+                break
 
         if carrier is None:
-            print(f"{C.ERR}[X]{C.OFF} ما لقيناش شركة التوصيل بالرمز «zr».")
-            print("    راجع: لوحة التحكم ← أسعار التوصيل")
+            print(f"{C.ERR}[X]{C.OFF} ما لقيناش شركة ZR Express.")
+            print("    الشركات الموجودة عندك:")
+            for c in Carrier.query.all():
+                print(f"      {c.code}  —  {c.name}")
             return 1
 
         print("=" * 66)
