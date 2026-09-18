@@ -228,6 +228,15 @@ def create_order(lines, customer_data, shipping_info, coupon=None, customer_note
                 raise OrderError("هذا الكوبون استُعمل بالكامل")
 
         db.session.commit()
+
+        # ⚠️ الإشعار **بعد** commit — لو فشل Telegram، الطلبية موجودة.
+        # لو حطّيناه قبل، rollback يحيّد الطلبية وإشعار Telegram ما يرجعش.
+        try:
+            from services.telegram import notify_new_order
+            notify_new_order(order)
+        except Exception:  # noqa: BLE001
+            pass
+
         return order
 
     except OrderError:

@@ -479,3 +479,37 @@ def test_rate_limit_blocks_excessive_review_spam(app, seed):
         codes.append(response.status_code)
 
     assert 429 in codes, f"الحد ما اشتغلش: {codes}"
+
+
+# ══════════════════════════════════════════════════════════════
+# السابق/التالي للطلبيات
+# ══════════════════════════════════════════════════════════════
+
+def test_order_neighbours_navigation(logged_in_admin, app, seed):
+    """صفحة الطلبية تعرض روابط السابق/التالي صحيحة حسب الترتيب."""
+    from datetime import datetime, timedelta
+
+    with app.app_context():
+        base = datetime.utcnow()
+        order_ids = []
+        for i in range(3):
+            o = Order(
+                order_number=f"BD-NAV{i:03d}", customer_name=f"زبون {i}",
+                customer_phone="0555000000", wilaya_code="16",
+                wilaya_name="الجزائر", subtotal=500, shipping_price=0,
+                total=500, status=Order.STATUS_PENDING,
+                created_at=base - timedelta(minutes=i),
+            )
+            db.session.add(o)
+            db.session.flush()
+            order_ids.append(o.id)
+        db.session.commit()
+
+    # الطلبية الوسطى (الثانية بالترتيب الزمني تنازليًا)
+    middle_id = order_ids[1]
+    resp = logged_in_admin.get(f"/admin/orders/{middle_id}")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    assert "neighbours-pos" in html
+    assert f"BD-NAV{2:03d}" in html or f"BD-NAV{0:03d}" in html

@@ -6,8 +6,42 @@
         {{ order.order_number }}
         <span class="status-pill status-{{ order.status }}">{{ order.status_label }}</span>
     </h1>
-    <a href="{{ url_for('admin.orders_list') }}" class="btn-admin btn-ghost">← كل الطلبيات</a>
+    <a href="{{ url_for('admin.orders_list',
+               status=request.args.get('status'),
+               q=request.args.get('q')) }}"
+       class="btn-admin btn-ghost">← كل الطلبيات</a>
 </div>
+
+{# شريط التنقل السابق/التالي — يتبع نفس فلترة القائمة #}
+{% if order_total %}
+<div class="neighbours-bar">
+    {% if prev_order %}
+    <a href="{{ url_for('admin.order_detail', order_id=prev_order.id,
+                        status=request.args.get('status'),
+                        q=request.args.get('q')) }}"
+       class="neighbours-btn" title="{{ prev_order.order_number }}">
+        ‹ السابق
+        <span class="neighbours-label">{{ prev_order.order_number }}</span>
+    </a>
+    {% else %}
+    <span class="neighbours-btn neighbours-btn--disabled">‹ السابق</span>
+    {% endif %}
+
+    <span class="neighbours-pos">{{ order_pos }} / {{ order_total }}</span>
+
+    {% if next_order %}
+    <a href="{{ url_for('admin.order_detail', order_id=next_order.id,
+                        status=request.args.get('status'),
+                        q=request.args.get('q')) }}"
+       class="neighbours-btn" title="{{ next_order.order_number }}">
+        التالي ›
+        <span class="neighbours-label">{{ next_order.order_number }}</span>
+    </a>
+    {% else %}
+    <span class="neighbours-btn neighbours-btn--disabled">التالي ›</span>
+    {% endif %}
+</div>
+{% endif %}
 
 <div class="form-grid">
     <div class="form-col">
@@ -375,7 +409,7 @@
 
                 <form method="post" action="{{ url_for('admin.order_refresh_tracking', order_id=order.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-admin btn-sm btn-ghost">حدّث الحالة</button>
+                    <button type="submit" class="btn-admin btn-sm btn-ghost">🔄 حدّث حالة التتبّع من ZR</button>
                 </form>
             {% else %}
                 <p class="hint">هاد الطلبية ما تبعثاتش لشركة التوصيل بعد.</p>
@@ -394,7 +428,12 @@
             {% endif %}
         </div>
 
-        <h2 class="section-title">تغيير الحالة</h2>
+        <h2 class="section-title">
+            حالة الطلبية عندنا
+            <span class="hint" style="font-weight:400;font-size:13px;">
+                (جديدة ← مؤكدة ← قيد التجهيز ← إلخ)
+            </span>
+        </h2>
         <form method="post" action="{{ url_for('admin.order_update_status', order_id=order.id) }}" class="admin-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label class="field">

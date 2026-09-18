@@ -614,6 +614,15 @@ var BudacSafe = (function () {
                 var active = (value === (currentCat || 'all'));
                 el.classList.toggle('is-active', active);
             });
+
+        // ⚠️ الحاسوب والموبايل: نمرّرو دايمًا لأعلى قسم المنتجات
+        // عند اختيار تصنيف — الزائر يتوقع يشوف المنتجات مباشرة بلا ما
+        // يمرّر بيدو. الشرط القديم (top < 0) كان يمنع التمرير على
+        // الموبايل لأن الشبكة كانت دايمًا تحت التصنيفات.
+        if (section) {
+            var targetTop = section.getBoundingClientRect().top + window.scrollY - 72;
+            window.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+        }
     }
 
     /* ---------- روابط التصنيفات ---------- */
@@ -626,17 +635,11 @@ var BudacSafe = (function () {
 
                 event.preventDefault();
                 var slug = el.getAttribute('data-cat');
+                // ⚠️ التمرير ولّى داخل setCategory نفسها (يمرّر دايمًا،
+                // ماشي غير إذا كانت الشبكة فوق الشاشة) — ما نكرروش
+                // نفس المنطق هنا، كان يسبب عدم توافق بين الحاسوب
+                // والموبايل.
                 setCategory(slug === 'all' ? null : slug);
-
-                if (section) {
-                    var top = section.getBoundingClientRect().top;
-                    if (top < 0) {
-                        window.scrollTo({
-                            top: top + window.scrollY - 20,
-                            behavior: 'smooth'
-                        });
-                    }
-                }
             });
         });
 

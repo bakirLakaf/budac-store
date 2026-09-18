@@ -1597,6 +1597,47 @@ def _parse_date(value):
 
 # ==================== الطلبيات ====================
 
+
+
+def _order_neighbours(order, args):
+    """
+    يلقى الطلبية السابقة والتالية داخل نفس الفلترة.
+
+    ⚠️ نفس منطق _product_neighbours: نبنيو قائمة IDs بالكامل بدل
+    استعلام ذكي، لأن الترتيب على created_at قد يشارك قيمًا متساوية.
+    عندك مئات الطلبيات ماشي ملايين، فالبساطة تربح.
+    """
+    if order is None:
+        return None, None, 0, 0
+
+    status = args.get("status")
+    search = (args.get("q") or "").strip()
+
+    query = Order.query
+    if status and status in Order.STATUS_LABELS:
+        query = query.filter_by(status=status)
+    if search:
+        query = query.filter(
+            db.or_(
+                Order.order_number.contains(search.upper()),
+                Order.customer_phone.contains(search),
+                Order.customer_name.contains(search),
+            )
+        )
+
+    ids = [row.id for row in
+           query.order_by(Order.created_at.desc())
+                .with_entities(Order.id).all()]
+
+    if order.id not in ids:
+        return None, None, 0, len(ids)
+
+    index = ids.index(order.id)
+    previous = Order.query.get(ids[index - 1]) if index > 0 else None
+    next_ = Order.query.get(ids[index + 1]) if index < len(ids) - 1 else None
+
+    return previous, next_, index + 1, len(ids)
+
 @admin_bp.route("/orders")
 @login_required
 def orders_list():
@@ -1648,11 +1689,17 @@ def order_detail(order_id):
         .all()
     )
 
+    prev_o, next_o, pos, total = _order_neighbours(order, request.args)
+
     return render_template(
         "admin/order_detail.html",
         order=order,
         status_labels=Order.STATUS_LABELS,
         products=products,
+        prev_order=prev_o,
+        next_order=next_o,
+        order_pos=pos,
+        order_total=total,
     )
 
 

@@ -351,14 +351,22 @@ def add_store_review():
     elif not rating or not (1 <= rating <= 5):
         flash("اختر عدد النجوم", "error")
     else:
-        db.session.add(Review(
+        review = Review(
             product_id=None,          # ← تقييم للمتجر
             author_name=name[:120],
             rating=rating,
             comment=comment[:1000] or None,
             is_approved=False,
-        ))
+        )
+        db.session.add(review)
         db.session.commit()
+
+        try:
+            from services.telegram import notify_new_review
+            notify_new_review(review, base_url=request.url_root)
+        except Exception:  # noqa: BLE001
+            pass
+
         flash("شكرًا على رأيك! راح يبان بعد المراجعة.", "success")
 
     return redirect(url_for("shop.store_reviews") + "#form")
@@ -384,14 +392,22 @@ def add_review(slug):
     elif not rating or not (1 <= rating <= 5):
         flash("اختر عدد النجوم", "error")
     else:
-        db.session.add(Review(
+        review = Review(
             product_id=product.id,
             author_name=name[:120],
             rating=rating,
             comment=comment[:1000] or None,
             is_approved=False,
-        ))
+        )
+        db.session.add(review)
         db.session.commit()
+
+        try:
+            from services.telegram import notify_new_review
+            notify_new_review(review, base_url=request.url_root)
+        except Exception:  # noqa: BLE001
+            pass
+
         flash("شكرًا على تقييمك! راح يبان بعد المراجعة.", "success")
 
     return redirect(url_for("shop.product_detail", slug=slug) + "#reviews")
