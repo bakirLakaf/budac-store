@@ -2379,9 +2379,38 @@ def order_refresh_tracking(order_id):
     except ZRError as e:
         flash(str(e), "error")
         return redirect(url_for("admin.order_detail", order_id=order.id))
+    except Exception as e:
+        # ⚠️ صفحة 500 عامة ما تفيدش الأدمن — يخرج بلا ما يعرف واش صرا.
+        # نمسكو أي استثناء غير متوقع (رد ZR بشكل غريب، قطع اتصال
+        # نصفي، إلخ) ونرجّعوه كرسالة واضحة بدل صفحة خطأ فاضية.
+        current_app.logger.exception(
+            "order_refresh_tracking: خطأ غير متوقع للطلبية %s", order.order_number
+        )
+        flash(
+            "صار خطأ غير متوقع فتحديث حالة التتبّع. جرّب مرة أخرى، "
+            "وإذا تكرر المشكل راسلنا.",
+            "error",
+        )
+        return redirect(url_for("admin.order_detail", order_id=order.id))
 
-    order.carrier_state = status["state"]
-    db.session.commit()
+    # ⚠️ status["state"] يفترض قاموس فيه المفتاح دايمًا — get_parcel_status
+    # لازم يضمن هذا، بصح نتحقق هنا زيادة أمان بلا ما نطيح لو تبدّل
+    # شكل الرد مستقبلاً.
+    new_state = status.get("state") if isinstance(status, dict) else None
+    if not new_state:
+        flash("ZR رجع رد ما فيهش حالة واضحة — جرّب مرة أخرى بعد شوية", "warning")
+        return redirect(url_for("admin.order_detail", order_id=order.id))
+
+    try:
+        order.carrier_state = new_state
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception(
+            "order_refresh_tracking: فشل الحفظ للطلبية %s", order.order_number
+        )
+        flash("جبنا الحالة من ZR بصح ما قدرناش نحفظوها — جرّب مرة أخرى", "error")
+        return redirect(url_for("admin.order_detail", order_id=order.id))
 
     flash(f"الحالة عند الشركة: {status['state']}", "success")
     return redirect(url_for("admin.order_detail", order_id=order.id))

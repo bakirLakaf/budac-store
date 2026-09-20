@@ -513,3 +513,70 @@ def test_order_neighbours_navigation(logged_in_admin, app, seed):
 
     assert "neighbours-pos" in html
     assert f"BD-NAV{2:03d}" in html or f"BD-NAV{0:03d}" in html
+
+
+# ══════════════════════════════════════════════════════════════
+# تحديث حالة التتبّع من ZR — ما يطيحش بصفحة 500
+# ══════════════════════════════════════════════════════════════
+
+def test_refresh_tracking_handles_unexpected_zr_response(logged_in_admin, app, seed):
+    """
+    استثناء غير متوقع من get_parcel_status (مو ZRError) لازم يرجّع
+    رسالة واضحة، ماشي صفحة 500 خام.
+
+    ⚠️ هاد الاختبار وُجد بعد بلاغ حقيقي: زر "حدّث حالة التتبّع من ZR"
+    كان يوقع صفحة 500 عامة بلا أي تفاصيل تفيد الأدمن.
+    """
+    from unittest.mock import patch
+
+    with app.app_context():
+        order = Order(
+            order_number="BD-TRK001", customer_name="زبون تتبّع",
+            customer_phone="0555000000", wilaya_code="16",
+            wilaya_name="الجزائر", subtotal=500, shipping_price=0,
+            total=500, status=Order.STATUS_CONFIRMED,
+            tracking_number="FCQIKGY725-ZR-24",
+        )
+        db.session.add(order)
+        db.session.commit()
+        oid = order.id
+
+    # نحاكيو استثناء غير متوقع (ماشي ZRError) — بالضبط نوع العطب
+    # اللي كان يطيح 500
+    with patch(
+        "services.zrexpress.get_parcel_status",
+        side_effect=AttributeError("'NoneType' object has no attribute 'get'"),
+    ):
+        resp = logged_in_admin.post(
+            f"/admin/orders/{oid}/refresh-tracking", follow_redirects=True
+        )
+
+    assert resp.status_code == 200, "لازم يرجّع رسالة واضحة ماشي 500"
+    html = resp.get_data(as_text=True)
+    assert "خطأ غير متوقع" in html
+
+
+def test_refresh_tracking_handles_malformed_status_response(logged_in_admin, app, seed):
+    """رد ZR بشكل غير متوقع (None ولا بلا مفتاح state) يرجّع رسالة واضحة."""
+    from unittest.mock import patch
+
+    with app.app_context():
+        order = Order(
+            order_number="BD-TRK002", customer_name="زبون تتبّع 2",
+            customer_phone="0555000001", wilaya_code="16",
+            wilaya_name="الجزائر", subtotal=500, shipping_price=0,
+            total=500, status=Order.STATUS_CONFIRMED,
+            tracking_number="FCQIKGY726-ZR-25",
+        )
+        db.session.add(order)
+        db.session.commit()
+        oid = order.id
+
+    with patch("services.zrexpress.get_parcel_status", return_value=None):
+        resp = logged_in_admin.post(
+            f"/admin/orders/{oid}/refresh-tracking", follow_redirects=True
+        )
+
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "ما فيهش حالة واضحة" in html
