@@ -623,15 +623,43 @@ def get_parcel_status(tracking_number):
     """
     حالة طرد برقم التتبّع.
     نستعملوها باش نحدّثو حالة الطلبية تلقائيًا بدل ما الأدمن يقلّب عند ZR.
+
+    ⚠️ بلاغ حقيقي (v148): ZR بدّلت شكل الرد — `state` ولّى كائن كامل
+    `{id, name, description, isBlocking, isLocked, visibleFor,
+    editableBy, color}` بدل نص بسيط. كنا نمرّرو هاد الكائن كامل
+    لعمود `carrier_state` (نص قصير) فكانت تطيح:
+        psycopg2.ProgrammingError: can't adapt type 'dict'
+    نستخرجو النص المقروء من جوّا الكائن، مع دعم الشكل القديم (نص
+    مباشر) احتياطًا لو ZR رجّعت للشكل القديم فمكان آخر من الـAPI.
     """
     data = _request("GET", f"/parcels/{tracking_number}")
 
+    state_obj = data.get("state")
+
+    if isinstance(state_obj, dict):
+        # الشكل الجديد: كائن فيه description (فرنسي مقروء) وname (تقني)
+        state_label = (
+            state_obj.get("description")
+            or state_obj.get("name")
+            or "غير معروف"
+        )
+        state_id = state_obj.get("id")
+    else:
+        # الشكل القديم: نص مباشر، أو stateName منفصل
+        state_label = data.get("stateName") or state_obj or "غير معروف"
+        state_id = data.get("stateId")
+
+    # نتأكدو أنو نص دايمًا، بأي حال — العمود فقاعدة البيانات نص
+    # قصير (120 حرف)، وما نبعثوش كائن مهما كان شكل رد ZR مستقبلاً.
+    state_label = str(state_label)[:120]
+
     return {
-        "state": data.get("stateName") or data.get("state") or "غير معروف",
-        "state_id": data.get("stateId"),
+        "state": state_label,
+        "state_id": state_id,
         "updated_at": data.get("updatedAt") or data.get("lastUpdate"),
         "raw": data,
     }
+
 
 def test_connection():
     """

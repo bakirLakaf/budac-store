@@ -2396,7 +2396,19 @@ def order_refresh_tracking(order_id):
     # ⚠️ status["state"] يفترض قاموس فيه المفتاح دايمًا — get_parcel_status
     # لازم يضمن هذا، بصح نتحقق هنا زيادة أمان بلا ما نطيح لو تبدّل
     # شكل الرد مستقبلاً.
+    #
+    # ⚠️ بلاغ حقيقي (v148): ZR بدّلت شكل الرد وget_parcel_status كانت
+    # ترجّع كائن (dict) عوض نص، والفحص هنا كان يتأكد أن `status`
+    # قاموس برك — بلا ما يتأكد أن `new_state` نفسها نص. الكائن كان
+    # يعدّي هذا الفحص (dict مليان مو فارغ) ويطيح فـdb.session.commit().
+    # نفرض هنا صراحة أنها نص، مهما كان شكل status.
     new_state = status.get("state") if isinstance(status, dict) else None
+    if isinstance(new_state, dict):
+        new_state = (
+            new_state.get("description") or new_state.get("name") or None
+        )
+    if new_state is not None:
+        new_state = str(new_state)[:120]
     if not new_state:
         flash("ZR رجع رد ما فيهش حالة واضحة — جرّب مرة أخرى بعد شوية", "warning")
         return redirect(url_for("admin.order_detail", order_id=order.id))

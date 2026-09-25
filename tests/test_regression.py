@@ -580,3 +580,199 @@ def test_refresh_tracking_handles_malformed_status_response(logged_in_admin, app
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "ما فيهش حالة واضحة" in html
+
+
+# ══════════════════════════════════════════════════════════════
+# get_parcel_status: ZR بدّلت شكل حقل state لكائن — ماشي نص
+# ══════════════════════════════════════════════════════════════
+
+def test_get_parcel_status_handles_new_zr_state_object(monkeypatch):
+    """
+    بلاغ إنتاج حقيقي (v148): ZR غيّرت رد /parcels/{id} — حقل `state`
+    ولّى كائن {id, name, description, color, ...} بدل نص بسيط.
+
+    الرد الحقيقي اللي جبناه من logs الإنتاج:
+        {"state": {"id": "...", "name": "encaisse",
+                    "description": "Encaissé", "color": "00796b", ...}}
+
+    كان يخلّي `order.carrier_state = status["state"]` يحاول يحفظ
+    dict كامل فعمود نص قصير، وpsycopg2 يرفض بـ:
+        ProgrammingError: can't adapt type 'dict'
+    """
+    from unittest.mock import patch, MagicMock
+    from services.zrexpress import get_parcel_status
+
+    monkeypatch.setenv("ZR_TENANT_ID", "test-tenant")
+    monkeypatch.setenv("ZR_API_KEY", "test-key")
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.content = b"{}"
+    fake_response.headers = {}
+    fake_response.json.return_value = {
+        "state": {
+            "id": "f34dfc2c-ecfe-4e06-9a19-430d2d0b27b9",
+            "name": "encaisse",
+            "description": "Encaissé",
+            "isBlocking": False,
+            "isLocked": False,
+            "visibleFor": 15,
+            "editableBy": 2,
+            "color": "00796b",
+        }
+    }
+
+    with patch("services.zrexpress.requests.request", return_value=fake_response):
+        result = get_parcel_status("FCQIKGY725-ZR-24")
+
+    assert isinstance(result["state"], str), "state لازم يكون نص، ماشي dict"
+    assert result["state"] == "Encaissé"
+    assert result["state_id"] == "f34dfc2c-ecfe-4e06-9a19-430d2d0b27b9"
+
+
+def test_get_parcel_status_still_supports_old_plain_string_format(monkeypatch):
+    """الشكل القديم (state = نص مباشر) لازم يبقى يخدم، ماشي غير الجديد."""
+    from unittest.mock import patch, MagicMock
+    from services.zrexpress import get_parcel_status
+
+    monkeypatch.setenv("ZR_TENANT_ID", "test-tenant")
+    monkeypatch.setenv("ZR_API_KEY", "test-key")
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.content = b"{}"
+    fake_response.headers = {}
+    fake_response.json.return_value = {"state": "delivered", "stateId": "xyz"}
+
+    with patch("services.zrexpress.requests.request", return_value=fake_response):
+        result = get_parcel_status("OLD-FORMAT-123")
+
+    assert result["state"] == "delivered"
+    assert result["state_id"] == "xyz"
+
+
+def test_refresh_tracking_saves_real_zr_dict_response_without_crashing(
+    logged_in_admin, app, seed, monkeypatch
+):
+    """
+    اختبار شامل من الطرف للطرف بنفس البيانات الحقيقية من production
+    logs — الروت كامل، مو الدالة وحدها.
+    """
+    from unittest.mock import patch, MagicMock
+
+    monkeypatch.setenv("ZR_TENANT_ID", "test-tenant")
+    monkeypatch.setenv("ZR_API_KEY", "test-key")
+
+    with app.app_context():
+        order = Order(
+            order_number="BD-REALTRK", customer_name="زبون حقيقي",
+            customer_phone="0555000002", wilaya_code="24",
+            wilaya_name="قالمة", subtotal=720, shipping_price=700,
+            total=1420, status=Order.STATUS_CONFIRMED,
+            tracking_number="FCQIKGY725-ZR-24",
+        )
+        db.session.add(order)
+        db.session.commit()
+        oid = order.id
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.content = b"{}"
+    fake_response.headers = {}
+    fake_response.json.return_value = {
+        "state": {
+            "id": "f34dfc2c-ecfe-4e06-9a19-430d2d0b27b9",
+            "name": "encaisse",
+            "description": "Encaissé",
+            "isBlocking": False,
+            "isLocked": False,
+            "visibleFor": 15,
+            "editableBy": 2,
+            "color": "00796b",
+        }
+    }
+
+    with patch("services.zrexpress.requests.request", return_value=fake_response):
+        resp = logged_in_admin.post(
+            f"/admin/orders/{oid}/refresh-tracking", follow_redirects=True
+        )
+
+    assert resp.status_code == 200
+
+    with app.app_context():
+        updated = db.session.get(Order, oid)
+        assert updated.carrier_state == "Encaissé"
+        assert isinstance(updated.carrier_state, str)
+
+
+# ══════════════════════════════════════════════════════════════
+# startup._fix_null_flags: قيم BOOLEAN لازم TRUE/FALSE ماشي 0/1
+# ══════════════════════════════════════════════════════════════
+
+def test_fix_null_flags_uses_ansi_boolean_literals(app):
+    """
+    بلاغ إنتاج حقيقي (v148): كنا نستعملو `0`/`1` كقيم افتراضية فـSQL
+    خام لتصليح أعمدة BOOLEAN اللي بقات NULL. Postgres يرفض هذا:
+
+        DatatypeMismatch: column "is_extra" is of type boolean
+        but expression is of type integer
+
+    SQLite ساهل ويقبل 0/1 كـBOOLEAN، فالمشكل ما كانش يبان غير
+    فالإنتاج (Postgres) — وكان يتكرر فكل نشر بلا ما يتصلّح أبدًا.
+    """
+    from sqlalchemy import text
+    from startup import _fix_null_flags
+    from models import Category, ProductImage, ProductVariant
+
+    with app.app_context():
+        cat = Category(name="اختبار قيم", slug="test-boolean-flags")
+        db.session.add(cat)
+        db.session.flush()
+
+        product = Product(name="منتج", slug="test-boolean-flags-p",
+                          price=100, category_id=cat.id, is_active=True)
+        db.session.add(product)
+        db.session.flush()
+
+        db.session.add(ProductImage(product_id=product.id, image_filename="x.jpg"))
+        db.session.commit()
+
+        # ⚠️ العمود الطازج عندو NOT NULL DEFAULT FALSE، فما نقدروش
+        # نحطّو NULL مباشرة. نحاكيو الحالة الواقعية (قاعدة بيانات
+        # قديمة قبل ما تنزاد القيود) بإعادة بناء العمود بلا قيد.
+        db.session.execute(text(
+            "ALTER TABLE product_images RENAME COLUMN is_extra TO is_extra_bak"
+        ))
+        db.session.execute(text(
+            "ALTER TABLE product_images ADD COLUMN is_extra BOOLEAN"
+        ))
+        db.session.commit()
+
+        # ما يطيحش، ويصلّح القيمة فعليًا
+        _fix_null_flags(db)
+
+        fixed = db.session.execute(text(
+            "SELECT is_extra FROM product_images WHERE product_id = :pid"
+        ), {"pid": product.id}).scalar()
+
+        assert fixed in (0, False), "لازم يتصلّح لـFalse، ماشي يبقى NULL"
+
+
+def test_fix_null_flags_source_uses_ansi_literals_not_integers():
+    """
+    ⚠️ SQLite متساهل مع 0/1 كـBOOLEAN، فاختبار السلوك وحدو ما يكفيش
+    يكشف عطب Postgres-specific. نتحقق مباشرة من القيم النصية
+    المستعملة فـSQL — هذا هو الضمان الحقيقي ضد رجوع الخطأ:
+        DatatypeMismatch: column "is_extra" is of type boolean
+        but expression is of type integer
+    """
+    import inspect
+    from startup import _fix_null_flags
+
+    source = inspect.getsource(_fix_null_flags)
+
+    assert '"FALSE"' in source or "'FALSE'" in source
+    assert '"TRUE"' in source or "'TRUE'" in source
+    # ما نلقاوش "0" ولا "1" كقيم افتراضية فداخل قائمة targets
+    assert '"0"),' not in source, "لازم TRUE/FALSE ماشي 0/1 (Postgres يرفضهم)"
+    assert '"1"),' not in source, "لازم TRUE/FALSE ماشي 0/1 (Postgres يرفضهم)"
