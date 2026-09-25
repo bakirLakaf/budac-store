@@ -174,13 +174,20 @@ def _fix_null_flags(db):
     فالصفوف يختفيو من أي فلترة. صرا مع `product_images.is_extra`:
     كل صور المنتجات القديمة كانت راح تختفي من المعرض.
 
+    ⚠️ بلاغ إنتاج (v148): كنا نستعملو `"0"` و`"1"` كقيم افتراضية،
+    وPostgres يرفض قيم رقمية مباشرة فعمود BOOLEAN:
+        DatatypeMismatch: column "is_extra" is of type boolean
+        but expression is of type integer
+    SQLite أكثر تساهلًا وكان يقبلها، فالمشكل ما بانش غير فالإنتاج.
+    الحل: `FALSE`/`TRUE` مباشرة — يخدم فـPostgres وSQLite بلا فرق.
+
     التشغيل المتكرر آمن — يمسّ غير الصفوف اللي فيها NULL.
     """
     from sqlalchemy import text, inspect
 
     targets = [
-        ("product_images", "is_extra", "0"),
-        ("product_variants", "is_available", "1"),
+        ("product_images", "is_extra", "FALSE"),
+        ("product_variants", "is_available", "TRUE"),
     ]
 
     inspector = inspect(db.engine)
