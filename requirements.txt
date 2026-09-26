@@ -9,7 +9,19 @@ python-dotenv==1.2.3
 requests==2.34.2
 Pillow==12.3.0
 gunicorn==23.0.0
+
+# ⚠️ بلاغ إنتاج حقيقي (v149): الموقع طاح بالكامل —
+#     ModuleNotFoundError: No module named 'psycopg'
+# السبب: DATABASE_URL عند Railway صار يبدأ بـ"postgresql+psycopg://"
+# صراحة (سائق psycopg النسخة 3)، بينما كنا مثبّتين psycopg2-binary
+# برك (النسخة 2). محليًا SQLAlchemy تختار psycopg2 تلقائيًا لرابط
+# "postgresql://" العادي — بصح "+psycopg" فالرابط يجبرها تحاول
+# تستورد الحزمة الثانية بالضبط.
+# نثبّتو الاثنين مع بعض: أي شكل رابط يبعثو Railway (قديم بـpsycopg2
+# ولا جديد بـpsycopg3) يخدم بلا ما نحتاج نغيّرو الكود ولا نخمّنو
+# الرابط بالضبط.
 psycopg2-binary==2.9.12
+psycopg[binary]==3.2.10
 openpyxl==3.1.5
 
 # تحديد معدّل الطلبات — شوف services/ratelimit.py
