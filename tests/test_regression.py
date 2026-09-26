@@ -776,3 +776,58 @@ def test_fix_null_flags_source_uses_ansi_literals_not_integers():
     # ما نلقاوش "0" ولا "1" كقيم افتراضية فداخل قائمة targets
     assert '"0"),' not in source, "لازم TRUE/FALSE ماشي 0/1 (Postgres يرفضهم)"
     assert '"1"),' not in source, "لازم TRUE/FALSE ماشي 0/1 (Postgres يرفضهم)"
+
+
+# ══════════════════════════════════════════════════════════════
+# create_app: لازم تخدم مهما كان شكل رابط Postgres اللي يبعثو Railway
+# ══════════════════════════════════════════════════════════════
+
+def test_create_app_works_with_psycopg3_style_database_url(monkeypatch):
+    """
+    بلاغ إنتاج حرج (v149): الموقع طاح بالكامل —
+        ModuleNotFoundError: No module named 'psycopg'
+
+    السبب: DATABASE_URL عند Railway صار يبدأ بـ"postgresql+psycopg://"
+    (سائق النسخة 3)، وكنا مثبّتين psycopg2-binary برك. كل عامل
+    (worker) كان يطيح فور الإقلاع — outage كامل، ماشي عطب جزئي.
+
+    هذا الاختبار يتأكد أن create_app() تقدر توصل لخطوة استيراد
+    السائق بلا ما تطيح، بغض النظر عن شكل الرابط.
+    """
+    import importlib
+    import secrets
+
+    monkeypatch.setenv("SECRET_KEY", secrets.token_hex(32))
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql+psycopg://user:pass@localhost:5432/fakedb"
+    )
+
+    import config
+    importlib.reload(config)
+    import app as app_module
+    importlib.reload(app_module)
+
+    # ما نطلبش اتصال حقيقي بقاعدة بيانات — نتأكد برك أن create_app()
+    # توصل لآخرها بلا ModuleNotFoundError عند استيراد السائق (هنا
+    # بالضبط كانت تطيح فالإنتاج، عند db.init_app → create_engine).
+    created_app = app_module.create_app()
+    assert created_app is not None
+
+
+def test_create_app_works_with_psycopg2_style_database_url(monkeypatch):
+    """الشكل القديم (بلا +psycopg صراحة) لازم يبقى يخدم، ماشي غير الجديد."""
+    import importlib
+    import secrets
+
+    monkeypatch.setenv("SECRET_KEY", secrets.token_hex(32))
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql://user:pass@localhost:5432/fakedb"
+    )
+
+    import config
+    importlib.reload(config)
+    import app as app_module
+    importlib.reload(app_module)
+
+    created_app = app_module.create_app()
+    assert created_app is not None
