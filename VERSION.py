@@ -1,4 +1,4 @@
 """رقم الإصدار — يبان فسجلات Railway وفأسفل لوحة التحكم."""
 
-VERSION = "v151"
-BUILD_NOTE = "زر تحديث كل الطلبيات من ZR دفعة وحدة"
+VERSION = "v153"
+BUILD_NOTE = "Récupéré par fournisseur = راجعة"
