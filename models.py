@@ -2012,6 +2012,7 @@ class AdminAction(db.Model):
     IMPORT = "import"
     EXPORT = "export"
     INTEGRATION = "integration"
+    REVIEW_EDIT = "review_edit"
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -2047,4 +2048,5 @@ class AdminAction(db.Model):
             self.IMPORT: "استيراد",
             self.EXPORT: "تصدير",
             self.INTEGRATION: "تكامل خارجي",
+            self.REVIEW_EDIT: "تعديل نجوم تقييم",
         }.get(self.action, self.action)
