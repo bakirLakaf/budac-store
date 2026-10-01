@@ -1,7 +1,14 @@
 {% extends "admin/base_admin.html" %}
 {% block content %}
 
-<h1 class="page-title">الطلبيات</h1>
+<div class="page-head-row">
+    <h1 class="page-title">الطلبيات</h1>
+    <form method="post" action="{{ url_for('admin.orders_refresh_all_tracking') }}"
+          onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = '⏳ جاري التحديث... ما تغلقش الصفحة';">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin btn-sm">🔄 تحديث كل الطلبيات الممكنة</button>
+    </form>
+</div>
 
 <div class="status-tabs">
     <a href="{{ url_for('admin.orders_list') }}" class="status-tab {{ 'is-active' if not current_status }}">

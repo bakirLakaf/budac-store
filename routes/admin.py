@@ -2402,10 +2402,51 @@ def order_send_to_carrier(order_id):
     return redirect(url_for("admin.order_detail", order_id=order.id))
 
 
+def _normalize_zr_state(status):
+    """يستخرج نص حالة ZR من الرد (مهما كان شكلو). يرجع None إذا ما لقاش."""
+    state = status.get("state") if isinstance(status, dict) else None
+    if isinstance(state, dict):
+        state = state.get("description") or state.get("name") or None
+    if state is not None:
+        state = str(state)[:120]
+    return state or None
+
+
+def _decide_status_change(order, new_state):
+    """
+    يقرّر واش نبدّلو حالة الطلبية بناءً على حالة ZR — قواعد الأمان فبلاصة وحدة
+    يستعملوها الزر الفردي والزر الجماعي.
+
+    يرجع (kind, target):
+      "change"  → نبدّلو لـtarget
+      "same"    → نفس الحالة، ما كاين والو
+      "back"    → التبديل يكون رجوع للوراء، نتجاهلوه
+      "locked"  → الطلبية مسلّمة/ملغاة/راجعة، ما نلمسوهاش
+      "unknown" → حالة ZR ما تتعرفش
+    """
+    from services.zrexpress import map_state_to_order_status
+
+    target = map_state_to_order_status(new_state, order.delivery_type)
+    if target is None:
+        return "unknown", None
+    if target == order.status:
+        return "same", target
+    if order.status in (Order.STATUS_DELIVERED, *Order.STATUS_TERMINAL):
+        return "locked", target
+
+    flow = Order.STATUS_FLOW
+    moving_forward = (
+        target in Order.STATUS_TERMINAL
+        or (order.status in flow and target in flow
+            and flow.index(target) > flow.index(order.status))
+    )
+    return ("change", target) if moving_forward else ("back", target)
+
+
 @admin_bp.route("/orders/<int:order_id>/refresh-tracking", methods=["POST"])
 @login_required
 def order_refresh_tracking(order_id):
-    """يحدّث حالة الطرد من ZR Express."""
+    """يحدّث حالة الطرد من ZR Express ويبدّل حالة الطلبية إذا لازم."""
     from services.zrexpress import get_parcel_status, ZRError
 
     order = db.session.get(Order, order_id) or abort(404)
@@ -2419,10 +2460,9 @@ def order_refresh_tracking(order_id):
     except ZRError as e:
         flash(str(e), "error")
         return redirect(url_for("admin.order_detail", order_id=order.id))
-    except Exception as e:
-        # ⚠️ صفحة 500 عامة ما تفيدش الأدمن — يخرج بلا ما يعرف واش صرا.
-        # نمسكو أي استثناء غير متوقع (رد ZR بشكل غريب، قطع اتصال
-        # نصفي، إلخ) ونرجّعوه كرسالة واضحة بدل صفحة خطأ فاضية.
+    except Exception:
+        # ⚠️ صفحة 500 عامة ما تفيدش الأدمن — نمسكو أي استثناء غير متوقع
+        # (رد ZR بشكل غريب، قطع اتصال...) ونرجّعوه كرسالة واضحة.
         current_app.logger.exception(
             "order_refresh_tracking: خطأ غير متوقع للطلبية %s", order.order_number
         )
@@ -2433,67 +2473,36 @@ def order_refresh_tracking(order_id):
         )
         return redirect(url_for("admin.order_detail", order_id=order.id))
 
-    # ⚠️ status["state"] يفترض قاموس فيه المفتاح دايمًا — get_parcel_status
-    # لازم يضمن هذا، بصح نتحقق هنا زيادة أمان بلا ما نطيح لو تبدّل
-    # شكل الرد مستقبلاً.
-    #
-    # ⚠️ بلاغ حقيقي (v148): ZR بدّلت شكل الرد وget_parcel_status كانت
-    # ترجّع كائن (dict) عوض نص، والفحص هنا كان يتأكد أن `status`
-    # قاموس برك — بلا ما يتأكد أن `new_state` نفسها نص. الكائن كان
-    # يعدّي هذا الفحص (dict مليان مو فارغ) ويطيح فـdb.session.commit().
-    # نفرض هنا صراحة أنها نص، مهما كان شكل status.
-    new_state = status.get("state") if isinstance(status, dict) else None
-    if isinstance(new_state, dict):
-        new_state = (
-            new_state.get("description") or new_state.get("name") or None
-        )
-    if new_state is not None:
-        new_state = str(new_state)[:120]
+    # ⚠️ بلاغ حقيقي (v148): ZR بدّلت شكل الرد (state ولّى كائن). نفرض هنا
+    # أن new_state نص دايمًا، مهما كان شكل status.
+    new_state = _normalize_zr_state(status)
     if not new_state:
         flash("ZR رجع رد ما فيهش حالة واضحة — جرّب مرة أخرى بعد شوية", "warning")
         return redirect(url_for("admin.order_detail", order_id=order.id))
 
-    # ── نترجمو حالة ZR لحالة الطلبية فالموقع ──
-    # قواعد الأمان:
-    #  • ما نرجعوش الطلبية للوراء أبدًا (مثلاً «تم التسليم» ما ترجعش «فالطريق»)
-    #  • الطلبية المسلّمة / الملغاة / الراجعة ما نلمسوهاش — هذا قرارك أنت
-    #  • حالة ZR ما تتعرفش → نخلّيو حالة الطلبية كما هي
-    from services.zrexpress import map_state_to_order_status
-
+    # ── نترجمو حالة ZR لحالة الطلبية فالموقع (القواعد فـ_decide_status_change) ──
     status_msg = None      # (نص, نوع) نعرضوه للأدمن
-    old_status = order.status
-    target = map_state_to_order_status(new_state, order.delivery_type)
+    kind, target = _decide_status_change(order, new_state)
 
     try:
         order.carrier_state = new_state
 
-        if target is None:
+        if kind == "unknown":
             status_msg = (
                 "حالة الطلبية فالموقع ما تبدّلتش (حالة ZR هذي ما نعرفوهاش — "
                 "بدّلها يدويًا إذا لازم)", "warning")
-        elif target == old_status:
-            status_msg = None   # نفس الحالة — ما كاين والو نقولو
-        elif old_status in (Order.STATUS_DELIVERED, *Order.STATUS_TERMINAL):
+        elif kind == "locked":
             status_msg = (
                 f"الطلبية فحالة «{order.status_label}» — ما بدّلناهاش تلقائيًا",
                 "warning")
-        else:
-            flow = Order.STATUS_FLOW
-            moving_forward = (
-                target in Order.STATUS_TERMINAL
-                or (old_status in flow and target in flow
-                    and flow.index(target) > flow.index(old_status))
-            )
-            if not moving_forward:
-                status_msg = None   # ما نرجعوش للوراء
-            else:
-                msgs = _change_order_status(
-                    order, target, note=f" (تلقائي من ZR: {new_state})")
-                status_msg = (
-                    f"حالة الطلبية ولات: {Order.STATUS_LABELS[target]}",
-                    "success")
-                for text, category in msgs:
-                    flash(text, category)
+        elif kind == "change":
+            msgs = _change_order_status(
+                order, target, note=f" (تلقائي من ZR: {new_state})")
+            status_msg = (
+                f"حالة الطلبية ولات: {Order.STATUS_LABELS[target]}", "success")
+            for text, category in msgs:
+                flash(text, category)
+        # "same" / "back" → ما نقولو والو
 
         db.session.commit()
     except OrderError as e:
@@ -2521,6 +2530,100 @@ def order_refresh_tracking(order_id):
     if status_msg:
         flash(status_msg[0], status_msg[1])
     return redirect(url_for("admin.order_detail", order_id=order.id))
+
+
+# أقصى عدد طلبيات فضغطة وحدة + أقصى وقت — باش الصفحة ما تعلّقش
+# (gunicorn timeout = 120 ثانية، وكل اتصال بـZR يقدر ياخذ حتى 25 ثانية)
+BULK_ZR_MAX_ORDERS = 40
+BULK_ZR_MAX_SECONDS = 80
+
+
+@admin_bp.route("/orders/refresh-all-tracking", methods=["POST"])
+@login_required
+def orders_refresh_all_tracking():
+    """
+    يحدّث حالة كل الطلبيات الممكنة من ZR دفعة وحدة.
+
+    «الممكنة» = عندها رقم تتبّع + مازالت ما وصلتش (مش مسلّمة/ملغاة/راجعة).
+    نبدؤو بالأقدم تحديثًا. إذا بقاو طلبيات، تضغط الزر مرة أخرى.
+    """
+    from services.zrexpress import get_parcel_status, ZRError, is_configured
+
+    if not is_configured():
+        flash("ZR Express مش مضبوطة — شوف صفحة التكاملات", "error")
+        return redirect(url_for("admin.orders_list"))
+
+    candidates = (
+        Order.query
+        .filter(
+            Order.tracking_number.isnot(None),
+            Order.tracking_number != "",
+            Order.status.notin_([Order.STATUS_DELIVERED, *Order.STATUS_TERMINAL]),
+        )
+        .order_by(Order.created_at.asc())
+        .all()
+    )
+
+    total_candidates = len(candidates)
+    started = time()
+    checked = changed = unchanged = unknown = failed = 0
+    unknown_states = set()
+    failed_numbers = []
+    stopped_early = False
+
+    for order in candidates:
+        if checked + failed >= BULK_ZR_MAX_ORDERS or time() - started > BULK_ZR_MAX_SECONDS:
+            stopped_early = True
+            break
+
+        try:
+            status = get_parcel_status(order.tracking_number)
+            new_state = _normalize_zr_state(status)
+            if not new_state:
+                raise ZRError("رد بلا حالة")
+
+            kind, target = _decide_status_change(order, new_state)
+            order.carrier_state = new_state
+
+            if kind == "change":
+                _change_order_status(
+                    order, target, note=f" (تلقائي من ZR: {new_state})")
+                changed += 1
+            elif kind == "unknown":
+                unknown += 1
+                unknown_states.add(new_state)
+            else:
+                unchanged += 1
+
+            db.session.commit()
+            checked += 1
+        except Exception as e:  # noqa: BLE001 — طلبية وحدة ما توقفش الباقي
+            db.session.rollback()
+            failed += 1
+            failed_numbers.append(order.order_number)
+            current_app.logger.warning(
+                "refresh_all_tracking: فشلت %s: %s", order.order_number, e)
+
+    if not total_candidates:
+        flash("ماكاين حتى طلبية تستنى تحديث (كلها مسلّمة أو ما تبعثاتش لـZR)", "info")
+        return redirect(url_for("admin.orders_list"))
+
+    flash(
+        f"تفحّصنا {checked} طلبية: {changed} تبدّلت حالتها، "
+        f"{unchanged} بلا تغيير"
+        + (f"، {unknown} بحالة ZR مجهولة" if unknown else "")
+        + (f"، {failed} فشلت" if failed else ""),
+        "success" if not failed else "warning",
+    )
+    if unknown_states:
+        flash("حالات ZR ما نعرفوهاش: " + " | ".join(sorted(unknown_states)), "warning")
+    if failed_numbers:
+        flash("فشلت: " + "، ".join(failed_numbers[:10]), "error")
+    if stopped_early:
+        remaining = total_candidates - checked - failed
+        flash(f"بقاو {remaining} طلبية — اضغط الزر مرة أخرى باش نكملو", "info")
+
+    return redirect(url_for("admin.orders_list"))
 
 
 @admin_bp.route("/integrations", methods=["GET", "POST"])

@@ -2257,3 +2257,9 @@ img.thumb-sm:hover {
 .rating-edit summary::-webkit-details-marker { display: none; }
 .rating-edit form { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 .rating-edit select { padding: 4px 6px; border-radius: 6px; border: 1px solid #d9d2c5; }
+
+/* ---------- رأس صفحة الطلبيات + زر التحديث الجماعي (v151) ---------- */
+.page-head-row { display: flex; justify-content: space-between; align-items: center;
+                 gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.page-head-row .page-title { margin: 0; }
+.page-head-row form { margin: 0; }

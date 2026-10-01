@@ -949,3 +949,88 @@ def test_public_review_forms_have_no_default_star(client, app, seed):
     """الفورم ما لازمش يجي بنجوم مختارة مسبقًا — الزبون يختار بنفسو."""
     html = client.get("/reviews").get_data(as_text=True)
     assert 'name="rating"' in html and "checked" not in html.split('name="rating"', 1)[1].split("</form>")[0]
+
+
+# ══════════════════════════════════════════════════════════════
+# v151: زر «تحديث كل الطلبيات الممكنة»
+# ══════════════════════════════════════════════════════════════
+
+def test_bulk_refresh_updates_only_eligible_orders(logged_in_admin, app, seed, monkeypatch):
+    from unittest.mock import patch
+    monkeypatch.setenv("ZR_TENANT_ID", "t")
+    monkeypatch.setenv("ZR_API_KEY", "k")
+
+    a = _make_order(app, "BD-BLK-A", Order.STATUS_SHIPPED)       # لازم يتحدّث
+    b = _make_order(app, "BD-BLK-B", Order.STATUS_DELIVERED)     # مسلّمة — نتجاهلوها
+    c = _make_order(app, "BD-BLK-C", Order.STATUS_PREPARED)      # حالة مجهولة
+    with app.app_context():
+        d = Order(order_number="BD-BLK-D", customer_name="x", customer_phone="0555",
+                  wilaya_code="16", wilaya_name="الجزائر", subtotal=1,
+                  shipping_price=0, total=1, status=Order.STATUS_CONFIRMED)
+        db.session.add(d); db.session.commit()
+        did = d.id    # بلا رقم تتبّع — نتجاهلوها
+
+    def fake(tracking):
+        return {"state": "Livré" if tracking.endswith("BD-BLK-A") else "حاجة غريبة",
+                "state_id": None, "updated_at": None, "raw": {}}
+
+    with patch("services.zrexpress.get_parcel_status", side_effect=fake) as m:
+        resp = logged_in_admin.post("/admin/orders/refresh-all-tracking",
+                                    follow_redirects=True)
+    assert resp.status_code == 200
+    assert m.call_count == 2   # A و C برك
+
+    with app.app_context():
+        assert db.session.get(Order, a).status == Order.STATUS_DELIVERED
+        assert db.session.get(Order, b).status == Order.STATUS_DELIVERED
+        assert db.session.get(Order, c).status == Order.STATUS_PREPARED
+        assert db.session.get(Order, c).carrier_state == "حاجة غريبة"
+        assert db.session.get(Order, did).status == Order.STATUS_CONFIRMED
+
+
+def test_bulk_refresh_one_failure_does_not_stop_others(logged_in_admin, app, seed, monkeypatch):
+    from unittest.mock import patch
+    from services.zrexpress import ZRError
+    monkeypatch.setenv("ZR_TENANT_ID", "t")
+    monkeypatch.setenv("ZR_API_KEY", "k")
+
+    bad = _make_order(app, "BD-BLK-E", Order.STATUS_SHIPPED)
+    good = _make_order(app, "BD-BLK-F", Order.STATUS_SHIPPED)
+
+    def fake(tracking):
+        if tracking.endswith("BD-BLK-E"):
+            raise ZRError("timeout")
+        return {"state": "Encaissé", "state_id": None, "updated_at": None, "raw": {}}
+
+    with patch("services.zrexpress.get_parcel_status", side_effect=fake):
+        resp = logged_in_admin.post("/admin/orders/refresh-all-tracking",
+                                    follow_redirects=True)
+    assert resp.status_code == 200
+    assert "فشلت" in resp.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.get(Order, bad).status == Order.STATUS_SHIPPED
+        assert db.session.get(Order, good).status == Order.STATUS_DELIVERED
+
+
+def test_bulk_refresh_respects_max_orders_cap(logged_in_admin, app, seed, monkeypatch):
+    from unittest.mock import patch
+    import routes.admin as admin_mod
+    monkeypatch.setenv("ZR_TENANT_ID", "t")
+    monkeypatch.setenv("ZR_API_KEY", "k")
+    monkeypatch.setattr(admin_mod, "BULK_ZR_MAX_ORDERS", 2)
+
+    for i in range(5):
+        _make_order(app, f"BD-CAP-{i}", Order.STATUS_SHIPPED)
+
+    with patch("services.zrexpress.get_parcel_status",
+               return_value={"state": "En transit", "state_id": None,
+                             "updated_at": None, "raw": {}}) as m:
+        resp = logged_in_admin.post("/admin/orders/refresh-all-tracking",
+                                    follow_redirects=True)
+    assert m.call_count == 2
+    assert "بقاو 3 طلبية" in resp.get_data(as_text=True)
+
+
+def test_orders_list_shows_bulk_refresh_button(logged_in_admin, app, seed):
+    html = logged_in_admin.get("/admin/orders").get_data(as_text=True)
+    assert "تحديث كل الطلبيات الممكنة" in html
