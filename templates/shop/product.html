@@ -1033,12 +1033,17 @@
 
                 <div class="field">
                     <span>تقييمك *</span>
-                    <div class="star-picker" id="starPicker">
+                    {# ⚠️ ما عادش 5 نجوم افتراضية: الزبون لازم يختار بنفسو،
+                       وإلا نجمعو تقييمات 5 نجوم غلط كي ينسى. #}
+                    <div class="star-picker" id="starPicker" data-rating-picker>
                         {% for i in range(5, 0, -1) %}
-                        <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}" {{ 'checked' if i == 5 }}>
+                        <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}" {{ 'required' if loop.first }}>
                         <label for="star{{ i }}" title="{{ i }} نجوم">★</label>
                         {% endfor %}
                     </div>
+                    <p class="rv-pick-hint" data-rating-hint aria-live="polite">
+                        اختار عدد النجوم — <strong>5 نجوم</strong> هي الأحسن
+                    </p>
                 </div>
 
                 <label class="field">

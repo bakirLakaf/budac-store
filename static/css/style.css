@@ -3737,3 +3737,9 @@ button.pager-num.is-disabled {
 .product-grid .product-card[hidden] {
     display: none !important;
 }
+
+
+/* ---------- سطر يوري عدد النجوم المختار (v150) ---------- */
+.rv-pick-hint { margin: 6px 0 0; font-size: 13px; color: #6b6258; min-height: 20px; }
+.rv-pick-hint strong { color: var(--color-gold-dark, #b8862b); }
+.rv-pick-hint.is-low { color: #b3402a; }

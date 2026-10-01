@@ -661,6 +661,62 @@ def get_parcel_status(tracking_number):
     }
 
 
+def _plain_state(text):
+    """نص بحروف صغيرة وبلا تشكيل لاتيني (Livré → livre) باش المقارنة تكون سهلة."""
+    import unicodedata
+    text = unicodedata.normalize("NFKD", str(text or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return text.lower().strip()
+
+
+def map_state_to_order_status(state_label, delivery_type="home"):
+    """
+    يترجم حالة ZR (مثلاً «Encaissé») لحالة طلبية فالموقع.
+
+    يرجع None إذا الحالة مش واضحة — وقتها ما نبدّلوش شي (الأمان أولًا:
+    نفضّلو ما نبدّلوش على ما نبدّلو غلط، خصوصًا أن «راجعة» ترجّع المخزون).
+
+    ⚠️ الكلمات تحت مبنية على أسماء حالات ZR المعروفة (فرنسي). إذا ZR
+    عندها حالة جديدة ما تتعرفش، زيدها هنا.
+    """
+    text = _plain_state(state_label)
+    if not text:
+        return None
+
+    # 1) راجعة — «retour en cours» مازال ما رجعش، ما نبدّلوش
+    if "retour" in text or "returned" in text:
+        if any(k in text for k in ("en cours", "en attente", "in progress")):
+            return None
+        return "returned"
+
+    # 2) حالات الفشل / الانتظار — ما نبدّلوش شي
+    if any(k in text for k in ("non livre", "echec", "failed", "annule",
+                               "en attente", "pending", "cree", "brouillon",
+                               "draft", "pret", "ready", "injoignable")):
+        return None
+
+    # 3) تسلّمها الزبون (وكذلك «Encaissé» = ZR قبضات الكاش من الزبون)
+    if any(k in text for k in ("livre", "delivered", "encaisse")):
+        return "delivered"
+
+    # 4) فمكتب الاستلام (للطلبيات اللي نوعها «مكتب» برك)
+    if delivery_type == "office" and any(
+        k in text for k in ("bureau", "stop desk", "stopdesk", "point relais",
+                            "pickup", "agence")
+    ):
+        return "at_office"
+
+    # 5) فالطريق
+    if any(k in text for k in ("expedie", "transit", "ramasse", "collecte",
+                               "prise en charge", "pris en charge",
+                               "en livraison", "en cours", "sorti", "hub",
+                               "tri", "shipped", "dispatch", "en route",
+                               "bureau", "stop desk", "stopdesk")):
+        return "shipped"
+
+    return None
+
+
 def test_connection():
     """
     يجرّب الاتصال ويرجع (نجح؟، رسالة).

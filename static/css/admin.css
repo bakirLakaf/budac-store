@@ -2246,3 +2246,14 @@ img.thumb-sm:hover {
 .zr-danger[open] > summary::before { content: "▾ "; }
 .zr-danger-body { padding: 0 18px 18px; }
 .zr-danger-body .form-section-title { margin-top: 12px; }
+
+
+/* ---------- تعديل نجوم التقييم (v150) ---------- */
+.rating-edit { margin-top: 4px; }
+.rating-edit summary {
+    cursor: pointer; font-size: 12px; color: var(--a-muted, #7a7066);
+    list-style: none; text-decoration: underline;
+}
+.rating-edit summary::-webkit-details-marker { display: none; }
+.rating-edit form { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.rating-edit select { padding: 4px 6px; border-radius: 6px; border: 1px solid #d9d2c5; }

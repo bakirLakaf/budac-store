@@ -44,7 +44,24 @@
                 {% endif %}
             </td>
             <td>{{ r.author_name }}</td>
-            <td><span class="review-stars-admin">{{ r.stars }}</span></td>
+            <td>
+                <span class="review-stars-admin">{{ r.stars }}</span>
+                {# تعديل النجوم — استعمله برك بعد ما تتفاهم مع الزبون #}
+                <details class="rating-edit">
+                    <summary>تعديل</summary>
+                    <form method="post"
+                          action="{{ url_for('admin.review_update_rating', review_id=r.id) }}"
+                          onsubmit="return confirm('تبدّل النجوم؟ تأكد أن الزبون موافق.')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <select name="rating" aria-label="عدد النجوم">
+                            {% for n in [5, 4, 3, 2, 1] %}
+                            <option value="{{ n }}" {{ 'selected' if n == r.rating }}>{{ '★' * n }} ({{ n }})</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn-admin btn-sm">حفظ</button>
+                    </form>
+                </details>
+            </td>
             <td class="review-comment-cell">{{ r.comment or '—' }}</td>
             <td class="muted-cell">{{ r.created_at.strftime('%m-%d') }}</td>
             <td class="row-actions">

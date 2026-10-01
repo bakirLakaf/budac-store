@@ -1893,37 +1893,27 @@ def order_update_shipping(order_id):
     return redirect(url_for("admin.order_detail", order_id=order_id))
 
 
-@admin_bp.route("/orders/<int:order_id>/status", methods=["POST"])
-@login_required
-def order_update_status(order_id):
+def _change_order_status(order, new_status, note=""):
     """
-    تبديل حالة الطلبية.
+    يبدّل حالة طلبية ويضبط المخزون — منطق واحد يستعملو التبديل اليدوي
+    وتحديث ZR التلقائي (باش ما يتكرّرش الكود).
 
-    ⚠️ منطق مهم: كي نلغيو طلبية، نرجّعو المخزون تلقائيًا.
-    وكي نلغيو الإلغاء (نرجعوها لحالة نشطة)، نخصمو المخزون من جديد.
-    بلا هذا، المخزون يولي غلط بصمت.
+    ⚠️ منطق مهم: كي نلغيو (ولا تولّي راجعة) نرجّعو المخزون تلقائيًا.
+    وكي نرجعوها لحالة نشطة، نخصمو المخزون من جديد.
+
+    يرجع قائمة رسائل [(نص, نوع)]. يرفع OrderError إذا ما قدرش يخصم المخزون
+    (وقتها يعمل rollback ويبقى كل شي كما كان).
     """
-
-    order = Order.query.get_or_404(order_id)
-    new_status = request.form.get("status")
-
-    if new_status not in Order.STATUS_LABELS:
-        flash("حالة غير معروفة", "error")
-        return redirect(url_for("admin.order_detail", order_id=order.id))
-
+    messages = []
     old_status = order.status
 
-    # ⚠️ «راجعة» كيما «ملغاة» فحساب المخزون: السلعة رجعات لينا فعليًا،
-    # فلازم ترجع للرفوف. بلا هذا نبيعو حاجة وحنا نحسبوها ناقصة.
     was_off = old_status in Order.STATUS_TERMINAL
     now_off = new_status in Order.STATUS_TERMINAL
 
-    # طلبية نشطة ولّات ملغاة/راجعة → نرجّعو المخزون
     if now_off and not was_off:
         restore_stock(order)
-        flash("تم إرجاع المخزون للمنتجات", "success")
+        messages.append(("تم إرجاع المخزون للمنتجات", "success"))
 
-    # طلبية ملغاة/راجعة رجعات للنشاط → نعاودو نخصمو المخزون
     elif was_off and not now_off:
         lines = [
             CartLine(
@@ -1936,18 +1926,39 @@ def order_update_status(order_id):
         ]
         try:
             reserve_stock(lines)
-        except OrderError as e:
+        except OrderError:
             db.session.rollback()
-            flash(f"ما قدرناش نرجعو الطلبية: {e}", "error")
-            return redirect(url_for("admin.order_detail", order_id=order.id))
-
-        flash("تم خصم المخزون من جديد", "success")
+            raise
+        messages.append(("تم خصم المخزون من جديد", "success"))
 
     order.status = new_status
     audit.record(
         AdminAction.ORDER_STATUS, "order", order.order_number,
-        f"{old_status} ← {new_status}",
+        f"{old_status} ← {new_status}{note}",
     )
+    return messages
+
+
+@admin_bp.route("/orders/<int:order_id>/status", methods=["POST"])
+@login_required
+def order_update_status(order_id):
+    """تبديل حالة الطلبية يدويًا."""
+
+    order = Order.query.get_or_404(order_id)
+    new_status = request.form.get("status")
+
+    if new_status not in Order.STATUS_LABELS:
+        flash("حالة غير معروفة", "error")
+        return redirect(url_for("admin.order_detail", order_id=order.id))
+
+    try:
+        messages = _change_order_status(order, new_status)
+    except OrderError as e:
+        flash(f"ما قدرناش نرجعو الطلبية: {e}", "error")
+        return redirect(url_for("admin.order_detail", order_id=order.id))
+
+    for text, category in messages:
+        flash(text, category)
 
     admin_note = request.form.get("admin_note")
     if admin_note is not None:
@@ -2125,6 +2136,35 @@ def review_approve(review_id):
     review.is_approved = True
     db.session.commit()
     flash("تمت الموافقة — التقييم يبان درك فالمتجر", "success")
+    return redirect(request.referrer or url_for("admin.reviews_list"))
+
+
+@admin_bp.route("/reviews/<int:review_id>/rating", methods=["POST"])
+@login_required
+def review_update_rating(review_id):
+    """
+    تعديل عدد نجوم تقييم (بعد ما تتفاهم مع الزبون).
+
+    ⚠️ نسجّلو التعديل فسجل الأدمن (القيمة القديمة ← الجديدة) باش يبقى
+    أثر واضح وما يولّيش تلاعب بلا علم.
+    """
+    review = db.session.get(Review, review_id) or abort(404)
+    rating = request.form.get("rating", type=int)
+
+    if not rating or not (1 <= rating <= 5):
+        flash("اختر عدد نجوم من 1 لـ5", "error")
+        return redirect(request.referrer or url_for("admin.reviews_list"))
+
+    if rating != review.rating:
+        old = review.rating
+        review.rating = rating
+        audit.record(
+            AdminAction.REVIEW_EDIT, "review", str(review.id),
+            f"نجوم {old} ← {rating} ({review.author_name})",
+        )
+        db.session.commit()
+        flash(f"تبدّلت النجوم من {old} لـ{rating}", "success")
+
     return redirect(request.referrer or url_for("admin.reviews_list"))
 
 
@@ -2413,9 +2453,62 @@ def order_refresh_tracking(order_id):
         flash("ZR رجع رد ما فيهش حالة واضحة — جرّب مرة أخرى بعد شوية", "warning")
         return redirect(url_for("admin.order_detail", order_id=order.id))
 
+    # ── نترجمو حالة ZR لحالة الطلبية فالموقع ──
+    # قواعد الأمان:
+    #  • ما نرجعوش الطلبية للوراء أبدًا (مثلاً «تم التسليم» ما ترجعش «فالطريق»)
+    #  • الطلبية المسلّمة / الملغاة / الراجعة ما نلمسوهاش — هذا قرارك أنت
+    #  • حالة ZR ما تتعرفش → نخلّيو حالة الطلبية كما هي
+    from services.zrexpress import map_state_to_order_status
+
+    status_msg = None      # (نص, نوع) نعرضوه للأدمن
+    old_status = order.status
+    target = map_state_to_order_status(new_state, order.delivery_type)
+
     try:
         order.carrier_state = new_state
+
+        if target is None:
+            status_msg = (
+                "حالة الطلبية فالموقع ما تبدّلتش (حالة ZR هذي ما نعرفوهاش — "
+                "بدّلها يدويًا إذا لازم)", "warning")
+        elif target == old_status:
+            status_msg = None   # نفس الحالة — ما كاين والو نقولو
+        elif old_status in (Order.STATUS_DELIVERED, *Order.STATUS_TERMINAL):
+            status_msg = (
+                f"الطلبية فحالة «{order.status_label}» — ما بدّلناهاش تلقائيًا",
+                "warning")
+        else:
+            flow = Order.STATUS_FLOW
+            moving_forward = (
+                target in Order.STATUS_TERMINAL
+                or (old_status in flow and target in flow
+                    and flow.index(target) > flow.index(old_status))
+            )
+            if not moving_forward:
+                status_msg = None   # ما نرجعوش للوراء
+            else:
+                msgs = _change_order_status(
+                    order, target, note=f" (تلقائي من ZR: {new_state})")
+                status_msg = (
+                    f"حالة الطلبية ولات: {Order.STATUS_LABELS[target]}",
+                    "success")
+                for text, category in msgs:
+                    flash(text, category)
+
         db.session.commit()
+    except OrderError as e:
+        db.session.rollback()
+        current_app.logger.warning(
+            "order_refresh_tracking: تعذّر تبديل الحالة %s: %s",
+            order.order_number, e)
+        # نحفظو على الأقل حالة ZR
+        try:
+            order.carrier_state = new_state
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        status_msg = (f"حالة ZR تحدّثات بصح ما قدرناش نبدّلو حالة الطلبية: {e}",
+                      "warning")
     except Exception:
         db.session.rollback()
         current_app.logger.exception(
@@ -2424,7 +2517,9 @@ def order_refresh_tracking(order_id):
         flash("جبنا الحالة من ZR بصح ما قدرناش نحفظوها — جرّب مرة أخرى", "error")
         return redirect(url_for("admin.order_detail", order_id=order.id))
 
-    flash(f"الحالة عند الشركة: {status['state']}", "success")
+    flash(f"الحالة عند الشركة: {new_state}", "success")
+    if status_msg:
+        flash(status_msg[0], status_msg[1])
     return redirect(url_for("admin.order_detail", order_id=order.id))
 
 

@@ -776,3 +776,46 @@ var BudacSafe = (function () {
     buildDots();
     start();
 })();
+
+
+/* ═══════════════════════════════════════════════════════════════
+ * منتقي النجوم — يكتب للزبون واش اختار بالضبط (v150)
+ *
+ * المشكل: زبون اختار نجمة وحدة بالغلط وهو يقصد تقييم إيجابي. السطر هذا يوريه «1 من 5» فالحين،
+ * فيقدر يصحّح قبل الإرسال.
+ * ═══════════════════════════════════════════════════════════════ */
+(function () {
+    "use strict";
+    var LABELS = {
+        1: "نجمة وحدة — ضعيف جدًا",
+        2: "نجمتين — ضعيف",
+        3: "3 نجوم — عادي",
+        4: "4 نجوم — مليح",
+        5: "5 نجوم — ممتاز"
+    };
+
+    document.querySelectorAll("[data-rating-picker]").forEach(function (picker) {
+        var form = picker.closest("form");
+        var hint = form && form.querySelector("[data-rating-hint]");
+        if (!form || !hint) { return; }
+
+        picker.addEventListener("change", function (e) {
+            var n = parseInt(e.target.value, 10);
+            if (!LABELS[n]) { return; }
+            hint.textContent = "اخترت: " + LABELS[n];
+            hint.classList.toggle("is-low", n <= 2);
+            if (n <= 2) {
+                hint.textContent += " — واش تقصد هكا؟ تقدر تبدّل قبل الإرسال";
+            }
+        });
+
+        // حماية إضافية: ما نبعثوش الفورم بلا نجوم
+        form.addEventListener("submit", function (e) {
+            if (!form.querySelector('input[name="rating"]:checked')) {
+                e.preventDefault();
+                hint.textContent = "من فضلك اختار عدد النجوم";
+                hint.classList.add("is-low");
+            }
+        });
+    });
+})();

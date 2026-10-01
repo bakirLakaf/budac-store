@@ -98,13 +98,18 @@
                 <legend>تقييمك</legend>
                 {# ⚠️ النجوم بـradio ماشي JS — تخدم حتى بلا JavaScript،
                    ولوحة المفاتيح تتنقل بيناتهم عادي. #}
-                <div class="rv-star-pick">
+                <div class="rv-star-pick" data-rating-picker>
                     {% for n in [5, 4, 3, 2, 1] %}
                     <input type="radio" name="rating" id="star{{ n }}"
                            value="{{ n }}" {{ 'required' if loop.first }}>
                     <label for="star{{ n }}" title="{{ n }} من 5">★</label>
                     {% endfor %}
                 </div>
+                {# ⚠️ هاد السطر يوري للزبون بالضبط واش اختار، باش ما يختارش
+                   نجمة وحدة بالغلط وهو يقصد تقييم إيجابي. #}
+                <p class="rv-pick-hint" data-rating-hint aria-live="polite">
+                    اختار عدد النجوم — <strong>5 نجوم</strong> هي الأحسن
+                </p>
             </fieldset>
 
             <label class="rv-field">

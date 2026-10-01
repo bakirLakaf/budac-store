@@ -831,3 +831,121 @@ def test_create_app_works_with_psycopg2_style_database_url(monkeypatch):
 
     created_app = app_module.create_app()
     assert created_app is not None
+
+
+# ══════════════════════════════════════════════════════════════
+# v150: تحديث حالة الطلبية تلقائيًا من ZR + تعديل نجوم التقييم
+# ══════════════════════════════════════════════════════════════
+
+def test_map_zr_state_to_order_status():
+    from services.zrexpress import map_state_to_order_status as m
+
+    # «Encaissé» = ZR قبضات الكاش → مسلّمة (حالة حقيقية من الإنتاج)
+    assert m("Encaissé") == "delivered"
+    assert m("Livré") == "delivered"
+    assert m("Retourné") == "returned"
+    # «retour en cours» مازال ما رجعش
+    assert m("Retour en cours") is None
+    # ما نخلطوش «non livré» بـ«livré»
+    assert m("Non livré") is None
+    assert m("En attente") is None
+    assert m("Expédié") == "shipped"
+    assert m("En transit") == "shipped"
+    # مكتب: يتحوّل لـ at_office غير للطلبيات نوعها مكتب
+    assert m("Disponible au bureau", "office") == "at_office"
+    assert m("Disponible au bureau", "home") == "shipped"
+    # حالة مجهولة → ما نبدّلوش
+    assert m("حاجة غريبة") is None
+    assert m("") is None
+
+
+def _zr_patch(label):
+    from unittest.mock import patch
+    return patch(
+        "services.zrexpress.get_parcel_status",
+        return_value={"state": label, "state_id": "x", "updated_at": None, "raw": {}},
+    )
+
+
+def _make_order(app, number, status, delivery_type="home"):
+    with app.app_context():
+        order = Order(
+            order_number=number, customer_name="زبون", customer_phone="0555111222",
+            wilaya_code="16", wilaya_name="الجزائر", subtotal=500,
+            shipping_price=0, total=500, status=status,
+            delivery_type=delivery_type, tracking_number="TRK-" + number,
+        )
+        db.session.add(order)
+        db.session.commit()
+        return order.id
+
+
+def test_refresh_tracking_updates_order_status_forward(logged_in_admin, app, seed):
+    oid = _make_order(app, "BD-V150A", Order.STATUS_CONFIRMED)
+    with _zr_patch("Encaissé"):
+        logged_in_admin.post(f"/admin/orders/{oid}/refresh-tracking",
+                             follow_redirects=True)
+    with app.app_context():
+        o = db.session.get(Order, oid)
+        assert o.carrier_state == "Encaissé"
+        assert o.status == Order.STATUS_DELIVERED
+
+
+def test_refresh_tracking_never_moves_status_backwards(logged_in_admin, app, seed):
+    oid = _make_order(app, "BD-V150B", Order.STATUS_AT_OFFICE, "office")
+    with _zr_patch("En transit"):   # shipped < at_office
+        logged_in_admin.post(f"/admin/orders/{oid}/refresh-tracking",
+                             follow_redirects=True)
+    with app.app_context():
+        assert db.session.get(Order, oid).status == Order.STATUS_AT_OFFICE
+
+
+def test_refresh_tracking_leaves_delivered_and_cancelled_alone(
+        logged_in_admin, app, seed):
+    for number, st in (("BD-V150C", Order.STATUS_DELIVERED),
+                       ("BD-V150D", Order.STATUS_CANCELLED)):
+        oid = _make_order(app, number, st)
+        with _zr_patch("Retourné"):
+            logged_in_admin.post(f"/admin/orders/{oid}/refresh-tracking",
+                                 follow_redirects=True)
+        with app.app_context():
+            assert db.session.get(Order, oid).status == st
+
+
+def test_refresh_tracking_unknown_state_keeps_status(logged_in_admin, app, seed):
+    oid = _make_order(app, "BD-V150E", Order.STATUS_PREPARED)
+    with _zr_patch("حالة جديدة ما نعرفوهاش"):
+        logged_in_admin.post(f"/admin/orders/{oid}/refresh-tracking",
+                             follow_redirects=True)
+    with app.app_context():
+        o = db.session.get(Order, oid)
+        assert o.status == Order.STATUS_PREPARED
+        assert o.carrier_state == "حالة جديدة ما نعرفوهاش"
+
+
+def test_admin_can_edit_review_rating(logged_in_admin, app, seed):
+    from models import Review, AdminAction
+    with app.app_context():
+        r = Review(product_id=None, author_name="زبون", rating=1,
+                   comment="ماشاء الله", is_approved=True)
+        db.session.add(r)
+        db.session.commit()
+        rid = r.id
+
+    resp = logged_in_admin.post(f"/admin/reviews/{rid}/rating",
+                                data={"rating": "5"}, follow_redirects=True)
+    assert resp.status_code == 200
+    with app.app_context():
+        assert db.session.get(Review, rid).rating == 5
+        assert AdminAction.query.filter_by(action=AdminAction.REVIEW_EDIT).count() == 1
+
+    # قيمة خارج المجال ما تتقبلش
+    logged_in_admin.post(f"/admin/reviews/{rid}/rating", data={"rating": "9"})
+    with app.app_context():
+        assert db.session.get(Review, rid).rating == 5
+
+
+def test_public_review_forms_have_no_default_star(client, app, seed):
+    """الفورم ما لازمش يجي بنجوم مختارة مسبقًا — الزبون يختار بنفسو."""
+    html = client.get("/reviews").get_data(as_text=True)
+    assert 'name="rating"' in html and "checked" not in html.split('name="rating"', 1)[1].split("</form>")[0]
