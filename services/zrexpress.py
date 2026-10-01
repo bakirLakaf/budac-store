@@ -689,14 +689,19 @@ def map_state_to_order_status(state_label, delivery_type="home"):
             return None
         return "returned"
 
+    # 1b) «Récupéré par fournisseur» = ZR رجّعت الطرد لصاحب المتجر (تأكيد منو)
+    #     ⚠️ العبارة كاملة برك: «Récupéré» وحدها (ramassé) = فالطريق، ماشي راجعة
+    if "recupere" in text and "par" in text and "fournisseur" in text:
+        return "returned"
+
     # 2) حالات الفشل / الانتظار — ما نبدّلوش شي
     if any(k in text for k in ("non livre", "echec", "failed", "annule",
                                "en attente", "pending", "cree", "brouillon",
                                "draft", "pret", "ready", "injoignable")):
         return None
 
-    # 3) تسلّمها الزبون (وكذلك «Encaissé» = ZR قبضات الكاش من الزبون)
-    if any(k in text for k in ("livre", "delivered", "encaisse")):
+    # 3) تسلّمها الزبون (وكذلك «Encaissé» و«Recouvert» = ZR قبضات الكاش)
+    if any(k in text for k in ("livre", "delivered", "encaisse", "recouvert")):
         return "delivered"
 
     # 4) فمكتب الاستلام (للطلبيات اللي نوعها «مكتب» برك)

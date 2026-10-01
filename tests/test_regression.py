@@ -843,6 +843,11 @@ def test_map_zr_state_to_order_status():
     # «Encaissé» = ZR قبضات الكاش → مسلّمة (حالة حقيقية من الإنتاج)
     assert m("Encaissé") == "delivered"
     assert m("Livré") == "delivered"
+    assert m("Recouvert") == "delivered"   # ZR قبضات المبلغ (من الإنتاج)
+    # «Récupéré par fournisseur» = رجعت لصاحب المتجر (تأكيد منو)
+    assert m("Récupéré par fournisseur") == "returned"
+    # «Récupéré» وحدها (مثلاً من السائق) ماشي راجعة
+    assert m("Récupéré par le livreur") != "returned"
     assert m("Retourné") == "returned"
     # «retour en cours» مازال ما رجعش
     assert m("Retour en cours") is None

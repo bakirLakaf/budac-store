@@ -2600,7 +2600,7 @@ def orders_refresh_all_tracking():
         except Exception as e:  # noqa: BLE001 — طلبية وحدة ما توقفش الباقي
             db.session.rollback()
             failed += 1
-            failed_numbers.append(order.order_number)
+            failed_numbers.append(f"{order.order_number} ({str(e)[:60]})")
             current_app.logger.warning(
                 "refresh_all_tracking: فشلت %s: %s", order.order_number, e)
 
