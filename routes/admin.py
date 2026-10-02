@@ -2567,7 +2567,8 @@ def orders_refresh_all_tracking():
     total_candidates = len(candidates)
     started = time()
     checked = changed = unchanged = unknown = failed = 0
-    unknown_states = set()
+    unknown_orders = []      # "BD-.. (شركة): الحالة"
+    carrier_mismatch = []    # طلبيات زبونها اختار World/Yalidine ومبعوثة لـZR
     failed_numbers = []
     stopped_early = False
 
@@ -2591,12 +2592,16 @@ def orders_refresh_all_tracking():
                 changed += 1
             elif kind == "unknown":
                 unknown += 1
-                unknown_states.add(new_state)
+                unknown_orders.append(
+                    f"{order.order_number} ({order.carrier_name or order.carrier_code or '؟'}): {new_state}")
             else:
                 unchanged += 1
 
             db.session.commit()
             checked += 1
+            if order.carrier_code not in (None, "", "zrexpress"):
+                carrier_mismatch.append(
+                    f"{order.order_number} ({order.carrier_name or order.carrier_code})")
         except Exception as e:  # noqa: BLE001 — طلبية وحدة ما توقفش الباقي
             db.session.rollback()
             failed += 1
@@ -2615,8 +2620,13 @@ def orders_refresh_all_tracking():
         + (f"، {failed} فشلت" if failed else ""),
         "success" if not failed else "warning",
     )
-    if unknown_states:
-        flash("حالات ZR ما نعرفوهاش: " + " | ".join(sorted(unknown_states)), "warning")
+    if unknown_orders:
+        flash("حالات ZR ما نعرفوهاش: " + " | ".join(unknown_orders[:10]), "warning")
+    if carrier_mismatch:
+        flash(
+            "⚠️ هاد الطلبيات الزبون اختار فيها شركة أخرى، بصح مبعوثة لـZR "
+            "(الحالة جات من ZR): " + " | ".join(carrier_mismatch[:10]),
+            "warning")
     if failed_numbers:
         flash("فشلت: " + "، ".join(failed_numbers[:10]), "error")
     if stopped_early:

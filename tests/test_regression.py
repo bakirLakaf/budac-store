@@ -1039,3 +1039,27 @@ def test_bulk_refresh_respects_max_orders_cap(logged_in_admin, app, seed, monkey
 def test_orders_list_shows_bulk_refresh_button(logged_in_admin, app, seed):
     html = logged_in_admin.get("/admin/orders").get_data(as_text=True)
     assert "تحديث كل الطلبيات الممكنة" in html
+
+
+def test_bulk_refresh_reports_order_and_carrier_for_unknown_state(
+        logged_in_admin, app, seed, monkeypatch):
+    from unittest.mock import patch
+    monkeypatch.setenv("ZR_TENANT_ID", "t")
+    monkeypatch.setenv("ZR_API_KEY", "k")
+
+    oid = _make_order(app, "BD-WRL-A", Order.STATUS_CONFIRMED)
+    with app.app_context():
+        o = db.session.get(Order, oid)
+        o.carrier_code = "worldexpress"
+        o.carrier_name = "World Express"
+        db.session.commit()
+
+    with patch("services.zrexpress.get_parcel_status",
+               return_value={"state": "حالة غريبة", "state_id": None,
+                             "updated_at": None, "raw": {}}):
+        resp = logged_in_admin.post("/admin/orders/refresh-all-tracking",
+                                    follow_redirects=True)
+    page = resp.get_data(as_text=True)
+    assert "BD-WRL-A" in page and "World Express" in page and "حالة غريبة" in page
+    with app.app_context():
+        assert db.session.get(Order, oid).status == Order.STATUS_CONFIRMED
