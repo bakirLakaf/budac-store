@@ -1349,3 +1349,64 @@ def test_orders_list_counts_unique_orders_in_js(logged_in_admin, app, seed):
     _make_order_for(app, "BD-DUP-B", Order.STATUS_DELIVERED, "Test", "0555000222")
     html = logged_in_admin.get("/admin/orders").get_data(as_text=True)
     assert "uniqueValues" in html     # العدّ بالقيم المختلفة، ماشي بعدد الصناديق
+
+
+# ══════════════════════════════════════════════════════════════
+# v160: ضغط gzip + كاش طويل للملفات الثابتة
+# ══════════════════════════════════════════════════════════════
+
+def test_public_pages_are_gzipped_when_browser_accepts(client, app, seed):
+    import gzip
+    r = client.get("/", headers={"Accept-Encoding": "gzip"})
+    assert r.status_code == 200
+    assert r.headers.get("Content-Encoding") == "gzip"
+    assert "Accept-Encoding" in r.headers.get("Vary", "")
+    assert b"<html" in gzip.decompress(r.data)          # المحتوى سليم بعد فك الضغط
+
+
+def test_no_gzip_when_browser_does_not_accept(client, app, seed):
+    r = client.get("/", headers={"Accept-Encoding": "identity"})
+    assert r.status_code == 200
+    assert "Content-Encoding" not in r.headers
+
+
+def test_admin_pages_are_never_compressed(client, app, seed):
+    r = client.get("/admin/login", headers={"Accept-Encoding": "gzip"})
+    assert r.status_code == 200
+    assert "Content-Encoding" not in r.headers
+
+
+def test_static_css_is_gzipped(client, app, seed):
+    import gzip
+    r = client.get("/static/css/style.css", headers={"Accept-Encoding": "gzip"})
+    assert r.status_code == 200 and r.headers.get("Content-Encoding") == "gzip"
+    original = open("static/css/style.css", "rb").read()
+    assert gzip.decompress(r.data) == original            # نفس الملف بالضبط
+    assert len(r.data) < len(original) * 0.5               # صغر بنسبة معتبرة
+
+
+def test_fingerprinted_static_gets_long_immutable_cache(client, app, seed):
+    html = client.get("/").get_data(as_text=True)
+    import re
+    m = re.search(r'/static/css/style\.css\?v=(\d+)', html)
+    assert m, "رابط CSS لازم يجي ببصمة"
+    r = client.get(f"/static/css/style.css?v={m.group(1)}")
+    cc = r.headers.get("Cache-Control", "")
+    assert "max-age=31536000" in cc and "immutable" in cc and "public" in cc
+
+
+def test_unversioned_css_is_not_cached_forever(client, app, seed):
+    r = client.get("/static/css/style.css")
+    assert "immutable" not in r.headers.get("Cache-Control", "")
+
+
+def test_static_images_without_fingerprint_get_30_days(client, app, seed):
+    r = client.get("/static/img/brand/logo.png")
+    assert r.status_code == 200
+    assert "max-age=2592000" in r.headers.get("Cache-Control", "")
+
+
+def test_no_double_version_param_in_rendered_html(client, app, seed):
+    import re
+    html = client.get("/").get_data(as_text=True)
+    assert not re.search(r'\?v=[^"\'\s]*\?v=', html)       # كان «favicon.ico?v=123?v=2»

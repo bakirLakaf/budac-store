@@ -9,16 +9,16 @@
     {# ---------- SEO + المشاركة الاجتماعية ---------- #}
     <meta name="description" content="{% block meta_description %}{{ store_name }} — متجر جزائري لمستلزمات الديكور والحرف اليدوية. توصيل لكل الولايات، الدفع عند الاستلام.{% endblock %}">
     {# ---------- أيقونة الموقع ---------- #}
-    {# ⚠️ ?v=2 يجبر المتصفح يعيد تحميل الأيقونة. الـfavicon يتخزن فالكاش
+    {# ⚠️ البصمة التلقائية (?v=<وقت التعديل>) تجبر المتصفح يعيد تحميل الأيقونة. الـfavicon يتخزن فالكاش
        بقوة كبيرة، وبلا هاد الرقم يقعد يعرض القديمة لأيام. كي تبدّل الأيقونة
        مستقبلاً، زيد الرقم. #}
-    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=2" sizes="any">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
     <link rel="icon" type="image/png" sizes="192x192"
-          href="{{ url_for('static', filename='img/brand/icon-192.png') }}?v=2">
+          href="{{ url_for('static', filename='img/brand/icon-192.png') }}">
     <link rel="icon" type="image/png" sizes="512x512"
-          href="{{ url_for('static', filename='img/brand/icon-512.png') }}?v=2">
+          href="{{ url_for('static', filename='img/brand/icon-512.png') }}">
     <link rel="apple-touch-icon"
-          href="{{ url_for('static', filename='img/brand/apple-touch-icon.png') }}?v=2">
+          href="{{ url_for('static', filename='img/brand/apple-touch-icon.png') }}">
     <meta name="theme-color" content="#2E1A47">
 
     <meta name="csrf-token" content="{{ csrf_token() }}">
