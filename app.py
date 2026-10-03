@@ -67,6 +67,61 @@ def create_app():
     from services.ratelimit import apply_limits
     apply_limits(app)
 
+    # ═══════════ ضغط الردود (gzip) ═══════════
+    # قبل: style.css (116 KB) وsite.js يتبعثو كاملين — ثقل على 4G الضعيف.
+    # دروك كل رد نصي (HTML/CSS/JS/JSON) يتضغط وحدو إذا المتصفح يقبل.
+    #
+    # ⚠️ ما نضغطوش لوحة التحكم (/admin): فيها بيانات حساسة، والضغط يفتح
+    # بابًا نظريًا لهجوم BREACH. وهي ماشي موجّهة للزبائن، فما تفيدش
+    # سرعتها فالـCore Web Vitals.
+    #
+    # ⚠️ نسجّلوه هنا (قبل باقي after_request) لأن Flask يشغّلهم بالعكس:
+    # الضغط يصرا فالأخير، بعد ما كل الرؤوس تكمل.
+    from flask_compress import Compress
+
+    app.config.setdefault("COMPRESS_REGISTER", False)     # نحن نسجّلوه يدويًا
+    app.config.setdefault("COMPRESS_ALGORITHM", ["gzip"])  # الأبسط والمدعوم دايمًا
+    app.config.setdefault("COMPRESS_MIN_SIZE", 500)        # الردود الصغيرة ما تستاهلش
+    _compress = Compress()
+    _compress.init_app(app)
+
+    @app.after_request
+    def _compress_public(response):
+        if request.path.startswith("/admin"):
+            return response
+
+        # ⚠️ الملفات الثابتة (CSS/JS) ترجع كـ"stream" وflask-compress يتجاهل
+        # الـstream. نحوّلوها لمحتوى عادي (فالذاكرة) قبل الضغط — برك للملفات
+        # النصية الصغيرة. الصور ما تتلمسش (مضغوطة أصلاً).
+        if (
+            response.status_code == 200
+            and request.path.startswith("/static/")
+            and response.mimetype in app.config["COMPRESS_MIMETYPES"]
+            and response.is_streamed
+        ):
+            response.direct_passthrough = False
+            response.make_sequence()
+
+        return _compress.after_request(response)
+
+    # ═══════════ كاش طويل للملفات الثابتة ═══════════
+    # الروابط تجي ببصمة (?v=<وقت تعديل الملف>) من `_static_cache_bust`،
+    # يعني الرابط يتبدّل كي الملف يتبدّل — وبالتالي نقدرو نخلّيو المتصفح
+    # يحتفظ بالملف سنة كاملة بلا خوف من نسخة قديمة.
+    # الصور المرفوعة (القرص الدائم) أسماؤها عشوائية فريدة (uuid) بلا
+    # بصمة، فنعطيوها 30 يوم برك (مرونة إذا اتعاد معالجة صورة).
+    @app.after_request
+    def _static_cache_headers(response):
+        if request.method not in ("GET", "HEAD") or response.status_code not in (200, 304):
+            return response
+        path = request.path
+        if path.startswith("/static/"):
+            if request.args.get("v"):
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            elif path.startswith("/static/img/"):
+                response.headers["Cache-Control"] = "public, max-age=2592000"
+        return response
+
     # ⚠️ إذا الصور مخزّنة فقرص دائم (UPLOAD_ROOT)، Flask ما يعرفش يخدمها
     # لأنها برّا مجلد static. نزيدو مسار يخدمها.
     upload_root = app.config.get("UPLOAD_ROOT", "")
