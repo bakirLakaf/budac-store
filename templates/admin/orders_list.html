@@ -138,23 +138,40 @@
 
 <script>
 /**
- * تحديد جماعي للطلبيات — لحذف طلبيات التجربة بسرعة.
- * شريط الحذف يبان فقط كي تختار على الأقل وحدة.
+ * تحديد جماعي للطلبيات (حذف + كوبونات مكافأة).
+ *
+ * ⚠️ كل طلبية عندها checkbox مرتين: وحدة فالجدول (كمبيوتر) ووحدة فالبطاقة
+ * (موبايل)، والـCSS يخفي واحدة. كنا نعدّو الاثنين (17 طلبية = «34»).
+ * دروك: نعدّو القيم المختلفة برك (id الطلبية)، ونزامنو الاثنين باش
+ * يبقاو متطابقين كي تبدّل من أي واحدة.
  */
 (function () {
     var all = document.getElementById('bulkAll');
     var bar = document.getElementById('bulkBar');
     var count = document.getElementById('bulkCount');
-    var boxes = document.querySelectorAll('.bulk-check');
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('.bulk-check'));
+
+    function uniqueValues(onlyChecked) {
+        var seen = {};
+        boxes.forEach(function (b) {
+            if (!onlyChecked || b.checked) { seen[b.value] = true; }
+        });
+        return Object.keys(seen).length;
+    }
 
     function refresh() {
-        var n = document.querySelectorAll('.bulk-check:checked').length;
+        var n = uniqueValues(true);
+        var total = uniqueValues(false);
         count.textContent = n;
         bar.hidden = n === 0;
 
-        // ⚠️ حالة وسطية كي البعض مختار فقط — أوضح من مربّع فارغ
-        all.indeterminate = n > 0 && n < boxes.length;
-        all.checked = n === boxes.length && n > 0;
+        // ⚠️ حالة وسطية كي البعض مختار برك — أوضح من مربّع فارغ
+        all.indeterminate = n > 0 && n < total;
+        all.checked = n === total && n > 0;
+    }
+
+    function setValue(value, checked) {
+        boxes.forEach(function (b) { if (b.value === value) { b.checked = checked; } });
     }
 
     all.addEventListener('change', function () {
@@ -162,7 +179,12 @@
         refresh();
     });
 
-    boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+    boxes.forEach(function (b) {
+        b.addEventListener('change', function () {
+            setValue(b.value, b.checked);   // نزامنو توأمها (جدول ↔ بطاقة)
+            refresh();
+        });
+    });
 })();
 </script>
 {% else %}

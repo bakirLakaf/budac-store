@@ -2143,7 +2143,8 @@ def orders_bulk_reward():
     """
     from utils import normalize_algerian_phone
 
-    ids = request.form.getlist("order_ids", type=int)[:200]
+    # ⚠️ نفس الطلبية تتبعث مرتين (checkbox فالجدول وفالبطاقة) — نحيّدو التكرار
+    ids = list(dict.fromkeys(request.form.getlist("order_ids", type=int)))[:200]
     if not ids:
         flash("ما اخترت حتى طلبية", "warning")
         return redirect(url_for("admin.orders_list"))
@@ -3561,7 +3562,7 @@ def orders_bulk_delete():
 
     ⚠️ نرجّعو المخزون لكل طلبية نشطة، نفس منطق الحذف الفردي.
     """
-    ids = request.form.getlist("order_ids", type=int)
+    ids = list(dict.fromkeys(request.form.getlist("order_ids", type=int)))
 
     if not ids:
         flash("ما اخترت حتى طلبية", "warning")

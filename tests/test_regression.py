@@ -1332,3 +1332,20 @@ def test_orders_list_has_bulk_reward_button(logged_in_admin, app, seed):
 def test_reward_batch_requires_login(client, app, seed):
     assert client.get("/admin/orders/reward-batch?ids=1").status_code in (302, 401)
     assert client.post("/admin/orders/bulk-reward", data={"order_ids": [1], "percent": "10"}).status_code in (302, 401, 400)
+
+
+def test_bulk_reward_handles_duplicated_checkbox_ids(logged_in_admin, app, seed):
+    """الجدول والبطاقة يبعثو نفس id مرتين — لازم يتعالج كطلبية وحدة."""
+    from models import Coupon
+    a = _make_order_for(app, "BD-DUP-A", Order.STATUS_DELIVERED, "Samia", "0555777888")
+    r = logged_in_admin.post("/admin/orders/bulk-reward",
+                             data={"order_ids": [a, a, a, a], "percent": "10"})
+    assert f"ids={a}" in r.headers["Location"]
+    with app.app_context():
+        assert Coupon.query.filter_by(source_order_id=a).count() == 1
+
+
+def test_orders_list_counts_unique_orders_in_js(logged_in_admin, app, seed):
+    _make_order_for(app, "BD-DUP-B", Order.STATUS_DELIVERED, "Test", "0555000222")
+    html = logged_in_admin.get("/admin/orders").get_data(as_text=True)
+    assert "uniqueValues" in html     # العدّ بالقيم المختلفة، ماشي بعدد الصناديق
