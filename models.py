@@ -961,8 +961,29 @@ class Coupon(db.Model):
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
+    # ⚠️ كوبون شخصي (مكافأة زبون): تاع رقم هاتف واحد، ومربوط بالطلبية
+    # اللي جابتو. الأعمدة nullable باش الكوبونات القديمة تبقى تخدم كما كانت.
+    customer_phone = db.Column(db.String(20), nullable=True)
+    source_order_id = db.Column(db.Integer, nullable=True, index=True)
+
     def __repr__(self):
         return f"<Coupon {self.code}>"
+
+    @property
+    def is_personal(self):
+        """واش الكوبون خاص بزبون محدد."""
+        return bool(self.customer_phone)
+
+    @property
+    def state_label(self):
+        """حالة الكوبون بالعربية — للأدمن."""
+        if not self.is_active:
+            return "معطّل"
+        if self.is_exhausted:
+            return "استعمله الزبون ✓"
+        if self.ends_at and utcnow() > self.ends_at:
+            return "انتهت صلاحيتو"
+        return "صالح — مازال ما استعملوش"
 
     @property
     def type_label(self):
@@ -984,7 +1005,7 @@ class Coupon(db.Model):
     def is_exhausted(self):
         return self.usage_limit is not None and self.used_count >= self.usage_limit
 
-    def check_validity(self, subtotal):
+    def check_validity(self, subtotal, phone=None):
         """
         يتحقق واش الكوبون صالح لهاد الطلبية.
         يرجع (True, None) أو (False, "سبب الرفض بالعربية").
@@ -994,6 +1015,16 @@ class Coupon(db.Model):
         """
         if not self.is_active:
             return False, "هذا الكوبون غير مفعّل"
+
+        # ⚠️ الكوبون الشخصي: نقارنو رقم الزبون بعد توحيد الصيغة (0555 = +213555).
+        # `phone=None` = الرقم مازال ما اتعرفش (مثلاً فالسلة قبل الـcheckout) —
+        # ما نرفضوش، والفحص الحقيقي يصرا عند إنشاء الطلبية (create_order).
+        if self.customer_phone and phone is not None:
+            from utils import normalize_algerian_phone
+            mine = normalize_algerian_phone(self.customer_phone) or self.customer_phone
+            theirs = normalize_algerian_phone(phone) or phone
+            if mine != theirs:
+                return False, "هذا الكوبون تاع زبون آخر"
 
         now = utcnow()
         if self.starts_at and now < self.starts_at:
@@ -1416,7 +1447,7 @@ class Order(db.Model):
           shipped  — الطلبية مشات، مع رقم التتبّع
           arrived  — وصلت لمكتب الاستلام
           returned — الطرد رجع لينا، نتفاهمو على إعادة الإرسال
-          modify   — نبغيو نبدّلو شي فالطلبية
+          modify   — نحبّو نبدّلو شي فالطلبية
           missing  — منتج ما بقاش موجود
           noreply  — ما جاوبش على الهاتف
           thanks   — شكر بعد التسليم
@@ -1538,6 +1569,44 @@ class Order(db.Model):
 
         # نوع مجهول — رسالة عامة أحسن من خطأ
         return f"{greeting}\n\nبخصوص طلبيتك *{num}*..."
+
+    @property
+    def reward_coupon(self):
+        """آخر كوبون مكافأة اتصنع لهاد الطلبية (أو None)."""
+        return (
+            Coupon.query.filter_by(source_order_id=self.id)
+            .order_by(Coupon.created_at.desc())
+            .first()
+        )
+
+    def reward_coupon_message(self, coupon, store_name="Budac", base_url=""):
+        """
+        رسالة واتساب «شباب» تبعثها للزبون مع كوبون المكافأة.
+
+        النبرة قريبة وخفيفة (ماشي رسمية)، والرسالة تقول بوضوح: الخصم
+        خاص بيه، للطلبية الجاية برك، ومرة وحدة. إيموجي قليل (نفس قاعدة
+        الرسائل الأخرى: الإيموجي المعقّد ما يوصلش مليح فالواتساب).
+        """
+        e = self.EMOJI
+        name = self.customer_name or "خويا"
+        link = base_url.rstrip("/") if base_url else "https://budacdz.com"
+
+        until = ""
+        if coupon.ends_at:
+            until = f"\n{e['clock']} صالح حتى *{coupon.ends_at.strftime('%d/%m/%Y')}*"
+
+        return (
+            f"سلام {name}،\nمعاك {store_name}.\n\n"
+            f"{e['heart']} طلبيتك *{self.order_number}* وصلاتك، ونتمنى عجبتك!\n\n"
+            f"حبينا نكافيوك على ثقتك فينا {e['sparkles']}\n"
+            f"عندك خصم *{coupon.value_display}* تاعك وحدك على طلبيتك الجاية.\n\n"
+            f"{e['star']} الكود تاعك: *{coupon.code}*\n"
+            f"{e['check']} يخدم مرة وحدة برك، وبهاد الرقم تاعك"
+            f"{until}\n\n"
+            f"كي تحب تطلب، اكتب الكود فالسلة قبل ما تأكّد الطلبية:\n"
+            f"{link}\n\n"
+            f"بالصحة والراحة، ونستناوك مرة أخرى {e['heart']}"
+        )
 
     @property
     def is_open(self):
@@ -2013,6 +2082,7 @@ class AdminAction(db.Model):
     EXPORT = "export"
     INTEGRATION = "integration"
     REVIEW_EDIT = "review_edit"
+    REWARD_COUPON = "reward_coupon"
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -2049,4 +2119,5 @@ class AdminAction(db.Model):
             self.EXPORT: "تصدير",
             self.INTEGRATION: "تكامل خارجي",
             self.REVIEW_EDIT: "تعديل نجوم تقييم",
+            self.REWARD_COUPON: "كوبون مكافأة لزبون",
         }.get(self.action, self.action)

@@ -115,3 +115,51 @@ def normalize_algerian_phone(raw):
     is_landline = len(digits) == 9 and digits[:2] in ("02", "03", "04")
 
     return digits if (is_mobile or is_landline) else None
+
+
+# ══════════════════════════════════════════════════════════════
+# حروف لاتينية من اسم الزبون (لتوليد أكواد الكوبونات)
+# ══════════════════════════════════════════════════════════════
+
+# جدول تحويل مبسّط للحروف العربية. ما يهمّناش النطق الدقيق — نحتاجو
+# بداية مفهومة تبيّن الاسم (كمال → KM، شيماء → SH، ميساء → MY).
+_AR_TO_LATIN = {
+    "ا": "A", "أ": "A", "إ": "I", "آ": "A", "ء": "", "ئ": "Y", "ؤ": "W",
+    "ب": "B", "ت": "T", "ث": "TH", "ج": "J", "ح": "H", "خ": "KH",
+    "د": "D", "ذ": "DH", "ر": "R", "ز": "Z", "س": "S", "ش": "SH",
+    "ص": "S", "ض": "D", "ط": "T", "ظ": "Z", "ع": "A", "غ": "GH",
+    "ف": "F", "ق": "Q", "ك": "K", "ل": "L", "م": "M", "ن": "N",
+    "ه": "H", "ة": "A", "و": "W", "ي": "Y", "ى": "A", "پ": "B",
+    "چ": "CH", "ڤ": "V", "گ": "G",
+}
+
+
+def latin_initials(name, length=2, fallback="BD"):
+    """
+    أول `length` حروف لاتينية من اسم الزبون — عربي ولا لاتيني.
+
+    «Rania allem» → RA · «كمال» → KM · «Éric» → ER · «ميساء ص» → MY
+    إذا الاسم فارغ ولا ما فيهش حروف يتحوّلو (أرقام، رموز) → `fallback`.
+
+    ⚠️ نشيلو التشكيل والتطويل، ونتجاهلو الفراغات والرموز، باش الكود
+    يخرج دايمًا حروف كبيرة A-Z برك — سهل الكتابة فالسلة.
+    """
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", str(name or ""))
+    letters = []
+    for ch in text:
+        if unicodedata.combining(ch) or ch == "\u0640":   # تشكيل / تطويل
+            continue
+        if ch in _AR_TO_LATIN:
+            letters.extend(_AR_TO_LATIN[ch])
+        elif "a" <= ch.lower() <= "z" and ch.isascii():
+            letters.append(ch.upper())
+        # أي حاجة أخرى (فراغ، رقم، رمز) نتجاهلوها
+        if len(letters) >= length:
+            break
+
+    result = "".join(letters)[:length]
+    if len(result) < length:
+        result = (result + fallback * length)[:length]
+    return result
