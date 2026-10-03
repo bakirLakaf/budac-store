@@ -25,7 +25,7 @@
 from flask import session
 
 # ⚠️ نخزّنو آخر الطلبيات، ماشي وحدة برك: الزبون يقدر يدير طلبية من
-# صفحة هبوط ثم وحدة من المتجر، وما نبغيوش الثانية تمسح الأولى ويطيح
+# صفحة هبوط ثم وحدة من المتجر، وما نحبّوش الثانية تمسح الأولى ويطيح
 # عليه رابط صفحة الشكر لو رجع للوراء.
 SESSION_KEY = "my_order_numbers"
 LEGACY_KEY = "last_order_number"
@@ -47,7 +47,7 @@ def remember_order(order_number):
     session[SESSION_KEY] = numbers[:MAX_REMEMBERED]
 
     # ⚠️ نحافظو على المفتاح القديم: زبائن عندهم جلسة مفتوحة درك
-    # وواقفين فصفحة النجاح — ما نبغيوش الرابط يطيح عليهم بعد النشر.
+    # وواقفين فصفحة النجاح — ما نحبّوش الرابط يطيح عليهم بعد النشر.
     session[LEGACY_KEY] = order_number
     session.modified = True
 

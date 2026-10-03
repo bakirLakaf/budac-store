@@ -304,20 +304,8 @@ def dashboard():
     ) or 0
     pending_reviews_count = Review.query.filter_by(is_approved=False).count()
 
-    # إحصائيات الزوار — من services/analytics
-    from services.analytics import get_summary, purge_scan_noise
-    try:
-        # ⚠️ ننظّفو زيارات روبوتات المسح فكل فتح للوحة، ماشي فالإقلاع
-        # وحدو. السبب: سجلات قديمة تسجّلت قبل ما نصلحو الفلتر، والأدمن
-        # ما يستاهلش يعيد النشر باش يشوف أرقام صحيحة.
-        purge_scan_noise()
-        visitors = get_summary()
-    except Exception:
-        visitors = None   # ⚠️ الجدول ممكن ما يكونش موجود بعد أول نشر
-
     return render_template(
         "admin/dashboard.html",
-        visitors=visitors,
         abandoned_new=abandoned_new,
         abandoned_value=abandoned_value,
         pending_reviews_count=pending_reviews_count,
@@ -2017,6 +2005,96 @@ def coupons_list():
     return render_template("admin/coupons.html", coupons=coupons, Coupon=Coupon)
 
 
+def _generate_reward_code(customer_name):
+    """
+    كود تلقائي سهل الكتابة: أول حرفين من اسم الزبون + 5 رموز عشوائية.
+    «Rania» → RA-7K2QX · «كمال» → KM-X4P9D (الاسم العربي يتحوّل للاتينية).
+    الرموز العشوائية بلا حروف تتشابه (0/O و1/I) ويتولّدو بـsecrets.
+    """
+    import secrets
+    from utils import latin_initials
+    prefix = latin_initials(customer_name)
+    alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+    for _ in range(20):
+        code = prefix + "-" + "".join(secrets.choice(alphabet) for _ in range(5))
+        if not Coupon.query.filter_by(code=code).first():
+            return code
+    raise RuntimeError("ما قدرناش نولّدو كود فريد")
+
+
+@admin_bp.route("/orders/<int:order_id>/reward-coupon", methods=["POST"])
+@login_required
+def order_create_reward_coupon(order_id):
+    """
+    ينشئ كوبون مكافأة شخصي للزبون اللي وصلتو طلبيتو.
+
+    القواعد (كلها تتفرض فالسيرفر، ماشي غير فالفورم):
+      • الطلبية لازم تكون «تم التسليم»
+      • النسبة من 1 لـ100 — الأدمن هو اللي يحدّدها
+      • خاص برقم الزبون + يخدم مرة وحدة برك
+      • كوبون واحد صالح لكل طلبية (ما نكرّروش المكافأة بالغلط)
+    """
+    from utils import normalize_algerian_phone
+
+    order = db.session.get(Order, order_id) or abort(404)
+    back = redirect(url_for("admin.order_detail", order_id=order.id))
+
+    if order.status != Order.STATUS_DELIVERED:
+        flash("الكوبون يتصنع للطلبية اللي وصلات للزبون برك (تم التسليم)", "error")
+        return back
+
+    percent = request.form.get("percent", type=int)
+    if not percent or not (1 <= percent <= 100):
+        flash("اكتب نسبة الخصم من 1 لـ100", "error")
+        return back
+
+    # مدة الصلاحية: فارغ = بلا انتهاء، وإلا من 1 لـ365 يوم
+    days_raw = (request.form.get("days") or "").strip()
+    ends_at = None
+    if days_raw:
+        days = request.form.get("days", type=int)
+        if not days or not (1 <= days <= 365):
+            flash("مدة الصلاحية من 1 لـ365 يوم (ولا خلّيها فارغة)", "error")
+            return back
+        ends_at = utcnow() + timedelta(days=days)
+
+    phone = normalize_algerian_phone(order.customer_phone)
+    if not phone:
+        flash("رقم الزبون ماشي صالح — ما نقدروش نربطو الكوبون بيه", "error")
+        return back
+
+    existing = order.reward_coupon
+    if existing and existing.is_active and not existing.is_exhausted:
+        flash(f"فيه كوبون صالح لهاد الطلبية: {existing.code}", "warning")
+        return back
+
+    try:
+        coupon = Coupon(
+            code=_generate_reward_code(order.customer_name),
+            discount_type=Coupon.TYPE_PERCENT,
+            value=percent,
+            usage_limit=1,
+            ends_at=ends_at,
+            is_active=True,
+            customer_phone=phone,
+            source_order_id=order.id,
+        )
+        db.session.add(coupon)
+        audit.record(
+            AdminAction.REWARD_COUPON, "order", order.order_number,
+            f"{coupon.code} — {percent}%",
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("reward coupon: فشل الإنشاء %s", order.order_number)
+        flash("ما قدرناش ننشئو الكوبون — جرّب مرة أخرى", "error")
+        return back
+
+    flash(f"تصنع الكوبون {coupon.code} — درك ابعثو للزبون عبر واتساب", "success")
+    return back
+
+
 @admin_bp.route("/coupons/<int:coupon_id>/toggle", methods=["POST"])
 @login_required
 def coupon_toggle(coupon_id):
@@ -2112,7 +2190,7 @@ def reviews_list():
     elif show == "approved":
         query = query.filter_by(is_approved=True)
     elif show == "store":
-        # تقييمات المتجر وحدها — مفيدة كي تبغي تراجعهم دفعة
+        # تقييمات المتجر وحدها — مفيدة كي تحب تراجعهم دفعة
         query = query.filter(Review.product_id.is_(None))
 
     reviews = query.order_by(Review.created_at.desc()).limit(200).all()
@@ -2544,13 +2622,13 @@ def orders_refresh_all_tracking():
     """
     يحدّث حالة كل الطلبيات الممكنة من ZR دفعة وحدة.
 
-    «الممكنة» = عندها رقم تتبّع + مازالت ما وصلتش (مش مسلّمة/ملغاة/راجعة).
+    «الممكنة» = عندها رقم تتبّع + مازالت ما وصلتش (ماشي مسلّمة/ملغاة/راجعة).
     نبدؤو بالأقدم تحديثًا. إذا بقاو طلبيات، تضغط الزر مرة أخرى.
     """
     from services.zrexpress import get_parcel_status, ZRError, is_configured
 
     if not is_configured():
-        flash("ZR Express مش مضبوطة — شوف صفحة التكاملات", "error")
+        flash("ZR Express ماهيش مضبوطة — شوف صفحة التكاملات", "error")
         return redirect(url_for("admin.orders_list"))
 
     candidates = (
@@ -3500,6 +3578,22 @@ def youcan_disconnect():
     return redirect(url_for("admin.youcan_settings"))
 
 
+@admin_bp.route("/visitors")
+@login_required
+def visitors():
+    """صفحة الزوار — كانت داخل «نظرة عامة»، ولات صفحة وحدها."""
+    from services.analytics import get_summary, purge_scan_noise
+    try:
+        # ⚠️ ننظّفو زيارات روبوتات المسح فكل فتح للصفحة، ماشي فالإقلاع
+        # وحدو. السبب: سجلات قديمة تسجّلت قبل ما نصلحو الفلتر، والأدمن
+        # ما يستاهلش يعيد النشر باش يشوف أرقام صحيحة.
+        purge_scan_noise()
+        data = get_summary()
+    except Exception:
+        data = None   # ⚠️ الجدول ممكن ما يكونش موجود بعد أول نشر
+    return render_template("admin/visitors.html", visitors=data)
+
+
 @admin_bp.route("/visitors/reset", methods=["POST"])
 @login_required
 def visitors_reset():
@@ -3526,7 +3620,7 @@ def visitors_reset():
         else:
             flash("ماكانش زيارات روبوتات — الأرقام نظيفة", "success")
 
-    return redirect(url_for("admin.dashboard"))
+    return redirect(url_for("admin.visitors"))
 
 
 @admin_bp.route("/shipping/sync-zr", methods=["POST"])

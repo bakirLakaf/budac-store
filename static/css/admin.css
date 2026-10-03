@@ -2263,3 +2263,12 @@ img.thumb-sm:hover {
                  gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .page-head-row .page-title { margin: 0; }
 .page-head-row form { margin: 0; }
+
+
+/* ---------- 🎁 كوبون مكافأة الزبون (v156) ---------- */
+.reward-panel { background: #fffaf0; border: 1px solid #ecdcae; border-radius: 12px;
+                padding: 14px; margin-bottom: 18px; }
+.reward-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.reward-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.reward-form input { padding: 6px 8px; border: 1px solid #d9d2c5; border-radius: 6px; width: 130px; }
+.reward-panel .wa-btn { margin-top: 10px; }

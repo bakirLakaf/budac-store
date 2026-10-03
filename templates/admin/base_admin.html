@@ -32,6 +32,9 @@
         <a href="{{ url_for('admin.dashboard') }}" class="{{ 'is-active' if request.endpoint == 'admin.dashboard' }}">
             نظرة عامة
         </a>
+        <a href="{{ url_for('admin.visitors') }}" class="{{ 'is-active' if 'visitor' in request.endpoint }}">
+            الزوار
+        </a>
         {# ⚠️ نوعين من الأرقام، وباينين بالألوان:
              • ذهبي = تنبيه، ثمة حاجة تستنى منك (طلبية جديدة)
              • هادي = جرد برك، كم عندك من كل شي #}

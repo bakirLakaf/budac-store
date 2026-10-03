@@ -159,7 +159,9 @@ def create_order(lines, customer_data, shipping_info, coupon=None, customer_note
 
     discount_amount, shipping_discount = 0, 0
     if coupon:
-        is_valid, reason = coupon.check_validity(subtotal)
+        # ⚠️ نمرّرو رقم الزبون: الكوبون الشخصي ما يخدمش لشخص آخر
+        is_valid, reason = coupon.check_validity(
+            subtotal, phone=customer_data.get("phone"))
         if not is_valid:
             raise OrderError(reason)
         discount_amount, shipping_discount = coupon.compute_discount(subtotal, shipping_price)
@@ -257,7 +259,7 @@ def create_order(lines, customer_data, shipping_info, coupon=None, customer_note
         )
 
 
-def find_coupon(code, subtotal):
+def find_coupon(code, subtotal, phone=None):
     """
     يلقى كوبون بالكود ويتحقق من صلاحيتو.
     يرجع (Coupon, None) أو (None, "سبب الرفض").
@@ -269,7 +271,7 @@ def find_coupon(code, subtotal):
     if not coupon:
         return None, "هذا الكود غير موجود"
 
-    is_valid, reason = coupon.check_validity(subtotal)
+    is_valid, reason = coupon.check_validity(subtotal, phone=phone)
     if not is_valid:
         return None, reason
 

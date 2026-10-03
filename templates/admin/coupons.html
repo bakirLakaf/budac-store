@@ -12,7 +12,7 @@
             <tbody>
                 {% for c in coupons %}
                 <tr class="{{ 'row-muted' if not c.is_active or c.is_exhausted }}">
-                    <td><code class="coupon-code">{{ c.code }}</code></td>
+                    <td><code class="coupon-code">{{ c.code }}</code>{% if c.is_personal %} <small title="كوبون شخصي: {{ c.customer_phone }}">👤 شخصي</small>{% endif %}</td>
                     <td>{{ c.type_label }}</td>
                     <td><strong>{{ c.value_display }}</strong>
                         {% if c.max_discount %}<br><small class="muted-cell">سقف {{ "{:,}".format(c.max_discount) }} دج</small>{% endif %}

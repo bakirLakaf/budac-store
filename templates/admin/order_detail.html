@@ -393,6 +393,47 @@
         <p class="hint">⚠️ ماكانش رقم هاتف صالح لهاد الزبون.</p>
         {% endif %}
 
+        {# ═══════════ 🎁 مكافأة الزبون ═══════════
+           كوبون شخصي: تاع هاد الزبون، للطلبية الجاية، مرة وحدة.
+           يظهر كي تكون الطلبية «تم التسليم» برك. الرسالة مبنية فالنموذج
+           (`Order.reward_coupon_message`) والأدمن يقدر يعدّلها قبل ما يبعث. #}
+        {% if order.status == 'delivered' %}
+        {% set rc = order.reward_coupon %}
+        <h2 class="section-title">🎁 مكافأة الزبون</h2>
+        <div class="reward-panel">
+            {% if rc %}
+                <div class="info-row"><span>الكود</span><strong class="tracking-num">{{ rc.code }}</strong></div>
+                <div class="info-row"><span>الخصم</span><strong>{{ rc.value_display }}</strong></div>
+                <div class="info-row"><span>الحالة</span><strong>{{ rc.state_label }}</strong></div>
+                {% if rc.ends_at %}
+                <div class="info-row"><span>صالح حتى</span><strong>{{ rc.ends_at.strftime('%d/%m/%Y') }}</strong></div>
+                {% endif %}
+
+                {% if order.whatsapp_phone and rc.is_active and not rc.is_exhausted %}
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="https://wa.me/{{ order.whatsapp_phone }}?text={{ order.reward_coupon_message(rc, store_name, request.url_root.rstrip('/')) | urlencode }}">
+                    🎁 <span>ابعث الكوبون عبر واتساب</span>
+                </a>
+                {% endif %}
+                <p class="hint">لتعطيل الكوبون: صفحة «كوبونات الخصم».</p>
+            {% else %}
+                <form method="post" action="{{ url_for('admin.order_create_reward_coupon', order_id=order.id) }}"
+                      class="reward-form"
+                      onsubmit="return confirm('تصنع كوبون خصم تاع هاد الزبون؟')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label>نسبة الخصم %
+                        <input type="number" name="percent" min="1" max="100" required placeholder="مثلاً 10">
+                    </label>
+                    <label>صالح لـ(يوم)
+                        <input type="number" name="days" min="1" max="365" value="30" placeholder="فارغ = بلا انتهاء">
+                    </label>
+                    <button type="submit" class="btn-admin btn-sm">🎁 اصنع الكوبون</button>
+                </form>
+                <p class="hint">تاع هاد الزبون برك، للطلبية الجاية، ويخدم مرة وحدة.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <h2 class="section-title">شركة التوصيل</h2>
         <div class="carrier-panel">
             {% if order.tracking_number %}

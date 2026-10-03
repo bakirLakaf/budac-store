@@ -1063,3 +1063,190 @@ def test_bulk_refresh_reports_order_and_carrier_for_unknown_state(
     assert "BD-WRL-A" in page and "World Express" in page and "حالة غريبة" in page
     with app.app_context():
         assert db.session.get(Order, oid).status == Order.STATUS_CONFIRMED
+
+
+# ══════════════════════════════════════════════════════════════
+# v155: الزوار فصفحة وحدها
+# ══════════════════════════════════════════════════════════════
+
+def test_visitors_page_separate_from_dashboard(logged_in_admin, app, seed):
+    dash = logged_in_admin.get("/admin/").get_data(as_text=True)
+    assert "vis-panel" not in dash          # الزوار ما بقاوش فنظرة عامة
+    assert 'href="/admin/visitors"' in dash  # بصح فيه رابط فالقائمة
+
+    page = logged_in_admin.get("/admin/visitors")
+    assert page.status_code == 200
+    assert "الزوار" in page.get_data(as_text=True)
+
+
+def test_visitors_reset_redirects_to_visitors_page(logged_in_admin, app, seed):
+    resp = logged_in_admin.post("/admin/visitors/reset", data={"mode": "all"})
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/admin/visitors")
+
+
+def test_visitors_page_requires_login(client, app, seed):
+    assert client.get("/admin/visitors").status_code in (302, 401)
+
+
+# ══════════════════════════════════════════════════════════════
+# v156: كوبون مكافأة شخصي للزبون
+# ══════════════════════════════════════════════════════════════
+
+def _reward_post(client, oid, percent="15", days="30"):
+    data = {"percent": percent}
+    if days is not None:
+        data["days"] = days
+    return client.post(f"/admin/orders/{oid}/reward-coupon", data=data,
+                       follow_redirects=True)
+
+
+def test_reward_coupon_created_for_delivered_order(logged_in_admin, app, seed):
+    from models import Coupon, AdminAction
+    oid = _make_order(app, "BD-RWD-A", Order.STATUS_DELIVERED)
+    with app.app_context():
+        db.session.get(Order, oid).customer_phone = "+213 555 11 12 22"
+        db.session.commit()
+
+    resp = _reward_post(logged_in_admin, oid, "15", "30")
+    assert resp.status_code == 200
+
+    with app.app_context():
+        c = Coupon.query.filter_by(source_order_id=oid).one()
+        import re
+        assert re.fullmatch(r"[A-Z]{2}-[2-9A-HJ-NP-Z]{5}", c.code), c.code
+        assert c.code.startswith("ZB-")        # اسم الطلبية «زبون» → ZB
+        assert c.discount_type == Coupon.TYPE_PERCENT and c.value == 15
+        assert c.usage_limit == 1                   # مرة وحدة
+        assert c.customer_phone == "0555111222"     # صيغة موحّدة
+        assert c.ends_at is not None
+        assert AdminAction.query.filter_by(action=AdminAction.REWARD_COUPON).count() == 1
+
+
+def test_reward_coupon_refused_for_undelivered_order(logged_in_admin, app, seed):
+    from models import Coupon
+    oid = _make_order(app, "BD-RWD-B", Order.STATUS_SHIPPED)
+    _reward_post(logged_in_admin, oid)
+    with app.app_context():
+        assert Coupon.query.filter_by(source_order_id=oid).count() == 0
+
+
+def test_reward_coupon_rejects_bad_percent_and_days(logged_in_admin, app, seed):
+    from models import Coupon
+    oid = _make_order(app, "BD-RWD-C", Order.STATUS_DELIVERED)
+    for pct in ("0", "101", "-5", ""):
+        _reward_post(logged_in_admin, oid, pct)
+    _reward_post(logged_in_admin, oid, "10", "9999")
+    with app.app_context():
+        assert Coupon.query.filter_by(source_order_id=oid).count() == 0
+
+
+def test_reward_coupon_not_duplicated_and_no_expiry_when_days_blank(
+        logged_in_admin, app, seed):
+    from models import Coupon
+    oid = _make_order(app, "BD-RWD-D", Order.STATUS_DELIVERED)
+    _reward_post(logged_in_admin, oid, "10", "")
+    _reward_post(logged_in_admin, oid, "20", "")   # ثاني مرة — ما يتكرّرش
+    with app.app_context():
+        coupons = Coupon.query.filter_by(source_order_id=oid).all()
+        assert len(coupons) == 1
+        assert coupons[0].value == 10 and coupons[0].ends_at is None
+
+
+def test_personal_coupon_only_valid_for_its_customer(app, seed):
+    from models import Coupon
+    with app.app_context():
+        # ⚠️ نسجّلوه فالقاعدة باش الافتراضيات (min_order_amount...) تتعمّر
+        c = Coupon(code="PERS-1", discount_type=Coupon.TYPE_PERCENT, value=10,
+                   usage_limit=1, customer_phone="0555111222")
+        normal = Coupon(code="NORM-1", discount_type=Coupon.TYPE_PERCENT, value=10)
+        db.session.add_all([c, normal]); db.session.commit()
+
+        # نفس الزبون بأي صيغة
+        assert c.check_validity(1000, phone="0555111222")[0]
+        assert c.check_validity(1000, phone="+213555111222")[0]
+        assert c.check_validity(1000, phone="0555 11 12 22")[0]
+        # زبون آخر
+        ok, reason = c.check_validity(1000, phone="0666000000")
+        assert not ok and "تاع زبون آخر" in reason
+        # الرقم مازال مجهول (فالسلة) — ما نرفضوش
+        assert c.check_validity(1000)[0]
+        # كوبون عادي ما يتأثرش
+        assert normal.check_validity(1000, phone="0666000000")[0]
+
+
+def test_create_order_enforces_personal_coupon_phone(app, seed):
+    import pytest
+    from models import Coupon
+    from services.orders import create_order, OrderError
+    from services.cart import CartLine
+    with app.app_context():
+        c = Coupon(code="PERS-2", discount_type=Coupon.TYPE_PERCENT, value=10,
+                   usage_limit=1, customer_phone="0555111222")
+        db.session.add(c); db.session.commit()
+        line = CartLine(key="product:1:0", kind="product", name="x",
+                        unit_price=100, quantity=1, product_id=1)
+        with pytest.raises(OrderError) as e:
+            create_order(
+                lines=[line],
+                customer_data={"name": "غريب", "phone": "0666000000",
+                               "wilaya_code": "39", "wilaya_name": "الوادي",
+                               "commune": "الوادي", "address_note": None},
+                shipping_info={"carrier_code": "zrexpress", "carrier_name": "ZR",
+                               "delivery_type": "home", "price": 600},
+                coupon=Coupon.query.filter_by(code="PERS-2").first(),
+            )
+        assert "تاع زبون آخر" in str(e.value)
+
+
+def test_reward_message_and_button(logged_in_admin, app, seed):
+    from models import Coupon
+    oid = _make_order(app, "BD-RWD-E", Order.STATUS_DELIVERED)
+    _reward_post(logged_in_admin, oid, "12", "14")
+    with app.app_context():
+        order = db.session.get(Order, oid)
+        c = order.reward_coupon
+        msg = order.reward_coupon_message(c, "Budac", "https://budacdz.com")
+        assert c.code in msg and "12%" in msg and order.order_number in msg
+        assert "مرة وحدة" in msg
+        # ⚠️ لهجة جزائرية: ما نستعملوش كلمات مغربية
+        words = set(msg.replace("\n", " ").replace("*", " ").split())
+        for banned in ("ديال", "دابا", "بغيت", "غادي", "شنو", "مزيان", "فين",
+                       "غير", "خاص", "مش", "عجباتك"):
+            assert banned not in words
+
+    html = logged_in_admin.get(f"/admin/orders/{oid}").get_data(as_text=True)
+    assert "ابعث الكوبون عبر واتساب" in html and "wa.me/" in html
+
+
+def test_reward_panel_hidden_for_undelivered(logged_in_admin, app, seed):
+    oid = _make_order(app, "BD-RWD-F", Order.STATUS_CONFIRMED)
+    html = logged_in_admin.get(f"/admin/orders/{oid}").get_data(as_text=True)
+    assert "مكافأة الزبون" not in html
+
+
+def test_latin_initials_for_codes():
+    from utils import latin_initials as li
+    assert li("Rania allem") == "RA"
+    assert li("Youssra Salah salah") == "YO"
+    assert li("Éric") == "ER"
+    assert li("كمال") == "KM"
+    assert li("ميساء ص") == "MY"
+    assert li("شيماء") == "SH"
+    assert li("عبادلية") == "AB"
+    assert li("أستغفر الله") == "AS"
+    # ما فيهش حروف يتحوّلو → BD
+    assert li("") == "BD" and li(None) == "BD" and li("123 !!") == "BD"
+    # حرف وحد → نكمّلو بالاحتياطي
+    assert len(li("A")) == 2 and li("A").startswith("A")
+
+
+def test_reward_code_uses_customer_initials(logged_in_admin, app, seed):
+    from models import Coupon
+    oid = _make_order(app, "BD-RWD-G", Order.STATUS_DELIVERED)
+    with app.app_context():
+        db.session.get(Order, oid).customer_name = "Rania allem"
+        db.session.commit()
+    _reward_post(logged_in_admin, oid, "10", "30")
+    with app.app_context():
+        assert Coupon.query.filter_by(source_order_id=oid).one().code.startswith("RA-")
