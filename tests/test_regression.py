@@ -1250,3 +1250,85 @@ def test_reward_code_uses_customer_initials(logged_in_admin, app, seed):
     _reward_post(logged_in_admin, oid, "10", "30")
     with app.app_context():
         assert Coupon.query.filter_by(source_order_id=oid).one().code.startswith("RA-")
+
+
+# ══════════════════════════════════════════════════════════════
+# v158: كوبونات مكافأة جماعية من صفحة الطلبيات
+# ══════════════════════════════════════════════════════════════
+
+def _make_order_for(app, number, status, name, phone):
+    oid = _make_order(app, number, status)
+    with app.app_context():
+        o = db.session.get(Order, oid)
+        o.customer_name, o.customer_phone = name, phone
+        db.session.commit()
+    return oid
+
+
+def test_bulk_reward_creates_one_coupon_per_customer(logged_in_admin, app, seed):
+    from models import Coupon
+    a = _make_order_for(app, "BD-BR-A", Order.STATUS_DELIVERED, "Rania allem", "0556329970")
+    b = _make_order_for(app, "BD-BR-B", Order.STATUS_DELIVERED, "Rania allem", "+213556329970")  # نفس الزبون
+    c = _make_order_for(app, "BD-BR-C", Order.STATUS_DELIVERED, "كمال مجذوب", "0662834652")
+    d = _make_order_for(app, "BD-BR-D", Order.STATUS_SHIPPED, "Diaf Akila", "0777000111")        # ماشي مسلّمة
+
+    resp = logged_in_admin.post(
+        "/admin/orders/bulk-reward",
+        data={"order_ids": [a, b, c, d], "percent": "10", "days": "30"})
+    assert resp.status_code == 302
+    assert "/admin/orders/reward-batch?ids=" in resp.headers["Location"]
+
+    with app.app_context():
+        coupons = Coupon.query.filter(Coupon.source_order_id.in_([a, b, c, d])).all()
+        by_order = {cp.source_order_id: cp for cp in coupons}
+        assert set(by_order) == {a, c}               # b نفس زبون a — d ماشي مسلّمة
+        assert by_order[a].code.startswith("RA-")
+        assert by_order[c].code.startswith("KM-")
+        assert all(cp.value == 10 and cp.usage_limit == 1 for cp in coupons)
+
+    page = logged_in_admin.get(resp.headers["Location"], follow_redirects=True)
+    html = page.get_data(as_text=True)
+    assert html.count("wa.me/") == 2
+    assert "BD-BR-A" in html and "BD-BR-C" in html and "BD-BR-D" not in html
+
+
+def test_bulk_reward_validates_percent_and_selection(logged_in_admin, app, seed):
+    from models import Coupon
+    a = _make_order_for(app, "BD-BR-E", Order.STATUS_DELIVERED, "Test", "0555000111")
+    r = logged_in_admin.post("/admin/orders/bulk-reward",
+                             data={"order_ids": [a], "percent": "0"})
+    assert r.status_code == 302 and "reward-batch" not in r.headers["Location"]
+    r = logged_in_admin.post("/admin/orders/bulk-reward", data={"percent": "10"})
+    assert r.status_code == 302 and "reward-batch" not in r.headers["Location"]
+    with app.app_context():
+        assert Coupon.query.filter_by(source_order_id=a).count() == 0
+
+
+def test_bulk_reward_reuses_existing_active_coupon(logged_in_admin, app, seed):
+    from models import Coupon
+    a = _make_order_for(app, "BD-BR-F", Order.STATUS_DELIVERED, "Samir", "0555123123")
+    logged_in_admin.post("/admin/orders/bulk-reward", data={"order_ids": [a], "percent": "10"})
+    logged_in_admin.post("/admin/orders/bulk-reward", data={"order_ids": [a], "percent": "20"})
+    with app.app_context():
+        cps = Coupon.query.filter_by(source_order_id=a).all()
+        assert len(cps) == 1 and cps[0].value == 10    # ما يتكرّرش ولا يتبدّل
+
+
+def test_bulk_reward_all_undelivered_creates_nothing(logged_in_admin, app, seed):
+    from models import Coupon
+    a = _make_order_for(app, "BD-BR-G", Order.STATUS_CONFIRMED, "Yacine", "0555321321")
+    r = logged_in_admin.post("/admin/orders/bulk-reward", data={"order_ids": [a], "percent": "10"})
+    assert "reward-batch" not in r.headers["Location"]
+    with app.app_context():
+        assert Coupon.query.filter_by(source_order_id=a).count() == 0
+
+
+def test_orders_list_has_bulk_reward_button(logged_in_admin, app, seed):
+    _make_order_for(app, "BD-BR-H", Order.STATUS_DELIVERED, "Test", "0555000999")
+    html = logged_in_admin.get("/admin/orders").get_data(as_text=True)
+    assert "كوبون مكافأة للمختارة" in html and "bulk-reward" in html
+
+
+def test_reward_batch_requires_login(client, app, seed):
+    assert client.get("/admin/orders/reward-batch?ids=1").status_code in (302, 401)
+    assert client.post("/admin/orders/bulk-reward", data={"order_ids": [1], "percent": "10"}).status_code in (302, 401, 400)

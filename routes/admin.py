@@ -2022,31 +2022,18 @@ def _generate_reward_code(customer_name):
     raise RuntimeError("ما قدرناش نولّدو كود فريد")
 
 
-@admin_bp.route("/orders/<int:order_id>/reward-coupon", methods=["POST"])
-@login_required
-def order_create_reward_coupon(order_id):
+class _RewardError(Exception):
+    """خطأ فمعطيات كوبون المكافأة (النسبة ولا المدة) — رسالتو تتعرض للأدمن."""
+
+
+def _reward_params_from_form():
     """
-    ينشئ كوبون مكافأة شخصي للزبون اللي وصلتو طلبيتو.
-
-    القواعد (كلها تتفرض فالسيرفر، ماشي غير فالفورم):
-      • الطلبية لازم تكون «تم التسليم»
-      • النسبة من 1 لـ100 — الأدمن هو اللي يحدّدها
-      • خاص برقم الزبون + يخدم مرة وحدة برك
-      • كوبون واحد صالح لكل طلبية (ما نكرّروش المكافأة بالغلط)
+    يقرا نسبة الخصم ومدة الصلاحية من الفورم ويتحقق منهم.
+    يرجع (percent, ends_at) ولا يرفع _RewardError برسالة عربية.
     """
-    from utils import normalize_algerian_phone
-
-    order = db.session.get(Order, order_id) or abort(404)
-    back = redirect(url_for("admin.order_detail", order_id=order.id))
-
-    if order.status != Order.STATUS_DELIVERED:
-        flash("الكوبون يتصنع للطلبية اللي وصلات للزبون برك (تم التسليم)", "error")
-        return back
-
     percent = request.form.get("percent", type=int)
     if not percent or not (1 <= percent <= 100):
-        flash("اكتب نسبة الخصم من 1 لـ100", "error")
-        return back
+        raise _RewardError("اكتب نسبة الخصم من 1 لـ100")
 
     # مدة الصلاحية: فارغ = بلا انتهاء، وإلا من 1 لـ365 يوم
     days_raw = (request.form.get("days") or "").strip()
@@ -2054,45 +2041,219 @@ def order_create_reward_coupon(order_id):
     if days_raw:
         days = request.form.get("days", type=int)
         if not days or not (1 <= days <= 365):
-            flash("مدة الصلاحية من 1 لـ365 يوم (ولا خلّيها فارغة)", "error")
-            return back
+            raise _RewardError("مدة الصلاحية من 1 لـ365 يوم (ولا خلّيها فارغة)")
         ends_at = utcnow() + timedelta(days=days)
+    return percent, ends_at
 
-    phone = normalize_algerian_phone(order.customer_phone)
-    if not phone:
-        flash("رقم الزبون ماشي صالح — ما نقدروش نربطو الكوبون بيه", "error")
-        return back
+
+def _make_reward_coupon(order, percent, ends_at):
+    """
+    يصنع كوبون مكافأة شخصي لطلبية (بلا commit — المستدعي هو اللي يحفظ).
+
+    يرجع (coupon, status):
+      "created"        → كوبون جديد
+      "existing"       → فيه كوبون صالح من قبل لهاد الطلبية (نرجعوه هو)
+      "not_delivered"  → الطلبية ماشي «تم التسليم»
+      "bad_phone"      → رقم الزبون ماشي صالح
+
+    القواعد: تتفرض فالسيرفر، سواء الزر الفردي ولا الجماعي.
+    """
+    from utils import normalize_algerian_phone
+
+    if order.status != Order.STATUS_DELIVERED:
+        return None, "not_delivered"
 
     existing = order.reward_coupon
     if existing and existing.is_active and not existing.is_exhausted:
-        flash(f"فيه كوبون صالح لهاد الطلبية: {existing.code}", "warning")
+        return existing, "existing"
+
+    phone = normalize_algerian_phone(order.customer_phone)
+    if not phone:
+        return None, "bad_phone"
+
+    coupon = Coupon(
+        code=_generate_reward_code(order.customer_name),
+        discount_type=Coupon.TYPE_PERCENT,
+        value=percent,
+        usage_limit=1,
+        ends_at=ends_at,
+        is_active=True,
+        customer_phone=phone,
+        source_order_id=order.id,
+    )
+    db.session.add(coupon)
+    db.session.flush()      # باش الكود الفريد الجاي ما يتكرّرش فنفس الدفعة
+    return coupon, "created"
+
+
+@admin_bp.route("/orders/<int:order_id>/reward-coupon", methods=["POST"])
+@login_required
+def order_create_reward_coupon(order_id):
+    """
+    ينشئ كوبون مكافأة شخصي للزبون اللي وصلتو طلبيتو.
+
+    القواعد: الطلبية «تم التسليم» برك · النسبة من 1 لـ100 (الأدمن يحدّدها) ·
+    تاع رقم الزبون + مرة وحدة · كوبون واحد صالح لكل طلبية.
+    """
+    order = db.session.get(Order, order_id) or abort(404)
+    back = redirect(url_for("admin.order_detail", order_id=order.id))
+
+    try:
+        percent, ends_at = _reward_params_from_form()
+    except _RewardError as e:
+        flash(str(e), "error")
         return back
 
     try:
-        coupon = Coupon(
-            code=_generate_reward_code(order.customer_name),
-            discount_type=Coupon.TYPE_PERCENT,
-            value=percent,
-            usage_limit=1,
-            ends_at=ends_at,
-            is_active=True,
-            customer_phone=phone,
-            source_order_id=order.id,
-        )
-        db.session.add(coupon)
-        audit.record(
-            AdminAction.REWARD_COUPON, "order", order.order_number,
-            f"{coupon.code} — {percent}%",
-        )
-        db.session.commit()
+        coupon, status = _make_reward_coupon(order, percent, ends_at)
+        if status == "created":
+            audit.record(
+                AdminAction.REWARD_COUPON, "order", order.order_number,
+                f"{coupon.code} — {percent}%",
+            )
+            db.session.commit()
     except Exception:
         db.session.rollback()
         current_app.logger.exception("reward coupon: فشل الإنشاء %s", order.order_number)
         flash("ما قدرناش ننشئو الكوبون — جرّب مرة أخرى", "error")
         return back
 
-    flash(f"تصنع الكوبون {coupon.code} — درك ابعثو للزبون عبر واتساب", "success")
+    if status == "not_delivered":
+        flash("الكوبون يتصنع للطلبية اللي وصلات للزبون برك (تم التسليم)", "error")
+    elif status == "bad_phone":
+        flash("رقم الزبون ماشي صالح — ما نقدروش نربطو الكوبون بيه", "error")
+    elif status == "existing":
+        flash(f"فيه كوبون صالح لهاد الطلبية: {coupon.code}", "warning")
+    else:
+        flash(f"تصنع الكوبون {coupon.code} — درك ابعثو للزبون عبر واتساب", "success")
     return back
+
+
+@admin_bp.route("/orders/bulk-reward", methods=["POST"])
+@login_required
+def orders_bulk_reward():
+    """
+    يصنع كوبونات مكافأة لعدة طلبيات دفعة وحدة (من صفحة «الطلبيات»).
+
+    • يتجاهل الطلبيات اللي ماشي «تم التسليم»
+    • كوبون واحد لكل زبون: إذا نفس الرقم فأكثر من طلبية مختارة، نصنعو
+      لواحدة برك (الأقدم) — ما يتعطاش نفس الزبون عدة مكافآت فنفس الدفعة
+    • الطلبية اللي عندها كوبون صالح من قبل تدخل فالقائمة (باش تبعثو) بلا تكرار
+    ثم يحوّلك لصفحة فيها زر واتساب لكل زبون.
+    """
+    from utils import normalize_algerian_phone
+
+    ids = request.form.getlist("order_ids", type=int)[:200]
+    if not ids:
+        flash("ما اخترت حتى طلبية", "warning")
+        return redirect(url_for("admin.orders_list"))
+
+    try:
+        percent, ends_at = _reward_params_from_form()
+    except _RewardError as e:
+        flash(str(e), "error")
+        return redirect(url_for("admin.orders_list"))
+
+    orders = (
+        Order.query.filter(Order.id.in_(ids))
+        .order_by(Order.created_at.asc())
+        .all()
+    )
+
+    created = existing = 0
+    skipped_status = skipped_phone = skipped_dup = 0
+    ready_ids = []
+    seen_phones = set()
+
+    try:
+        for order in orders:
+            phone = normalize_algerian_phone(order.customer_phone)
+
+            if order.status != Order.STATUS_DELIVERED:
+                skipped_status += 1
+                continue
+            if phone and phone in seen_phones:
+                skipped_dup += 1
+                continue
+
+            coupon, status = _make_reward_coupon(order, percent, ends_at)
+            if status == "bad_phone":
+                skipped_phone += 1
+                continue
+
+            seen_phones.add(phone)
+            ready_ids.append(order.id)
+            if status == "created":
+                created += 1
+            else:
+                existing += 1
+
+        if created:
+            audit.record(
+                AdminAction.REWARD_COUPON, "order", None,
+                f"{created} كوبون مكافأة — {percent}%",
+            )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("bulk reward coupons: فشل")
+        flash("ما قدرناش ننشئو الكوبونات — جرّب مرة أخرى", "error")
+        return redirect(url_for("admin.orders_list"))
+
+    if not ready_ids:
+        flash("ما تصنع حتى كوبون: الطلبيات المختارة لازم تكون «تم التسليم»", "warning")
+        return redirect(url_for("admin.orders_list"))
+
+    parts = [f"تصنعو {created} كوبون"]
+    if existing:
+        parts.append(f"{existing} كان عندهم كوبون صالح")
+    flash("، ".join(parts), "success")
+    skipped = []
+    if skipped_status:
+        skipped.append(f"{skipped_status} ماشي «تم التسليم»")
+    if skipped_dup:
+        skipped.append(f"{skipped_dup} نفس الزبون (كوبون واحد برك)")
+    if skipped_phone:
+        skipped.append(f"{skipped_phone} رقمهم ماشي صالح")
+    if skipped:
+        flash("تجاهلنا: " + " | ".join(skipped), "warning")
+
+    return redirect(url_for(
+        "admin.orders_reward_batch", ids=",".join(str(i) for i in ready_ids)))
+
+
+@admin_bp.route("/orders/reward-batch")
+@login_required
+def orders_reward_batch():
+    """
+    صفحة إرسال كوبونات المكافأة: زبون فكل سطر + زر واتساب برسالتو.
+
+    ⚠️ واتساب ما يسمحش نبعثو رسائل آليًا من الموقع — الأدمن يضغط «ابعث»
+    على كل سطر (ولا «افتح التالي»). الصفحة تقرا من القاعدة، ماشي من
+    الجلسة، يعني تقدر ترجعلها فأي وقت من نفس الرابط.
+    """
+    ids = []
+    for chunk in (request.args.get("ids") or "").split(","):
+        if chunk.strip().isdigit():
+            ids.append(int(chunk))
+    ids = ids[:200]
+
+    orders = (
+        Order.query.filter(Order.id.in_(ids))
+        .order_by(Order.created_at.asc())
+        .all()
+        if ids else []
+    )
+
+    rows = []
+    for order in orders:
+        coupon = order.reward_coupon
+        if not coupon or not order.whatsapp_phone:
+            continue
+        rows.append({"order": order, "coupon": coupon,
+                     "sendable": coupon.is_active and not coupon.is_exhausted})
+
+    return render_template("admin/reward_batch.html", rows=rows)
 
 
 @admin_bp.route("/coupons/<int:coupon_id>/toggle", methods=["POST"])

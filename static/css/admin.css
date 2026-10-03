@@ -2272,3 +2272,11 @@ img.thumb-sm:hover {
 .reward-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .reward-form input { padding: 6px 8px; border: 1px solid #d9d2c5; border-radius: 6px; width: 130px; }
 .reward-panel .wa-btn { margin-top: 10px; }
+
+
+/* ---------- 🎁 كوبونات المكافأة الجماعية (v158) ---------- */
+.bulk-reward { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.bulk-reward input { width: 84px; padding: 5px 8px; border: 1px solid #d9d2c5; border-radius: 6px; }
+.reward-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+.reward-table .reward-row.is-sent { opacity: .55; }
+.reward-done { color: #2e7d32; font-weight: 600; }

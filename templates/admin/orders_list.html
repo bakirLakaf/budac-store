@@ -36,6 +36,20 @@
 
 <div class="bulk-bar" id="bulkBar" hidden>
     <span><strong id="bulkCount">0</strong> طلبية مختارة</span>
+
+    {# 🎁 كوبون مكافأة لكل زبون مختار — يستعمل نفس checkbox، ويتبعث للصفحة
+       الخاصة بيه (formaction). ماشي required: الحذف يستعمل نفس الفورم. #}
+    <span class="bulk-reward">
+        <input type="number" name="percent" min="1" max="100" placeholder="% خصم"
+               aria-label="نسبة الخصم">
+        <input type="number" name="days" min="1" max="365" value="30"
+               placeholder="أيام" aria-label="مدة الصلاحية بالأيام">
+        <button type="submit" class="btn-admin btn-sm"
+                formaction="{{ url_for('admin.orders_bulk_reward') }}"
+                onclick="var p=this.form.elements['percent'].value; if(!p){alert('اكتب نسبة الخصم'); return false;} return confirm('تصنع كوبون مكافأة لكل زبون مختار (اللي طلبيتو «تم التسليم» برك)؟')">
+            🎁 كوبون مكافأة للمختارة
+        </button>
+    </span>
     <button type="submit" class="btn-admin btn-sm btn-danger"
             onclick="return confirm('تحذف الطلبيات المختارة نهائيًا؟ ما ترجعش.')">
         🗑️ احذف المختارة
