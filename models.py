@@ -280,7 +280,7 @@ class Product(db.Model):
     color_variant = db.Column(db.String(120), nullable=True)  # قديم — يبقى للتوافق، الأفضل نستعملو variants
 
     # ---------- حاسبة الكمية ----------
-    # بعض المنتجات تتباع بالمتر (أشرطة، ورق لاصق)، والزبون ما يعرفش شحال يحتاج.
+    # بعض المنتجات تتباع بالمتر (أشرطة، ورق لاصق)، والزبون ما يعرفش قداش يحتاج.
     # الحاسبة تسولو على أبعاد الحاجة اللي حاب يزيّن، وتحسبلو الكمية.
     #   None       → بلا حاسبة (منتج عادي)
     #   "perimeter"→ حاسبة محيط: للأشرطة اللي تدور حول مرآة/إطار
@@ -793,7 +793,7 @@ class Commune(db.Model):
     """
     بلدية جزائرية — القائمة الرسمية الكاملة (1541 بلدية × 58 ولاية).
 
-    ⚠️ ليش مستقلة عن شركة التوصيل؟
+    ⚠️ علاش مستقلة عن شركة التوصيل؟
     البلديات تاع الجزائر ثابتة، ماشي ملك شركة. لو ربطناها بـZR، كنا:
       • نخسرو البلديات اللي ZR ما يوصلش ليها (والزبون ما يلقاش بلديتو)
       • نعاودو نجيبوها من الصفر لكل شركة جديدة
@@ -863,7 +863,7 @@ class StoreSetting(db.Model):
     """
     إعدادات المتجر — جدول بسيط: مفتاح ← قيمة.
 
-    ⚠️ ليش هكذا بدل عمود لكل إعداد؟ باش نزيدو إعدادات جديدة بلا ما نبدلو
+    ⚠️ علاش هكذا بدل عمود لكل إعداد؟ باش نزيدو إعدادات جديدة بلا ما نبدلو
     بنية قاعدة البيانات فكل مرة. القيم كلها نصوص، والدوال تحت تحوّلها.
     """
 
@@ -1438,137 +1438,20 @@ class Order(db.Model):
 
 
 
-    def whatsapp_message(self, kind, store_name="Budac", base_url=""):
+    def whatsapp_message(self, kind, store_name=None, base_url=""):
         """
-        يبني نص رسالة جاهزة حسب الحاجة.
+        يبني نص رسالة واتساب جاهزة حسب النوع.
 
-        الأنواع:
-          confirm  — تأكيد الطلبية مع الزبون قبل الإرسال
-          shipped  — الطلبية مشات، مع رقم التتبّع
-          arrived  — وصلت لمكتب الاستلام
-          returned — الطرد رجع لينا، نتفاهمو على إعادة الإرسال
-          modify   — نحبّو نبدّلو شي فالطلبية
-          missing  — منتج ما بقاش موجود
-          noreply  — ما جاوبش على الهاتف
-          thanks   — شكر بعد التسليم
-          review   — طلب رأي/تقييم للمتجر (يحتاج base_url باش يبني الرابط)
+        الأنواع: confirm · modify · noreply · missing · shipped · arrived ·
+                 returned · thanks · review
 
-        ⚠️ الإيموجي كلو من `EMOJI` (3 بايت) — شوف الشرح فوق القائمة.
-        وعمدًا قليل: إيموجي واحد ولا زوج فالرسالة. الرسالة المزيّنة
-        بزاف تبان إعلانًا آليًا والزبون ما يردّش عليها.
+        ⚠️ النصوص ماشي هنا ثاني — راهي فـ`services/wa_templates.py`، والأدمن
+        يقدر يعدّلها من تبويب «رسائل واتساب». `store_name` بقات فالتوقيع
+        باش الاستدعاءات القديمة تبقى تخدم، بصح تتجاهل: الرسالة ديما
+        تبدا بـ«معاك BUDAC».
         """
-        e = self.EMOJI
-        name = self.customer_name or "خويا"
-        num = self.order_number
-        total = self.total_display
-
-        # ⚠️ الروابط غير فرسائل المراجعة (تأكيد/تعديل) — فيهم الزبون
-        # يحتاج يشوف واش طلب. فرسالة الشحن يزيدو ضجيجًا برك.
-        items = self._items_lines(with_links=bool(base_url), base_url=base_url)
-
-        greeting = f"سلام {name}،\nمعاك {store_name}."
-
-        if kind == "confirm":
-            return (
-                f"{greeting}\n\n"
-                f"{e['box']} وصلاتنا طلبيتك رقم *{num}*:\n\n"
-                f"{items}\n\n"
-                f"{e['money']} المجموع مع التوصيل: *{total}*\n"
-                f"{e['pin']} {self.delivery_type_label} - {self.wilaya_name}\n\n"
-                f"نأكّدو الطلبية؟"
-            )
-
-        if kind == "shipped":
-            tracking = (
-                f"\nرقم التتبّع: *{self.tracking_number}*"
-                if self.tracking_number else ""
-            )
-            return (
-                f"{greeting}\n\n"
-                f"{e['truck']} طلبيتك *{num}* خرجات اليوم مع "
-                f"{self.carrier_name or 'شركة التوصيل'}، بإذن الله."
-                f"{tracking}\n\n"
-                f"{e['clock']} توصلك فحدود 24 إلى 48 ساعة، خلّي هاتفك "
-                f"مفتوح باش يتصل بيك الموزّع.\n\n"
-                f"{e['money']} المبلغ عند الاستلام: *{total}*"
-            )
-
-        if kind == "arrived":
-            where = self.pickup_point_name or self.wilaya_name
-            return (
-                f"{greeting}\n\n"
-                f"{e['check']} طلبيتك *{num}* وصلات لـ*{where}*.\n\n"
-                f"تقدر تروح تحوّزها - جيب معاك بطاقة التعريف.\n"
-                f"{e['money']} المبلغ: *{total}*\n\n"
-                f"نستنّاوك."
-            )
-
-        if kind == "returned":
-            # ⚠️ رسالة حسّاسة — الزبون ما حوّزش الطرد. النبرة تبقى
-            # محايدة بلا لوم، والهدف نعرفو واش راح ونعاودو نبعثو.
-            return (
-                f"{greeting}\n\n"
-                f"{e['back']} طلبيتك *{num}* رجعات لينا بلا ما تتسلّم.\n\n"
-                f"إذا مازال تحبها، قوللي ونعاودو نبعثوها - نتأكدو غير "
-                f"من العنوان والوقت المناسب.\n\n"
-                f"وإذا بدّلت رأيك، ما كاين والو، غير عرّفني."
-            )
-
-        if kind == "modify":
-            return (
-                f"{greeting}\n\n"
-                f"{e['box']} بخصوص طلبيتك *{num}*:\n\n"
-                f"{items}\n\n"
-                f"{e['money']} المجموع: *{total}*\n\n"
-                f"حبيت نسقسيك - تحب تزيد ولا تنقّص شي حاجة قبل ما نبعثوها؟"
-            )
-
-        if kind == "missing":
-            return (
-                f"{greeting}\n\n"
-                f"{e['warn']} بخصوص طلبيتك *{num}* - نعتذرلك، كاين منتج "
-                f"ما بقاش موجود درك.\n\n"
-                f"عندك خيارين:\n"
-                f"1. نبدّلوه بحاجة أخرى تعجبك\n"
-                f"2. نبعثو الباقي ونحيّدو ثمنو من المجموع\n\n"
-                f"واش تفضّل؟"
-            )
-
-        if kind == "noreply":
-            return (
-                f"{greeting}\n\n"
-                f"{e['phone']} حاولنا نتصلو بيك على طلبيتك *{num}* "
-                f"وما لقيناكش.\n\n"
-                f"قوللي وقتاش يريحك ونعاودو نتصلو، ولا جاوبني هنا "
-                f"ونأكّدوها مباشرة."
-            )
-
-        if kind == "thanks":
-            return (
-                f"سلام {name}،\n\n"
-                f"{e['heart']} يعطيك الصحة على ثقتك فينا، ونتمنى المنتج "
-                f"عجبك.\n\n"
-                f"إذا عندك أي ملاحظة، قوللي - رأيك يهمّنا.\n\n"
-                f"ونفرحو بيك مرة أخرى فـ{store_name}."
-            )
-
-        if kind == "review":
-            # ⚠️ الرابط لازم يكون كاملاً — الواتساب ما يخدمش رابطًا نسبيًا،
-            # وإذا ما وصلش base_url نستعملو الدومين الرسمي بدل رابط مكسور.
-            link = f"{base_url.rstrip('/')}/reviews" if base_url else "https://budacdz.com/reviews"
-            return (
-                f"{greeting}\n\n"
-                f"{e['check']} طلبيتك رقم *{num}* وصلاتك، ونتمنى تكون "
-                f"كيما تستنّى.\n\n"
-                f"{e['star']} إذا عندك دقيقة، رأيك على المنتج والخدمة "
-                f"يهمّنا - يفيد الزبائن الجدد ويعاوننا نتحسّنو:\n"
-                f"{link}\n\n"
-                f"وإذا كاينة شي ملاحظة، ابعثهالي هنا مباشرة ونتكفّلو بيها.\n\n"
-                f"{e['heart']} شكرًا على ثقتك."
-            )
-
-        # نوع مجهول — رسالة عامة أحسن من خطأ
-        return f"{greeting}\n\nبخصوص طلبيتك *{num}*..."
+        from services.wa_templates import render_for_order
+        return render_for_order(self, kind, base_url)
 
     @property
     def reward_coupon(self):
@@ -1579,34 +1462,13 @@ class Order(db.Model):
             .first()
         )
 
-    def reward_coupon_message(self, coupon, store_name="Budac", base_url=""):
+    def reward_coupon_message(self, coupon, store_name=None, base_url=""):
         """
-        رسالة واتساب «شباب» تبعثها للزبون مع كوبون المكافأة.
-
-        النبرة قريبة وخفيفة (ماشي رسمية)، والرسالة تقول بوضوح: الخصم
-        خاص بيه، للطلبية الجاية برك، ومرة وحدة. إيموجي قليل (نفس قاعدة
-        الرسائل الأخرى: الإيموجي المعقّد ما يوصلش مليح فالواتساب).
+        رسالة واتساب تاع كوبون المكافأة — النص فـ`services/wa_templates.py`
+        (نوع reward) والأدمن يعدّلو من تبويب «رسائل واتساب».
         """
-        e = self.EMOJI
-        name = self.customer_name or "خويا"
-        link = base_url.rstrip("/") if base_url else "https://budacdz.com"
-
-        until = ""
-        if coupon.ends_at:
-            until = f"\n{e['clock']} صالح حتى *{coupon.ends_at.strftime('%d/%m/%Y')}*"
-
-        return (
-            f"سلام {name}،\nمعاك {store_name}.\n\n"
-            f"{e['heart']} طلبيتك *{self.order_number}* وصلاتك، ونتمنى عجبتك!\n\n"
-            f"حبينا نكافيوك على ثقتك فينا {e['sparkles']}\n"
-            f"عندك خصم *{coupon.value_display}* تاعك وحدك على طلبيتك الجاية.\n\n"
-            f"{e['star']} الكود تاعك: *{coupon.code}*\n"
-            f"{e['check']} يخدم مرة وحدة برك، وبهاد الرقم تاعك"
-            f"{until}\n\n"
-            f"كي تحب تطلب، اكتب الكود فالسلة قبل ما تأكّد الطلبية:\n"
-            f"{link}\n\n"
-            f"بالصحة والراحة، ونستناوك مرة أخرى {e['heart']}"
-        )
+        from services.wa_templates import render_for_order
+        return render_for_order(self, "reward", base_url, coupon=coupon)
 
     @property
     def is_open(self):
@@ -1726,12 +1588,8 @@ class AbandonedCart(db.Model):
         elif not phone.startswith("213"):
             phone = "213" + phone
 
-        names = "، ".join(item.get("name", "") for item in self.items[:3])
-        greeting = f"سلام {self.customer_name}،" if self.customer_name else "سلام،"
-        message = (
-            f"{greeting} لاحظنا أنك كنت بصدد طلب: {names}. "
-            "واش تحتاج مساعدة باش تكمّل طلبيتك؟"
-        )
+        from services.wa_templates import render_for_abandoned_cart
+        message = render_for_abandoned_cart(self)
         return f"https://wa.me/{phone}?text={quote(message)}"
 
     def __repr__(self):
@@ -1845,7 +1703,7 @@ class LandingPage(db.Model):
     """
     صفحة هبوط لحملة إعلانية — منتج واحد + فورم طلب مباشر.
 
-    ⚠️ ليش منفصلة عن صفحة المنتج العادية؟
+    ⚠️ علاش منفصلة عن صفحة المنتج العادية؟
     صفحة المنتج فيها هيدر، تصنيفات، منتجات مقترحة، سلة... كلها تشتّت
     الزائر اللي جاي من إعلان. صفحة الهبوط تحذف كلش وتخلي هدف واحد:
     يعمّر الفورم. هذا يرفع نسبة التحويل بشكل ملحوظ.
@@ -1868,7 +1726,7 @@ class LandingPage(db.Model):
     subheadline = db.Column(db.String(300), nullable=True)
     body = db.Column(db.Text, nullable=True)          # وصف مطوّل — سطر لكل فقرة
     benefits = db.Column(db.Text, nullable=True)      # مميزات — سطر لكل وحدة
-    cta_text = db.Column(db.String(80), nullable=False, default="اطلب الآن")
+    cta_text = db.Column(db.String(80), nullable=False, default="اطلب درك")
 
     # صورة الغلاف. إذا فارغة، ناخذو صورة المنتج
     hero_image = db.Column(db.String(255), nullable=True)
@@ -1952,7 +1810,7 @@ class SiteVisit(db.Model):
     """
     زوّار الموقع — مجمّعة باليوم.
 
-    ⚠️ ليش هاد التصميم وماشي سطر لكل زيارة؟
+    ⚠️ علاش هاد التصميم وماشي سطر لكل زيارة؟
     سطر لكل زيارة يعمّر قاعدة البيانات بسرعة (100 زائر × 10 صفحات =
     1000 سطر فاليوم). هنا **سطر واحد لكل زائر فاليوم**، وعدد صفحاتو
     يتزاد فنفس السطر. يعني:
@@ -2083,6 +1941,7 @@ class AdminAction(db.Model):
     INTEGRATION = "integration"
     REVIEW_EDIT = "review_edit"
     REWARD_COUPON = "reward_coupon"
+    WA_TEMPLATE = "wa_template"
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -2120,4 +1979,5 @@ class AdminAction(db.Model):
             self.INTEGRATION: "تكامل خارجي",
             self.REVIEW_EDIT: "تعديل نجوم تقييم",
             self.REWARD_COUPON: "كوبون مكافأة لزبون",
+            self.WA_TEMPLATE: "تعديل نموذج رسالة واتساب",
         }.get(self.action, self.action)
