@@ -1410,3 +1410,135 @@ def test_no_double_version_param_in_rendered_html(client, app, seed):
     import re
     html = client.get("/").get_data(as_text=True)
     assert not re.search(r'\?v=[^"\'\s]*\?v=', html)       # كان «favicon.ico?v=123?v=2»
+
+
+# ══════════════════════════════════════════════════════════════
+# v161: نماذج رسائل واتساب قابلة للتعديل + حد أدنى لكوبون المكافأة
+# ══════════════════════════════════════════════════════════════
+
+def test_every_default_message_starts_with_brand_greeting(app, seed):
+    """كل رسالة تبدا بـ«معاك BUDAC» (طلب صاحب المتجر)."""
+    from services import wa_templates as wa
+    with app.app_context():
+        oid = _make_order(app, "BD-WA-A", Order.STATUS_DELIVERED)
+        order = db.session.get(Order, oid)
+        for spec in wa.KINDS:
+            if spec["key"] in ("reward", "abandoned"):
+                continue
+            msg = order.whatsapp_message(spec["key"], "ignored-store-name")
+            assert "معاك BUDAC." in msg, spec["key"]
+            assert msg.startswith("سلام"), spec["key"]
+            assert "{" not in msg, f"متغيّر ما تعوّضش فـ{spec['key']}: {msg}"
+
+
+def test_reward_message_has_brand_and_min_amount(app, seed):
+    from models import Coupon
+    with app.app_context():
+        oid = _make_order(app, "BD-WA-B", Order.STATUS_DELIVERED)
+        order = db.session.get(Order, oid)
+        c = Coupon(code="AM-TEST1", discount_type=Coupon.TYPE_PERCENT, value=10,
+                   usage_limit=1, min_order_amount=5000)
+        db.session.add(c); db.session.commit()
+        msg = order.reward_coupon_message(c, base_url="https://budacdz.com")
+        assert "معاك BUDAC." in msg and "AM-TEST1" in msg
+        assert "5,000 دج" in msg and "{" not in msg
+        c.min_order_amount = 0
+        assert "فما فوق" not in order.reward_coupon_message(c)
+
+
+def test_admin_edit_template_changes_the_sent_message(logged_in_admin, app, seed):
+    from services import wa_templates as wa
+    oid = _make_order(app, "BD-WA-C", Order.STATUS_SHIPPED)
+    text = "سلام {name}، معاك {store}. طلبيتك {order_number} في الطريق {truck}"
+    r = logged_in_admin.post("/admin/whatsapp-templates/shipped", data={"text": text},
+                             follow_redirects=True)
+    assert r.status_code == 200
+    with app.app_context():
+        assert wa.is_customized("shipped")
+        msg = db.session.get(Order, oid).whatsapp_message("shipped")
+        assert msg.startswith("سلام زبون، معاك BUDAC. طلبيتك BD-WA-C في الطريق")
+    # الصفحة تبيّن النص الجديد + علامة «معدّلة»
+    html = logged_in_admin.get("/admin/whatsapp-templates").get_data(as_text=True)
+    assert "معدّلة" in html and "في الطريق" in html
+
+
+def test_admin_reset_template_restores_default(logged_in_admin, app, seed):
+    from services import wa_templates as wa
+    logged_in_admin.post("/admin/whatsapp-templates/thanks", data={"text": "نص جديد {name}"})
+    with app.app_context():
+        assert wa.is_customized("thanks")
+    logged_in_admin.post("/admin/whatsapp-templates/thanks/reset")
+    with app.app_context():
+        assert not wa.is_customized("thanks")
+        assert wa.get_template("thanks") == wa.KIND_BY_KEY["thanks"]["default"]
+
+
+def test_template_validation_rules(logged_in_admin, app, seed):
+    from services import wa_templates as wa
+    with app.app_context():
+        v = wa.validate_template
+        assert v("shipped", "") is not None                        # فارغ
+        assert v("shipped", "x" * (wa.MAX_LEN + 1)) is not None    # طويل بزاف
+        assert v("shipped", "مرحبا 😀") is not None                # إيموجي 4 بايت
+        assert v("shipped", "تم ✅") is not None                    # إيموجي ملوّن BMP
+        assert v("shipped", "تم {check}") is None                  # رمز نصّي مقبول
+        assert v("reward", "خصم بلا كود") is not None             # {code} ضروري
+        assert v("review", "قيّمنا") is not None                   # {link} ضروري
+        assert v("reward", "الكود {code}") is None
+        assert v("unknown_kind", "x") is not None
+    # الرفض يوصل للأدمن ولا يحفظ شي
+    logged_in_admin.post("/admin/whatsapp-templates/shipped", data={"text": "مرحبا 😀"})
+    with app.app_context():
+        assert not wa.is_customized("shipped")
+
+
+def test_unknown_placeholders_never_break_sending(app, seed):
+    from services import wa_templates as wa
+    out = wa.render_text("سلام {name} {nothing_here} {", {"name": "علي"})
+    assert out == "سلام علي {nothing_here} {"
+
+
+def test_wa_templates_page_and_nav(logged_in_admin, app, seed):
+    html = logged_in_admin.get("/admin/whatsapp-templates").get_data(as_text=True)
+    for label in ("تأكيد الطلبية", "الطلبية خرجات", "كوبون مكافأة", "سلة متروكة"):
+        assert label in html
+    assert "معاك BUDAC" in html
+    dash = logged_in_admin.get("/admin/").get_data(as_text=True)
+    assert "رسائل واتساب" in dash
+
+
+def test_wa_templates_require_login(client, app, seed):
+    assert client.get("/admin/whatsapp-templates").status_code in (302, 401)
+    assert client.post("/admin/whatsapp-templates/thanks", data={"text": "x"}).status_code in (302, 401, 400)
+
+
+def test_reward_coupon_min_amount_single_and_bulk(logged_in_admin, app, seed):
+    from models import Coupon
+    a = _make_order_for(app, "BD-MIN-A", Order.STATUS_DELIVERED, "Sara", "0555444333")
+    logged_in_admin.post(f"/admin/orders/{a}/reward-coupon",
+                         data={"percent": "10", "days": "30", "min_amount": "5000"})
+    b = _make_order_for(app, "BD-MIN-B", Order.STATUS_DELIVERED, "Hamza", "0555444222")
+    c = _make_order_for(app, "BD-MIN-C", Order.STATUS_DELIVERED, "Nour", "0555444111")
+    logged_in_admin.post("/admin/orders/bulk-reward",
+                         data={"order_ids": [b, c], "percent": "15", "min_amount": "3000"})
+    with app.app_context():
+        assert Coupon.query.filter_by(source_order_id=a).one().min_order_amount == 5000
+        for oid in (b, c):
+            assert Coupon.query.filter_by(source_order_id=oid).one().min_order_amount == 3000
+    # القيمة السالبة أو غير الرقمية ترفض
+    d = _make_order_for(app, "BD-MIN-D", Order.STATUS_DELIVERED, "Zaki", "0555444000")
+    for bad in ("-5", "abc", "99999999"):
+        logged_in_admin.post(f"/admin/orders/{d}/reward-coupon",
+                             data={"percent": "10", "min_amount": bad})
+    with app.app_context():
+        assert Coupon.query.filter_by(source_order_id=d).count() == 0
+
+
+def test_personal_coupon_with_min_amount_is_enforced_at_validity(app, seed):
+    from models import Coupon
+    with app.app_context():
+        c = Coupon(code="MIN-1", discount_type=Coupon.TYPE_PERCENT, value=10,
+                   usage_limit=1, min_order_amount=5000)
+        db.session.add(c); db.session.commit()
+        assert not c.check_validity(4000)[0]
+        assert c.check_validity(5000)[0]

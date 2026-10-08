@@ -36,7 +36,7 @@
             <td dir="ltr">{{ o.customer_phone }}</td>
             <td><a href="{{ url_for('admin.order_detail', order_id=o.id) }}">{{ o.order_number }}</a></td>
             <td><code class="coupon-code">{{ c.code }}</code></td>
-            <td>{{ c.value_display }}</td>
+            <td>{{ c.value_display }}{% if c.min_order_amount %}<br><small>من {{ '{:,}'.format(c.min_order_amount) }} دج</small>{% endif %}</td>
             <td>{{ c.state_label }}</td>
             <td>
                 {% if r.sendable %}

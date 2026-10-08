@@ -86,7 +86,7 @@ def calculate_shipping(carrier_code, wilaya_code, delivery_type="home", is_free=
         # بيانات ناقصة — ماشي نفس الشي كي الخدمة غير متوفرة
         return ShippingQuote(
             STATUS_NO_DATA,
-            message="السعر غير متوفر حاليا، يرجى التواصل معنا",
+            message="السعر ماهوش متوفر درك، راسلنا ونعطيوك السعر",
             carrier_name=carrier.name,
         )
 

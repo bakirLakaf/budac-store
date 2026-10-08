@@ -405,6 +405,9 @@
                 <div class="info-row"><span>الكود</span><strong class="tracking-num">{{ rc.code }}</strong></div>
                 <div class="info-row"><span>الخصم</span><strong>{{ rc.value_display }}</strong></div>
                 <div class="info-row"><span>الحالة</span><strong>{{ rc.state_label }}</strong></div>
+                {% if rc.min_order_amount %}
+                <div class="info-row"><span>للطلبية اللي تفوق</span><strong>{{ '{:,}'.format(rc.min_order_amount) }} دج</strong></div>
+                {% endif %}
                 {% if rc.ends_at %}
                 <div class="info-row"><span>صالح حتى</span><strong>{{ rc.ends_at.strftime('%d/%m/%Y') }}</strong></div>
                 {% endif %}
@@ -426,6 +429,9 @@
                     </label>
                     <label>صالح لـ(يوم)
                         <input type="number" name="days" min="1" max="365" value="30" placeholder="فارغ = بلا انتهاء">
+                    </label>
+                    <label>للطلبية اللي تفوق (دج)
+                        <input type="number" name="min_amount" min="0" max="1000000" placeholder="فارغ = بلا شرط">
                     </label>
                     <button type="submit" class="btn-admin btn-sm">🎁 اصنع الكوبون</button>
                 </form>

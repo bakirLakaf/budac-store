@@ -727,7 +727,7 @@ def _apply_image_decisions(product):
     """
     يطبّق ترتيب الصور والصورة الرئيسية والحذف — كلهم مرة وحدة.
 
-    ⚠️ ليش هكذا وماشي مسار لكل عملية؟
+    ⚠️ علاش هكذا وماشي مسار لكل عملية؟
     قبل، كل تحريك صورة كان يعيد تحميل الصفحة ويرجّع الأدمن لفوق.
     درك يرتّب ويحذف براحتو فالمتصفح، ويضغط «حفظ» مرة وحدة.
 
@@ -1122,7 +1122,7 @@ def variant_image(variant_id):
     """
     يربط موديل بصورة من **صور المنتج الموجودة**.
 
-    ⚠️ ليش ماشي رفع جديد؟ الصور نفسها: الأدمن يرفع صور المنتج مرة وحدة،
+    ⚠️ علاش ماشي رفع جديد؟ الصور نفسها: الأدمن يرفع صور المنتج مرة وحدة،
     وبعدها يقول "هاد الموديل = هاد الصورة". بلا تكرار على القرص، وبلا
     ما يعاود يرفع نفس الصورة لكل موديل.
     """
@@ -1649,7 +1649,7 @@ def orders_list():
 
     orders = query.order_by(Order.created_at.desc()).limit(200).all()
 
-    # عدّاد لكل حالة — باش الأدمن يشوف بسرعة شحال عندو جديد
+    # عدّاد لكل حالة — باش الأدمن يشوف بسرعة قداش عندو جديد
     counts = dict(
         db.session.query(Order.status, func.count(Order.id))
         .group_by(Order.status)
@@ -2043,10 +2043,17 @@ def _reward_params_from_form():
         if not days or not (1 <= days <= 365):
             raise _RewardError("مدة الصلاحية من 1 لـ365 يوم (ولا خلّيها فارغة)")
         ends_at = utcnow() + timedelta(days=days)
-    return percent, ends_at
+    # الحد الأدنى لقيمة المنتجات (بلا التوصيل): فارغ ولا 0 = بلا شرط
+    min_raw = (request.form.get("min_amount") or "").strip()
+    min_amount = 0
+    if min_raw:
+        min_amount = request.form.get("min_amount", type=int)
+        if min_amount is None or not (0 <= min_amount <= 1_000_000):
+            raise _RewardError("الحد الأدنى بالدينار (رقم من 0 لـ1,000,000) — ولا خلّيه فارغ")
+    return percent, ends_at, min_amount
 
 
-def _make_reward_coupon(order, percent, ends_at):
+def _make_reward_coupon(order, percent, ends_at, min_amount=0):
     """
     يصنع كوبون مكافأة شخصي لطلبية (بلا commit — المستدعي هو اللي يحفظ).
 
@@ -2077,6 +2084,7 @@ def _make_reward_coupon(order, percent, ends_at):
         value=percent,
         usage_limit=1,
         ends_at=ends_at,
+        min_order_amount=min_amount or 0,
         is_active=True,
         customer_phone=phone,
         source_order_id=order.id,
@@ -2099,17 +2107,17 @@ def order_create_reward_coupon(order_id):
     back = redirect(url_for("admin.order_detail", order_id=order.id))
 
     try:
-        percent, ends_at = _reward_params_from_form()
+        percent, ends_at, min_amount = _reward_params_from_form()
     except _RewardError as e:
         flash(str(e), "error")
         return back
 
     try:
-        coupon, status = _make_reward_coupon(order, percent, ends_at)
+        coupon, status = _make_reward_coupon(order, percent, ends_at, min_amount)
         if status == "created":
             audit.record(
                 AdminAction.REWARD_COUPON, "order", order.order_number,
-                f"{coupon.code} — {percent}%",
+                f"{coupon.code} — {percent}%" + (f" (من {min_amount:,} دج)" if min_amount else ""),
             )
             db.session.commit()
     except Exception:
@@ -2150,7 +2158,7 @@ def orders_bulk_reward():
         return redirect(url_for("admin.orders_list"))
 
     try:
-        percent, ends_at = _reward_params_from_form()
+        percent, ends_at, min_amount = _reward_params_from_form()
     except _RewardError as e:
         flash(str(e), "error")
         return redirect(url_for("admin.orders_list"))
@@ -2177,7 +2185,7 @@ def orders_bulk_reward():
                 skipped_dup += 1
                 continue
 
-            coupon, status = _make_reward_coupon(order, percent, ends_at)
+            coupon, status = _make_reward_coupon(order, percent, ends_at, min_amount)
             if status == "bad_phone":
                 skipped_phone += 1
                 continue
@@ -2192,7 +2200,7 @@ def orders_bulk_reward():
         if created:
             audit.record(
                 AdminAction.REWARD_COUPON, "order", None,
-                f"{created} كوبون مكافأة — {percent}%",
+                f"{created} كوبون مكافأة — {percent}%" + (f" (من {min_amount:,} دج)" if min_amount else ""),
             )
         db.session.commit()
     except Exception:
@@ -2304,7 +2312,7 @@ def abandoned_list():
         .all()
     )
 
-    # القيمة الضائعة المحتملة — يوري للأدمن شحال يستاهل الوقت
+    # القيمة الضائعة المحتملة — يوري للأدمن قداش يستاهل الوقت
     potential = (
         db.session.query(func.sum(AbandonedCart.cart_total))
         .filter(AbandonedCart.status.in_([AbandonedCart.STATUS_NEW, AbandonedCart.STATUS_CONTACTED]))
@@ -2607,7 +2615,7 @@ def order_send_to_carrier(order_id):
         # ⚠️ ما نبلعوش الفشل بصمت — الأدمن لازم يعرف قبل ما يشوف 400
         flash(
             f"ما لقيناش معرّف الوجهة عند ZR ({why}). "
-            "اضغط «افحص ليش ما لقيناش المعرّف» فصفحة التشخيص.",
+            "اضغط «افحص علاش ما لقيناش المعرّف» فصفحة التشخيص.",
             "warning",
         )
 
@@ -2876,6 +2884,64 @@ def orders_refresh_all_tracking():
     return redirect(url_for("admin.orders_list"))
 
 
+@admin_bp.route("/whatsapp-templates")
+@login_required
+def wa_templates_page():
+    """تبويب «رسائل واتساب»: نموذج لكل نوع رسالة، والأدمن يعدّلو."""
+    from services import wa_templates as wa
+
+    kinds = [
+        {**spec, "text": wa.get_template(spec["key"]),
+         "customized": wa.is_customized(spec["key"])}
+        for spec in wa.KINDS
+    ]
+    symbols = wa._symbols()
+    return render_template(
+        "admin/wa_templates.html",
+        kinds=kinds,
+        variables=wa.VARIABLES,
+        symbol_help=wa.SYMBOL_HELP,
+        preview_ctx={**symbols, **wa.sample_context()},
+        max_len=wa.MAX_LEN,
+    )
+
+
+@admin_bp.route("/whatsapp-templates/<kind>", methods=["POST"])
+@login_required
+def wa_template_save(kind):
+    """يحفظ تعديل الأدمن لنموذج رسالة (يرفض الإيموجي الملوّن والنص الناقص)."""
+    from services import wa_templates as wa
+
+    if kind not in wa.KIND_BY_KEY:
+        abort(404)
+    back = redirect(url_for("admin.wa_templates_page") + f"#kind-{kind}")
+    try:
+        wa.save_template(kind, request.form.get("text", ""))
+        audit.record(AdminAction.WA_TEMPLATE, "wa_template", kind, "تعديل")
+        db.session.commit()
+    except ValueError as e:
+        db.session.rollback()
+        flash(str(e), "error")
+        return back
+    flash(f"تحفظ نموذج «{wa.KIND_BY_KEY[kind]['label']}»", "success")
+    return back
+
+
+@admin_bp.route("/whatsapp-templates/<kind>/reset", methods=["POST"])
+@login_required
+def wa_template_reset(kind):
+    """يرجّع النص الأصلي لنوع رسالة (يمسح تعديل الأدمن)."""
+    from services import wa_templates as wa
+
+    if kind not in wa.KIND_BY_KEY:
+        abort(404)
+    wa.reset_template(kind)
+    audit.record(AdminAction.WA_TEMPLATE, "wa_template", kind, "رجوع للأصلي")
+    db.session.commit()
+    flash(f"رجع النص الأصلي لـ«{wa.KIND_BY_KEY[kind]['label']}»", "success")
+    return redirect(url_for("admin.wa_templates_page") + f"#kind-{kind}")
+
+
 @admin_bp.route("/integrations", methods=["GET", "POST"])
 @login_required
 def integrations():
@@ -2990,7 +3056,7 @@ def _read_landing_form(data):
         "subheadline": (data.get("subheadline") or "").strip() or None,
         "body": (data.get("body") or "").strip() or None,
         "benefits": (data.get("benefits") or "").strip() or None,
-        "cta_text": (data.get("cta_text") or "").strip() or "اطلب الآن",
+        "cta_text": (data.get("cta_text") or "").strip() or "اطلب درك",
         "campaign_price": data.get("campaign_price", type=int) or None,
         "compare_at_price": data.get("compare_at_price", type=int) or None,
         "show_countdown": bool(data.get("show_countdown")),
@@ -3191,7 +3257,7 @@ def _zr_report(order, ctx):
         row("الولاية", diag.get("wilaya_code"))
         row("البلدية المطلوبة", diag.get("commune_name") or "—")
         row("بعد التطبيع", diag.get("normalized") or "—")
-        row("الولاية موجودة عند ZR", "إيه" if diag.get("wilaya_found") else "لا")
+        row("الولاية موجودة عند ZR", "نعم" if diag.get("wilaya_found") else "لا")
         row("المطابقة", diag.get("match") or diag.get("search_match") or "ما لقيناهاش")
         row("مناطق ZR", diag.get("total_territories"))
         if diag.get("error"):
@@ -3229,7 +3295,7 @@ def order_zr_debug(order_id):
     """
     تشخيص الإرسال لـZR — يعرض بالضبط واش نبعثو وواش يرد.
 
-    ⚠️ ليش هاد الصفحة؟
+    ⚠️ علاش هاد الصفحة؟
     ZR يرد بـ400 «One or more validation errors» بلا تفاصيل فبعض الحالات.
     بلا ما نشوفو الـpayload الحقيقي والرد الخام، أي إصلاح يكون تخمين.
     """
@@ -3771,7 +3837,7 @@ def visitors_reset():
         # يخلّي غير الأسبوع الجاري (من السبت لليوم)
         removed, start = keep_current_week()
         flash(
-            f"مسحنا {removed} سطر قديم — بقى غير الأسبوع الجاري "
+            f"مسحنا {removed} سطر قديم — بقى الأسبوع الجاري برك "
             f"(من {start.strftime('%d/%m')})",
             "success",
         )
@@ -3927,7 +3993,7 @@ def variant_packs(variant_id):
     for quantity, label, price in new_packs:
         key = label.lower()
         if key in seen:
-            flash(f"«{label}» مكرر — خليّنا الأول فقط", "warning")
+            flash(f"«{label}» مكرر — خليّنا الأول برك", "warning")
             continue
         seen.add(key)
         unique.append((quantity, label, price))
@@ -3959,7 +4025,7 @@ def product_packs_bulk(product_id):
     """
     يضيف عرضًا جاهزًا لعدة موديلات ضربة وحدة.
 
-    ⚠️ ليش هاد المسار؟
+    ⚠️ علاش هاد المسار؟
     منتج فيه 10 موديلات (ألوان) بنفس التغليف — «رولو (12 متر)» ينطبق
     عليهم كلهم. بلا هذا، الأدمن يعمّر نفس العرض 10 مرات.
 
@@ -4298,7 +4364,7 @@ def product_image_move(product_id, image_id):
     """
     يحرّك صورة خطوة يمين ولا يسار فترتيب المعرض.
 
-    ⚠️ ليش أزرار وماشي سحب؟ السحب (drag & drop) صعيب فالموبايل ويحتاج
+    ⚠️ علاش أزرار وماشي سحب؟ السحب (drag & drop) صعيب فالموبايل ويحتاج
     مكتبة. الأدمن يرتّب صور مرة وحدة عند إضافة المنتج، فأزرار بسيطة
     تخدم الغرض بلا تعقيد.
     """
@@ -4422,7 +4488,7 @@ def variant_price(variant_id):
     """
     يبدّل سعر موديل واحد — تعديل سريع من رأس البطاقة.
 
-    ⚠️ ليش مسار مستقل؟ الفورم الرئيسي تاع المنتج طويل ويحفظ كلش.
+    ⚠️ علاش مسار مستقل؟ الفورم الرئيسي تاع المنتج طويل ويحفظ كلش.
     تبديل سعر موديل واحد ما يستاهلش حفظ الصفحة كاملة.
 
     القيمة الفارغة = الموديل يرث سعر المنتج (ماشي صفر).

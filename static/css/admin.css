@@ -2280,3 +2280,26 @@ img.thumb-sm:hover {
 .reward-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
 .reward-table .reward-row.is-sent { opacity: .55; }
 .reward-done { color: #2e7d32; font-weight: 600; }
+
+/* ---------- تبويب «رسائل واتساب» (v161) ---------- */
+.wa-warning { background: #fff7e6; border: 1px solid #f0d9a8; border-radius: 10px;
+              padding: 10px 14px; margin: 10px 0 18px; font-size: 14px; line-height: 1.9; }
+.wa-warning code, .hint code { background: #f1ece2; border-radius: 4px; padding: 0 5px; direction: ltr; unicode-bidi: embed; }
+.wa-card { background: #fff; border: 1px solid #e6dfd0; border-radius: 14px; padding: 16px; margin-bottom: 18px; }
+.wa-card-head h2 { margin: 0 0 2px; font-size: 18px; }
+.wa-tag { font-size: 12px; background: #e8f5e9; color: #2e7d32; border-radius: 999px; padding: 2px 8px; margin-inline-start: 8px; }
+.wa-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-top: 10px; }
+@media (max-width: 900px) { .wa-grid { grid-template-columns: 1fr; } }
+.wa-text { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #d9d2c5; border-radius: 10px;
+           font: inherit; line-height: 1.8; resize: vertical; }
+.wa-vars { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.wa-var { border: 1px solid #d9d2c5; background: #faf7f0; border-radius: 6px; padding: 2px 8px;
+          font-family: monospace; font-size: 13px; cursor: pointer; direction: ltr; }
+.wa-var:hover { background: #f1e8d0; }
+.wa-actions { display: flex; justify-content: space-between; align-items: center; }
+.wa-count { color: #8a8174; }
+.wa-preview-box { background: #ece5dd; border-radius: 12px; padding: 12px; }
+.wa-preview-title { font-size: 12px; color: #6b6258; margin-bottom: 8px; }
+.wa-bubble { background: #dcf8c6; border-radius: 10px; padding: 10px 12px; white-space: pre-wrap;
+             line-height: 1.8; font-size: 14px; word-break: break-word; }
+.wa-reset { margin-top: 8px; }

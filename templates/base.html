@@ -39,7 +39,7 @@
     {# ═══════════════════════════════════════════════════
        البيانات المنظّمة (Schema.org)
 
-       ⚠️ ليش مهمة؟ جوجل يقرا HTML كنص، فما يعرفش واش هاد الصفحة
+       ⚠️ علاش مهمة؟ جوجل يقرا HTML كنص، فما يعرفش واش هاد الصفحة
        متجر ولا مدونة. هاد الكتلة تقولّو صراحة: «هاد متجر اسمو BUDAC،
        فالجزائر، هاد هاتفو». بلاها، البحث على «budac» ممكن يعطي
        نتائج أخرى قبلك.
@@ -153,7 +153,7 @@
                   id="headerSearch" autocomplete="off"
                   data-suggest-url="{{ url_for('shop.api_search_suggest') }}">
                 <input type="search" name="q" value="{{ request.args.get('q', '') }}"
-                       placeholder="على ماذا تبحث؟" aria-label="بحث فالمنتجات"
+                       placeholder="على واش تقلّب؟" aria-label="بحث فالمنتجات"
                        id="searchInput" role="combobox" aria-expanded="false"
                        aria-controls="searchSuggest" aria-autocomplete="list">
                 <button type="submit" aria-label="بحث">

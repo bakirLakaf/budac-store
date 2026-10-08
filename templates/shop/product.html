@@ -169,7 +169,7 @@
                  data-url="{{ url_for('shop.api_calculate', slug=product.slug) }}">
 
                 {% if product.calculator_type == 'perimeter' %}
-                <h3 class="calc-title">📐 شحال تحتاج؟</h3>
+                <h3 class="calc-title">📐 قداش تحتاج؟</h3>
                 <p class="calc-hint">عطينا مقاس المرآة ونحسبولك الكمية</p>
 
                 <div class="calc-shapes">
@@ -197,7 +197,7 @@
                     <input type="number" name="quantity" min="1" value="1"></label>
 
                 {% else %}
-                <h3 class="calc-title">📐 شحال تحتاج؟</h3>
+                <h3 class="calc-title">📐 قداش تحتاج؟</h3>
                 <p class="calc-hint">
                     عطينا مقاس السطح اللي حبيت تغطي
                     {% if product.roll_width_m %}(عرض اللفة: {{ product.roll_width_m }} م){% endif %}
@@ -244,17 +244,17 @@
             <details class="product-faq">
                 <summary>أسئلة شائعة</summary>
                 <dl>
-                    <dt>شحال يوصل الطلب؟</dt>
+                    <dt>وقتاش يوصل الطلب؟</dt>
                     <dd>من 2 لـ7 أيام حسب الولاية. نتصلو بيك قبل الإرسال باش نأكدو معاك.</dd>
 
                     <dt>واش نخلّص قبل ما توصلني؟</dt>
                     <dd>لا. <strong>الدفع عند الاستلام</strong> — تشوف السلعة أولاً وبعدها تخلّص.</dd>
 
                     <dt>واش نقدر نبدّل إذا ما عجبنيش؟</dt>
-                    <dd>إيه، خلال 48 ساعة من الاستلام إذا كان فيه عيب أو وصلك غير اللي طلبت.
+                    <dd>نعم، خلال 48 ساعة من الاستلام إذا كان فيه عيب أو وصلك غير اللي طلبت.
                         <a href="{{ url_for('shop.page', slug='returns') }}">شوف التفاصيل</a>.</dd>
 
-                    <dt>شحال سعر التوصيل؟</dt>
+                    <dt>قداش سعر التوصيل؟</dt>
                     <dd>يختلف حسب الولاية والشركة. تشوفو <strong>بالضبط</strong> فصفحة الطلب
                         قبل ما تأكد — بلا مفاجآت.</dd>
                 </dl>
@@ -321,7 +321,7 @@
                     <button type="submit" class="btn-primary btn-block">أضف للسلة</button>
                     <button type="submit" name="go_to_cart" value="1" class="btn-ghost-link">أضف واذهب للسلة ←</button>
                 </form>
-                <p class="stock-note" id="stockNote">✓ متوفر — اطلبه الآن</p>
+                <p class="stock-note" id="stockNote">✓ متوفر — اطلبه درك</p>
 
                 {# ⚠️ شريط الثقة هنا بالضبط، ماشي فالتذييل. الزبون يقرر
                    وقت ما يشوف الزر — والتذييل ما يوصلوش أصلاً. #}
@@ -551,7 +551,7 @@
 
                 if (data.type === "perimeter") {
                     /* 🔴 كان هنا سطر «اطلب X لفة» — اتحيّد.
-                       المنتج يتباع بالمتر، والزبون ما يعرفش شحال فاللفة.
+                       المنتج يتباع بالمتر، والزبون ما يعرفش قداش فاللفة.
                        درك رقم واحد واضح: كم متر يطلب. */
                     html += '<p class="cr-main">تحتاج <strong>' + res.meters_to_order + ' متر</strong></p>';
                     html += '<p class="cr-detail">' + res.shape_label;
@@ -625,7 +625,7 @@
                 }, 1800);
             }
 
-            // clipboard API يخدم غير على https (أو localhost) — نحضّرو بديل
+            // clipboard API يخدم برك على https (أو localhost) — نحضّرو بديل
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(link).then(showDone);
             } else {
@@ -1267,7 +1267,7 @@
         <span class="buy-bar-price" id="buyBarPrice">{{ product.price_display }}</span>
         <span class="buy-bar-name">{{ product.name }}</span>
     </div>
-    <button type="button" class="buy-bar-btn" id="buyBarBtn">اطلب الآن</button>
+    <button type="button" class="buy-bar-btn" id="buyBarBtn">اطلب درك</button>
 </div>
 {% endif %}
 

@@ -106,7 +106,7 @@
 
 <!-- ═════ 3ب. تشخيص معرّف الوجهة ═════ -->
 {% if territory_diag %}
-<h2 class="form-section-title">3ب. ليش ما لقيناش المعرّف</h2>
+<h2 class="form-section-title">3ب. علاش ما لقيناش المعرّف</h2>
 
 {% if territory_diag.error %}
 <p style="color:#B4453E;font-weight:600;">🔴 {{ territory_diag.error }}</p>
@@ -447,7 +447,7 @@
         setTimeout(function () { btn.textContent = old; }, 2000);
     }
 
-    /* ⚠️ طريقتين قصدًا: navigator.clipboard يخدم غير فـHTTPS ولا
+    /* ⚠️ طريقتين قصدًا: navigator.clipboard يخدم برك فـHTTPS ولا
        localhost. لو اعتمدنا عليه وحدو، الزر يطيح بصمت فأي حالة
        أخرى — والأدمن يظن أنو نسخ. */
     function fallback() {

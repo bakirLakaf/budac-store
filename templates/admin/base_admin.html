@@ -72,6 +72,9 @@
         <a href="{{ url_for('admin.upsells_list') }}" class="{{ 'is-active' if 'upsell' in request.endpoint }}">
             الاقتراحات
         </a>
+        <a href="{{ url_for('admin.wa_templates_page') }}" class="{{ 'is-active' if 'wa_template' in request.endpoint }}">
+            رسائل واتساب
+        </a>
         <a href="{{ url_for('admin.coupons_list') }}" class="{{ 'is-active' if 'coupon' in request.endpoint }}">
             كوبونات الخصم
         </a>
@@ -209,7 +212,7 @@ document.addEventListener('click', function (e) {
         setTimeout(function () { btn.classList.remove('is-copied'); }, 1200);
     }
 
-    // ⚠️ `navigator.clipboard` ما يخدمش غير فـHTTPS ولا localhost.
+    // ⚠️ `navigator.clipboard` ما يخدمش إلا فـHTTPS ولا localhost.
     // نديرو تراجعًا لطريقة قديمة باش تخدم فكل الحالات.
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(function () { done(true); },

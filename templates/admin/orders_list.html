@@ -44,9 +44,11 @@
                aria-label="نسبة الخصم">
         <input type="number" name="days" min="1" max="365" value="30"
                placeholder="أيام" aria-label="مدة الصلاحية بالأيام">
+        <input type="number" name="min_amount" min="0" max="1000000"
+               placeholder="للطلبية &gt; دج" aria-label="الحد الأدنى للطلبية بالدينار">
         <button type="submit" class="btn-admin btn-sm"
                 formaction="{{ url_for('admin.orders_bulk_reward') }}"
-                onclick="var p=this.form.elements['percent'].value; if(!p){alert('اكتب نسبة الخصم'); return false;} return confirm('تصنع كوبون مكافأة لكل زبون مختار (اللي طلبيتو «تم التسليم» برك)؟')">
+                onclick="var p=this.form.elements['percent'].value; if(!p){alert('اكتب نسبة الخصم'); return false;} return confirm('تصنع كوبون مكافأة لكل زبون مختار (اللي طلبيتو «تم التسليم» برك)؟ الحد الأدنى الفارغ = بلا شرط.')">
             🎁 كوبون مكافأة للمختارة
         </button>
     </span>
