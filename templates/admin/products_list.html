@@ -33,14 +33,16 @@
             <p class="hint hint-sm">
                 ⚠️ <strong>slug موجود</strong> = تحديث · <strong>slug جديد</strong> = منتج جديد.
                 <br>الخانة الفارغة <strong>ما تمسحش</strong> القيمة القديمة.
-                <br>الصور ما تتلمسش من الملف.
+                <br>الصور: ارفع معاها <strong>ملف ZIP</strong> (اختياري) — الأسماء تتربط من صفحة <strong>«الصور»</strong> فالـExcel
+                (رابط المنتج · الموديل · اسم الملف). RAR ما يتقبلش.
             </p>
 
             <form method="post" action="{{ url_for('admin.products_import') }}"
                   enctype="multipart/form-data" class="xl-form"
-                  onsubmit="return confirm('تستورد المنتجات من هاد الملف؟')">
+                  onsubmit="if(!confirm('تستورد المنتجات من هاد الملف؟')) return false; var b=this.querySelector('button'); b.disabled=true; b.textContent='⏳ جاري الاستيراد... ما تغلقش الصفحة';">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="file" name="excel_file" accept=".xlsx,.xlsm" required>
+                <label class="xl-file">ملف Excel <input type="file" name="excel_file" accept=".xlsx,.xlsm" required></label>
+                <label class="xl-file">ملف الصور ZIP (اختياري) <input type="file" name="images_zip" accept=".zip"></label>
                 <button type="submit" class="btn-admin btn-sm">⬆️ استورد</button>
             </form>
         </div>

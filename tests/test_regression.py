@@ -1542,3 +1542,218 @@ def test_personal_coupon_with_min_amount_is_enforced_at_validity(app, seed):
         db.session.add(c); db.session.commit()
         assert not c.check_validity(4000)[0]
         assert c.check_validity(5000)[0]
+
+
+# ══════════════════════════════════════════════════════════════
+# v162: محرّر الصور (قص وتدوير) + إصلاح CSP للصور من blob
+# ══════════════════════════════════════════════════════════════
+
+def test_csp_allows_blob_images(client, app, seed):
+    """بلاه blob: المتصفح يمنع تصغير الصور ومعاينة القص بصمت."""
+    csp = client.get("/").headers.get("Content-Security-Policy", "")
+    img_src = [d for d in csp.split(";") if d.strip().startswith("img-src")][0]
+    assert "blob:" in img_src and "'self'" in img_src
+    assert "script-src 'self'" in csp                      # المكتبة محلية، ماشي CDN
+
+
+def test_cropper_vendor_files_are_served(client, app, seed):
+    for path, marker in (
+        ("/static/vendor/cropperjs/cropper.min.js", b"Cropper.js v1.6.2"),
+        ("/static/vendor/cropperjs/cropper.min.css", b".cropper-container"),
+        ("/static/vendor/cropperjs/LICENSE", b"MIT"),
+        ("/static/js/image-editor.js", b"BudacImageEditor"),
+    ):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert marker in r.data, path
+
+
+def test_admin_pages_load_image_editor_script(logged_in_admin, app, seed):
+    html = logged_in_admin.get("/admin/").get_data(as_text=True)
+    assert "js/image-editor.js" in html
+
+
+def test_product_form_routes_uploads_through_editor(logged_in_admin, app, seed):
+    html = logged_in_admin.get("/admin/products/new").get_data(as_text=True)
+    assert "BudacImageEditor.edit" in html
+    assert "aspect: box.dataset.kind === 'extra' ? NaN : 1" in html   # الأساسية 1:1، التوضيحية حرّة
+
+
+def test_category_and_offer_file_inputs_use_editor(logged_in_admin, app, seed):
+    cats = logged_in_admin.get("/admin/categories").get_data(as_text=True)
+    assert 'name="image"' in cats and 'data-image-editor="1"' in cats
+    offer = logged_in_admin.get("/admin/offers/new").get_data(as_text=True)
+    assert 'name="banner"' in offer and 'data-image-editor="16/9"' in offer
+
+
+# ══════════════════════════════════════════════════════════════
+# v163: استيراد المنتجات مع صورها (Excel + ZIP)
+# ══════════════════════════════════════════════════════════════
+
+def _xl_bytes(products, variants=(), images=()):
+    """Excel صغير بنفس صيغة الاستيراد: products=(slug,name,price)، variants=(slug,label)، images=(slug,label,file)."""
+    import io
+    from openpyxl import Workbook
+    from services.excel_io import (COLS_PRODUCTS, COLS_VARIANTS, COLS_IMAGES,
+                                   SHEET_PRODUCTS, SHEET_VARIANTS, SHEET_IMAGES)
+    wb = Workbook()
+    ws = wb.active; ws.title = SHEET_PRODUCTS
+    ws.append(COLS_PRODUCTS)
+    for slug, name, price in products:
+        row = {c: None for c in COLS_PRODUCTS}
+        row.update({"الرابط (slug)": slug, "اسم المنتج": name, "السعر": price, "مفعّل": "لا"})
+        ws.append([row[c] for c in COLS_PRODUCTS])
+    wv = wb.create_sheet(SHEET_VARIANTS); wv.append(COLS_VARIANTS)
+    for slug, label in variants:
+        row = {c: None for c in COLS_VARIANTS}
+        row.update({"رابط المنتج": slug, "اسم الموديل": label})
+        wv.append([row[c] for c in COLS_VARIANTS])
+    wi = wb.create_sheet(SHEET_IMAGES); wi.append(COLS_IMAGES)
+    for r in images:
+        wi.append(list(r))
+    buf = io.BytesIO(); wb.save(buf); return buf.getvalue()
+
+
+def _jpeg_bytes(color=(200, 30, 30), size=(300, 200)):
+    import io
+    from PIL import Image
+    buf = io.BytesIO(); Image.new("RGB", size, color).save(buf, "JPEG"); return buf.getvalue()
+
+
+def _zip_bytes(files):
+    import io, zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, data in files.items():
+            z.writestr(name, data)
+    return buf.getvalue()
+
+
+def _post_import(client, xlsx, zip_bytes=None, zip_name="imgs.zip"):
+    import io
+    data = {"excel_file": (io.BytesIO(xlsx), "p.xlsx")}
+    if zip_bytes is not None:
+        data["images_zip"] = (io.BytesIO(zip_bytes), zip_name)
+    return client.post("/admin/products/import", data=data,
+                       content_type="multipart/form-data", follow_redirects=True)
+
+
+def test_import_with_zip_attaches_images_and_links_variants(logged_in_admin, app, seed):
+    from models import Product, ProductImage
+    xlsx = _xl_bytes(
+        [("zz-handle", "مقبض تجريبي", 500), ("zz-single", "منتج وحيد", 300)],
+        variants=[("zz-handle", "ذهبي"), ("zz-handle", "فضي")],
+        images=[("zz-handle", "ذهبي", "gold.jpg"), ("zz-handle", "فضي", "silver.jpg"),
+                ("zz-single", "", "single.jpg")],
+    )
+    zb = _zip_bytes({"folder/gold.jpg": _jpeg_bytes((220, 180, 40)),   # مجلد داخل ZIP — عادي
+                     "silver.jpg": _jpeg_bytes((190, 190, 190)),
+                     "single.jpg": _jpeg_bytes((10, 10, 200)),
+                     "unused.jpg": _jpeg_bytes()})                      # ماشي فـExcel ← ما يتلمسش
+    r = _post_import(logged_in_admin, xlsx, zb)
+    assert r.status_code == 200
+    with app.app_context():
+        handle = Product.query.filter_by(slug="zz-handle").one()
+        single = Product.query.filter_by(slug="zz-single").one()
+        assert ProductImage.query.filter_by(product_id=handle.id).count() == 2
+        assert ProductImage.query.filter_by(product_id=single.id).count() == 1
+        assert handle.image_filename and single.image_filename            # الرئيسية تتحدّد
+        imgs = {v.label: v.image_filename for v in handle.variants}
+        assert imgs["ذهبي"] and imgs["فضي"] and imgs["ذهبي"] != imgs["فضي"]
+        assert ProductImage.query.count() == 3                             # unused.jpg ما دخلش
+
+
+def test_import_images_is_idempotent_and_keeps_manual_variant_choice(logged_in_admin, app, seed):
+    from models import Product, ProductImage, ProductVariant
+    xlsx = _xl_bytes([("zz-idem", "منتج", 100)], [("zz-idem", "أحمر")],
+                     [("zz-idem", "أحمر", "red.jpg")])
+    zb = _zip_bytes({"red.jpg": _jpeg_bytes()})
+    _post_import(logged_in_admin, xlsx, zb)
+    with app.app_context():
+        v = ProductVariant.query.filter_by(label="أحمر").one()
+        v.image_filename = "choix-manuel.webp"           # الأدمن بدّل الصورة يدويًا
+        db.session.commit()
+    _post_import(logged_in_admin, xlsx, zb)               # نفس الملفين مرة ثانية
+    with app.app_context():
+        p = Product.query.filter_by(slug="zz-idem").one()
+        assert ProductImage.query.filter_by(product_id=p.id).count() == 1   # ما تكرّرتش
+        assert ProductVariant.query.filter_by(label="أحمر").one().image_filename == "choix-manuel.webp"
+
+
+def test_import_reports_missing_unknown_and_bad_images(logged_in_admin, app, seed):
+    from models import ProductImage
+    xlsx = _xl_bytes([("zz-warn", "منتج", 100)], [],
+                     [("zz-warn", "", "absent.jpg"),          # ماكانش فـZIP
+                      ("no-such-product", "", "a.jpg"),       # منتج مجهول
+                      ("zz-warn", "", "fake.jpg"),            # ماشي صورة حقيقية
+                      ("zz-warn", "موديل مجهول", "ok.jpg")])  # صورة تتزاد + موديل مجهول
+    zb = _zip_bytes({"a.jpg": _jpeg_bytes(), "fake.jpg": b"this is not an image",
+                     "ok.jpg": _jpeg_bytes()})
+    html = _post_import(logged_in_admin, xlsx, zb).get_data(as_text=True)
+    assert "absent.jpg" in html and "no-such-product" in html
+    assert "fake.jpg" in html and "موديل مجهول" in html
+    with app.app_context():
+        assert ProductImage.query.count() == 1               # ok.jpg برك
+
+
+def test_import_rejects_rar_and_non_zip_but_keeps_excel_untouched(logged_in_admin, app, seed):
+    from models import Product
+    xlsx = _xl_bytes([("zz-rar", "منتج", 100)])
+    html = _post_import(logged_in_admin, xlsx, b"Rar!\x1a\x07\x00junk", "photos.rar").get_data(as_text=True)
+    assert "RAR" in html and "ZIP" in html
+    html = _post_import(logged_in_admin, xlsx, b"not a zip at all", "photos.zip").get_data(as_text=True)
+    assert "ماشي ZIP صحيح" in html
+    with app.app_context():
+        assert Product.query.filter_by(slug="zz-rar").count() == 0   # رفض كامل قبل أي كتابة
+
+
+def test_import_warns_when_sheet_and_zip_do_not_match(logged_in_admin, app, seed):
+    # صفحة «الصور» بلا ZIP
+    xlsx = _xl_bytes([("zz-nozip", "منتج", 100)], [], [("zz-nozip", "", "a.jpg")])
+    html = _post_import(logged_in_admin, xlsx).get_data(as_text=True)
+    assert "بلا ملف ZIP" in html
+    # ZIP بلا صفحة «الصور»
+    xlsx2 = _xl_bytes([("zz-nosheet", "منتج", 100)])
+    html = _post_import(logged_in_admin, xlsx2, _zip_bytes({"a.jpg": _jpeg_bytes()})).get_data(as_text=True)
+    assert "بلا صفحة" in html
+
+
+def test_zip_slip_names_never_touch_disk_and_names_are_repaired(app):
+    import zipfile, io
+    from services.excel_io import _zip_basename, _zip_index, _find_zip_member
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("../../etc/evil.jpg", b"x")
+        z.writestr("__MACOSX/._a.jpg", b"x")
+        z.writestr("Dir\\Photo One.JPG", b"x")
+    with zipfile.ZipFile(buf) as z:
+        idx = _zip_index(z)
+        assert "evil.jpg" in idx and "photo one.jpg" in idx and "._a.jpg" not in idx
+        assert _find_zip_member(idx, "photo one") is not None           # بلا امتداد + حروف كبيرة/صغيرة
+        assert _find_zip_member(idx, "PHOTO ONE.jpg") is not None
+    # اسم عربي مخزّن بـUTF-8 بلا علامة (ZIP قديم) يتصلّح
+    info = zipfile.ZipInfo("مقبض ذهبي.jpg".encode("utf-8").decode("cp437"))
+    info.flag_bits = 0
+    assert _zip_basename(info) == "مقبض ذهبي.jpg"
+
+
+def test_import_route_allows_bigger_request_than_global_limit(logged_in_admin, app, seed):
+    """الحد العام 30 ميغا ما يوقّفش استيراد Excel + صور."""
+    from models import Product
+    app.config["MAX_CONTENT_LENGTH"] = 150_000           # حد عام صغير للتجربة
+    xlsx = _xl_bytes([("zz-big", "منتج", 100)], [], [("zz-big", "", "big.jpg")])
+    from PIL import Image
+    import io, os
+    noise = Image.frombytes("RGB", (400, 400), os.urandom(400 * 400 * 3))   # صورة ما تتضغطش
+    b = io.BytesIO(); noise.save(b, "PNG")
+    zb = _zip_bytes({"big.jpg": b.getvalue()})
+    assert len(zb) > 150_000
+    r = _post_import(logged_in_admin, xlsx, zb)
+    assert r.status_code == 200                                         # ماشي 413
+    with app.app_context():
+        assert Product.query.filter_by(slug="zz-big").count() == 1
+
+
+def test_products_page_has_zip_input(logged_in_admin, app, seed):
+    html = logged_in_admin.get("/admin/products").get_data(as_text=True)
+    assert 'name="images_zip"' in html and 'accept=".zip"' in html

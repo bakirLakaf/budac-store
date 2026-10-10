@@ -1741,8 +1741,20 @@ function initUploader(box) {
     }
 
     picker.addEventListener('change', function () {
-        var files = Array.prototype.slice.call(picker.files || []);
-        if (!files.length) return;
+        var chosen = Array.prototype.slice.call(picker.files || []);
+        if (!chosen.length) return;
+
+        // ✂️ قص وتدوير قبل الرفع (static/js/image-editor.js). الصور الأساسية
+        // نقترحو لها مربّع 1:1 (كيما تبان فالمتجر)، والتوضيحية شكل حر.
+        // إذا المحرّر ما تحمّلش لأي سبب، نرفعو الصور كيما هي.
+        var editing = window.BudacImageEditor
+            ? window.BudacImageEditor.edit(chosen, {
+                  aspect: box.dataset.kind === 'extra' ? NaN : 1
+              })
+            : Promise.resolve(chosen);
+
+        editing.then(function (files) {
+        if (!files.length) { picker.value = ''; return; }
 
         wrap.hidden = false;
         list.innerHTML = '';
@@ -1787,6 +1799,7 @@ function initUploader(box) {
         }
 
         step(0);
+        });   // نهاية editing.then
     });
 }
 

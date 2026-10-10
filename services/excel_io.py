@@ -27,6 +27,9 @@
 """
 
 import io
+import time
+import unicodedata
+import zipfile
 from datetime import datetime
 
 import logging
@@ -38,7 +41,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from models import (
-    db, Product, Category, ProductVariant,
+    db, Product, Category, ProductVariant, ProductImage,
     VariantPriceTier, VariantPack,
 )
 from utils import slugify
@@ -310,6 +313,18 @@ def export_workbook():
 MAX_SHEETS = 12
 MAX_ROWS_PER_SHEET = 20000
 
+# ═══════════ صور المنتجات (ZIP) ═══════════
+# صفحة «الصور» فالـExcel تربط: المنتج (slug) + الموديل (اختياري) + اسم الملف داخل الـZIP.
+SHEET_IMAGES = "الصور"
+COLS_IMAGES = ["رابط المنتج", "الموديل", "اسم الملف"]
+
+# حدود الأمان — ZIP ماشي دايمًا مرتّب ولا صغير
+IMAGES_MAX_PER_IMPORT = 60          # صورة كحد أقصى فالمرة (باش الطلب ما يعلّقش)
+IMAGES_TIME_BUDGET = 90             # ثانية (gunicorn timeout = 120)
+IMAGES_MAX_ARCHIVE_ENTRIES = 5000   # عدد ملفات الأرشيف
+IMAGES_MAX_TOTAL_BYTES = 500 * 1024 * 1024   # مجموع الصور المقروءة (بعد فك الضغط)
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+
 
 def _rows(sheet, headers):
     """
@@ -363,9 +378,188 @@ def _rows(sheet, headers):
     return out
 
 
-def import_workbook(file_storage):
+def _zip_basename(info):
+    """
+    اسم الملف داخل ZIP (بلا مجلدات) بترميز صحيح.
+
+    ⚠️ ZIP اللي يصنعو ويندوز القديم/بعض البرامج يخزّن الأسماء العربية
+    بلا علامة UTF-8، وبايثون يقراها كـcp437 فتولّي رموز غريبة. نحاولو
+    نصلّحوها: cp437 ← UTF-8، وإلا ← cp1256 (عربي ويندوز).
+    """
+    name = info.filename
+    if not (info.flag_bits & 0x800):
+        raw = name.encode("cp437", errors="ignore")
+        for encoding in ("utf-8", "cp1256"):
+            try:
+                name = raw.decode(encoding)
+                break
+            except Exception:
+                continue
+    name = name.replace("\\", "/").split("/")[-1]
+    return unicodedata.normalize("NFC", name).strip()
+
+
+def _zip_index(archive):
+    """{اسم_بحروف_صغيرة: ZipInfo} — بلا مجلدات وبلا ملفات macOS الزايدة."""
+    index = {}
+    for info in archive.infolist():
+        if info.is_dir() or info.filename.startswith("__MACOSX/"):
+            continue
+        name = _zip_basename(info)
+        if not name or name.startswith("._"):
+            continue
+        index.setdefault(name.casefold(), info)
+    return index
+
+
+def _find_zip_member(index, wanted):
+    """يلقى الملف بالاسم (بلا حساسية للحروف)، ويجرّب الامتدادات إذا نسيها الأدمن."""
+    key = unicodedata.normalize("NFC", wanted).strip().casefold()
+    if key in index:
+        return index[key]
+    if not key.endswith(IMAGE_EXTENSIONS):
+        for ext in IMAGE_EXTENSIONS:
+            if key + ext in index:
+                return index[key + ext]
+    return None
+
+
+def _attach_images(image_rows, images_zip, report, warn):
+    """
+    يضيف صور المنتجات من ZIP حسب صفحة «الصور».
+
+    • كل صورة تمرّ بنفس مسار الرفع العادي (save_image): فحص النوع والحجم،
+      WebP، 1200 بكسل، مصغّرة.
+    • الترتيب: ترتيب الأسطر فالصفحة. أول صورة تولّي الرئيسية إذا المنتج بلاها.
+    • الموديل (اختياري): نربطو الصورة بيه، غير إذا ما عندوش صورة (ما نبدّلوش
+      اختيار الأدمن اليدوي).
+    • آمن للتكرار: صورة بنفس اسم الملف ما تتزادش مرتين (source_name).
+    • سقف عدد/وقت: إذا وصلناه نوقفو ونقولو للأدمن يعاود نفس الاستيراد.
+    ⚠️ نقراو غير الملفات المذكورة فـExcel، وغير الاسم الأخير (basename)،
+       يعني ما كاين حتى كتابة على القرص من أسماء الأرشيف (zip-slip).
+    """
+    from werkzeug.datastructures import FileStorage
+    from services.uploads import save_image, UploadError, MAX_FILE_SIZE
+
+    try:
+        archive = zipfile.ZipFile(images_zip)
+    except Exception:
+        raise ValueError("ملف الصور ماشي ZIP صحيح — حوّلو لـZIP (RAR ما يتقبلش).")
+
+    with archive:
+        if len(archive.infolist()) > IMAGES_MAX_ARCHIVE_ENTRIES:
+            raise ValueError(
+                f"الـZIP فيه أكثر من {IMAGES_MAX_ARCHIVE_ENTRIES:,} ملف — خلّي غير صور المنتجات."
+            )
+
+        index = _zip_index(archive)
+        started = time.time()
+        total_bytes = 0
+        handled = 0
+
+        for position, row in enumerate(image_rows, start=2):
+            slug = _text_in(row.get("رابط المنتج"))
+            label = _text_in(row.get("الموديل"))
+            wanted = _text_in(row.get("اسم الملف"))
+            where = f"{SHEET_IMAGES} سطر {position}"
+
+            if not slug or not wanted:
+                warn(f"{where}: «رابط المنتج» ولا «اسم الملف» ناقص — تجاوزناه")
+                continue
+
+            product = Product.query.filter(
+                db.func.lower(Product.slug) == slug.lower()
+            ).first()
+            if not product:
+                warn(f"{where}: ماكانش منتج بالرابط «{slug}» — تجاوزناه")
+                continue
+
+            info = _find_zip_member(index, wanted)
+            if info is None:
+                report["images_missing"].append(wanted)
+                warn(f"{where}: الملف «{wanted}» ماكانش فـ ZIP")
+                continue
+
+            # ---- سقف العدد والوقت ----
+            if handled >= IMAGES_MAX_PER_IMPORT or time.time() - started > IMAGES_TIME_BUDGET:
+                remaining = len(image_rows) - (position - 2)
+                warn(
+                    f"وقفنا بعد {handled} صورة (سقف الأمان). بقاو {remaining} سطر — "
+                    "عاود نفس الاستيراد بنفس الملفين: الصور اللي تزادت ما تتكرّرش."
+                )
+                break
+            handled += 1
+
+            source_key = unicodedata.normalize("NFC", wanted).strip().casefold()
+            existing = next(
+                (i for i in ProductImage.query.filter_by(product_id=product.id)
+                 if (i.source_name or "").casefold() == source_key),
+                None,
+            )
+
+            if existing:
+                report["images_existing"] += 1
+                filename = existing.image_filename
+            else:
+                total_bytes += info.file_size
+                if total_bytes > IMAGES_MAX_TOTAL_BYTES:
+                    warn(f"{where}: مجموع الصور كبير بزاف — وقفنا")
+                    break
+                if info.file_size > MAX_FILE_SIZE:
+                    warn(f"{where}: «{wanted}» كبيرة بزاف (الحد {MAX_FILE_SIZE // (1024 * 1024)} ميغا)")
+                    continue
+
+                try:
+                    with archive.open(info) as handle:
+                        data = handle.read(MAX_FILE_SIZE + 1)
+                except Exception:
+                    warn(f"{where}: ما قدرناش نقراو «{wanted}» من ZIP")
+                    continue
+                if len(data) > MAX_FILE_SIZE:
+                    warn(f"{where}: «{wanted}» كبيرة بزاف")
+                    continue
+
+                upload = FileStorage(stream=io.BytesIO(data), filename=_zip_basename(info))
+                try:
+                    filename = save_image(upload, "products", base_name=product.slug)
+                except UploadError as e:
+                    warn(f"{where}: «{wanted}» — {e}")
+                    continue
+
+                last = max(
+                    (i.sort_order for i in ProductImage.query.filter_by(
+                        product_id=product.id, is_extra=False)),
+                    default=-1,
+                )
+                db.session.add(ProductImage(
+                    product_id=product.id, image_filename=filename,
+                    source_name=unicodedata.normalize("NFC", wanted).strip()[:255],
+                    sort_order=last + 1, is_extra=False,
+                ))
+                if not product.image_filename:
+                    product.image_filename = filename
+                report["images_added"] += 1
+
+            if label:
+                variant = ProductVariant.query.filter(
+                    ProductVariant.product_id == product.id,
+                    db.func.lower(db.func.trim(ProductVariant.label)) == label.lower(),
+                ).first()
+                if not variant:
+                    warn(f"{where}: ماكانش موديل «{label}» فـ«{product.name}»")
+                elif not variant.image_filename:
+                    variant.image_filename = filename
+                    report["variants_linked"] += 1
+
+            db.session.commit()
+
+
+def import_workbook(file_storage, images_zip=None):
     """
     يستورد المنتجات من ملف Excel.
+
+    `images_zip` (اختياري): ZIP فيه صور المنتجات. يتربطو بالمنتجات حسب صفحة
+    «الصور» فالـExcel (شوف _attach_images).
 
     يرجع تقريرًا مفصّلاً: واش تنشأ، واش تحدّث، وواش تجاوزناه وليش.
     """
@@ -398,6 +592,8 @@ def import_workbook(file_storage):
         "products_new": 0, "products_updated": 0,
         "variants_new": 0, "variants_updated": 0,
         "tiers": 0, "packs": 0,
+        "images_added": 0, "images_existing": 0, "variants_linked": 0,
+        "images_missing": [],
         "warnings": [],
     }
 
@@ -623,5 +819,17 @@ def import_workbook(file_storage):
         ))
         report["packs"] += 1
 
+    # ---------- 5) الصور (ZIP) ----------
+    # ⚠️ بعد commit المنتجات: فشل صورة ما يضيّعش المنتجات اللي تسجّلو.
+    # (نقراو الصفحة قبل ما نقفلو الملف)
+    image_rows = _rows(sheet(SHEET_IMAGES), COLS_IMAGES)
     db.session.commit()
+
+    if images_zip is not None and not image_rows:
+        warn(f"وصل ملف صور بلا صفحة «{SHEET_IMAGES}» فالـExcel — ما عرفناش أي صورة لأي منتج")
+    elif image_rows and images_zip is None:
+        warn(f"صفحة «{SHEET_IMAGES}» موجودة بلا ملف ZIP — الصور تجاوزناها (ارفع الـZIP مع الـExcel)")
+    elif image_rows and images_zip is not None:
+        _attach_images(image_rows, images_zip, report, warn)
+
     return report

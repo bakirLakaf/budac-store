@@ -4632,6 +4632,10 @@ def products_export():
     )
 
 
+# حد حجم طلب الاستيراد (Excel + ZIP الصور). الحد العام MAX_CONTENT_LENGTH = 30 ميغا.
+IMPORT_MAX_BYTES = 80 * 1024 * 1024
+
+
 @admin_bp.route("/products/import", methods=["POST"])
 @login_required
 def products_import():
@@ -4643,6 +4647,11 @@ def products_import():
     بالغلط من ملف.
     """
     from services.excel_io import import_workbook
+    import zipfile
+
+    # ⚠️ الحد العام (30 ميغا) صغير على Excel + صور. نرفعوه لهاد المسار برك
+    # (ماشي لكل الموقع) — لازم يتحط قبل ما نقراو request.files.
+    request.max_content_length = IMPORT_MAX_BYTES
 
     uploaded = request.files.get("excel_file")
 
@@ -4654,8 +4663,23 @@ def products_import():
         flash("الملف لازم يكون .xlsx", "error")
         return redirect(url_for("admin.products_list"))
 
+    # ملف الصور (اختياري): ZIP برك. RAR ما نقدروش نقراوه (يحتاج برنامج خارجي).
+    images_zip = request.files.get("images_zip")
+    if images_zip and images_zip.filename:
+        name = images_zip.filename.lower()
+        if name.endswith((".rar", ".7z")):
+            flash("ملف RAR/7z ما نقراوهش — حوّلو لـZIP (كليك يمين ← Send to ← "
+                  "Compressed folder، ولا WinRAR ← صيغة الأرشيف ZIP).", "error")
+            return redirect(url_for("admin.products_list"))
+        if not zipfile.is_zipfile(images_zip.stream):
+            flash("ملف الصور ماشي ZIP صحيح", "error")
+            return redirect(url_for("admin.products_list"))
+        images_zip.stream.seek(0)
+    else:
+        images_zip = None
+
     try:
-        report = import_workbook(uploaded)
+        report = import_workbook(uploaded, images_zip=images_zip.stream if images_zip else None)
     except ValueError as e:
         flash(str(e), "error")
         return redirect(url_for("admin.products_list"))
@@ -4685,6 +4709,12 @@ def products_import():
         parts.append(f"{report['tiers']} سعر كمية")
     if report["packs"]:
         parts.append(f"{report['packs']} عرض جاهز")
+    if report["images_added"]:
+        parts.append(f"{report['images_added']} صورة")
+    if report["images_existing"]:
+        parts.append(f"{report['images_existing']} صورة كانت موجودة")
+    if report["variants_linked"]:
+        parts.append(f"{report['variants_linked']} موديل رُبط بصورتو")
 
     flash("✅ " + (" · ".join(parts) if parts else "ماكانش تبديل"), "success")
 
