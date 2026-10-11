@@ -183,7 +183,7 @@ Railway ينشر التحديث لوحدو خلال دقيقتين. **قاعدة
 
 | فالسجل | الحل |
 |---|---|
-| `no such table` | قاعدة البيانات ما تربطاتش — تأكد أن PostgreSQL مضافة |
+| `no such table` | قاعدة البيانات ما تربطتش — تأكد أن PostgreSQL مضافة |
 | `SECRET_KEY` | ناقص من Variables |
 | `ModuleNotFoundError` | ملف `requirements.txt` ما ارتفعش |
 

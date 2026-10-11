@@ -1096,7 +1096,7 @@ class Order(db.Model):
     STATUS_SHIPPED = "shipped"        # اتسلّمت لشركة التوصيل
     STATUS_AT_OFFICE = "at_office"    # وصلت لمكتب الاستلام، تستنى الزبون
     STATUS_DELIVERED = "delivered"    # وصلت للزبون
-    STATUS_RETURNED = "returned"      # رجعات لينا (ما تسلّمتش)
+    STATUS_RETURNED = "returned"      # رجعت لينا (ما تسلّمتش)
     STATUS_CANCELLED = "cancelled"    # ملغاة
 
     # ⚠️ الترتيب مهم — يستعملوه شريط التقدّم فصفحة «طلبياتي»
@@ -1195,7 +1195,7 @@ class Order(db.Model):
     # نقدرو نعرفو أن الحجز قديم ونسمحو بإعادة المحاولة.
     # ══════════════════════════════════════════════════════════
 
-    ZR_IDLE = "idle"            # ما تبعثاتش بعد
+    ZR_IDLE = "idle"            # ما تبعثتش بعد
     ZR_SENDING = "sending"      # محجوزة درك، طلب فالطريق
     ZR_SENT = "sent"            # نجحت — عندها رقم تتبّع
     ZR_FAILED = "failed"        # فشلت — يقدر يعاود
@@ -1334,7 +1334,7 @@ class Order(db.Model):
         واش نقدرو نعدّلو الطلبية؟
 
         ⚠️ بعد ما تتبعث لشركة التوصيل، التعديل عندنا ما يوصلهمش —
-        المبلغ اللي يحوّزو من الزبون يبقى القديم. نمنعو التعديل باش
+        المبلغ اللي يقبضو من الزبون يبقى القديم. نمنعو التعديل باش
         ما يبانش المتجر وZR بمبلغين مختلوين.
         """
         if self.status == self.STATUS_DELIVERED or self.status in self.STATUS_TERMINAL:
@@ -1945,6 +1945,7 @@ class AdminAction(db.Model):
     REVIEW_EDIT = "review_edit"
     REWARD_COUPON = "reward_coupon"
     WA_TEMPLATE = "wa_template"
+    PRODUCT_BULK = "product_bulk"
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -1983,4 +1984,5 @@ class AdminAction(db.Model):
             self.REVIEW_EDIT: "تعديل نجوم تقييم",
             self.REWARD_COUPON: "كوبون مكافأة لزبون",
             self.WA_TEMPLATE: "تعديل نموذج رسالة واتساب",
+            self.PRODUCT_BULK: "تفعيل/تعطيل منتجات دفعة وحدة",
         }.get(self.action, self.action)
