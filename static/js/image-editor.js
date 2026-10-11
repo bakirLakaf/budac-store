@@ -117,6 +117,8 @@
                 '<div class="ie-group">' +
                   '<button type="button" data-act="rot-left">↺ دوّر لليسار</button>' +
                   '<button type="button" data-act="rot-right">↻ دوّر لليمين</button>' +
+                  '<button type="button" data-act="flip-h">⇋ اقلبها أفقيًا</button>' +
+                  '<button type="button" data-act="flip-v">⇅ اقلبها عموديًا</button>' +
                   '<button type="button" data-act="reset">رجّع كيما كانت</button>' +
                 '</div>' +
                 '<div class="ie-group ie-ratios">' +
@@ -221,6 +223,8 @@
                     switch (btn.dataset.act) {
                         case "rot-left":  if (cropper) { cropper.rotate(-90); } break;
                         case "rot-right": if (cropper) { cropper.rotate(90); } break;
+                        case "flip-h":    if (cropper) { cropper.scaleX(cropper.getData().scaleX === -1 ? 1 : -1); } break;
+                        case "flip-v":    if (cropper) { cropper.scaleY(cropper.getData().scaleY === -1 ? 1 : -1); } break;
                         case "reset":     if (cropper) { cropper.reset(); } break;
                         case "ok":        exportEdited(); break;
                         case "asis":      finish({ action: "asis", file: file }); break;
@@ -296,6 +300,29 @@
         });
     }
 
+    // ───────────────────────── تعديل صورة موجودة (من رابط) ─────────────────────────
+    /**
+     * يجيب صورة مرفوعة من قبل (نفس الموقع) ويفتحها فالمحرّر.
+     * يرجع Promise بـFile جديد إذا الأدمن عدّل وأكّد، وإلا null
+     * (ألغى، ولا ضغط «خلّيها كيما هي»، ولا فشل الجلب).
+     * الشكل الافتراضي «حر» باش التدوير والقلب ما يقصّوش شي.
+     */
+    function editFromUrl(url, options) {
+        options = options || {};
+        return fetch(url, { credentials: "same-origin" }).then(function (res) {
+            if (!res.ok) { throw new Error("HTTP " + res.status); }
+            return res.blob();
+        }).then(function (blob) {
+            var name = decodeURIComponent(String(url).split("?")[0].split("/").pop() || "image.webp");
+            var original = new File([blob], name, { type: blob.type || "image/webp" });
+            return edit([original], {
+                aspect: options.aspect === undefined ? NaN : options.aspect
+            }).then(function (out) {
+                return out.length && out[0] !== original ? out[0] : null;
+            });
+        }).catch(function () { return null; });
+    }
+
     // ───────────────────────── حقول <input type=file> العادية ─────────────────────────
     function wire(input) {
         input.addEventListener("change", function (e) {
@@ -306,14 +333,41 @@
             e.stopImmediatePropagation();
             edit(files, { aspect: parseAspect(input.dataset.imageEditor) }).then(function (out) {
                 if (!out.length) { input.value = ""; return; }
-                var dt = new DataTransfer();
-                out.forEach(function (f) { dt.items.add(f); });
-                input.files = dt.files;
+                setFiles(input, out);
             });
         }, true);
+
+        // «✂️ عدّل الصورة الحالية»: نفتحو الصورة المحفوظة فالمحرّر، والنتيجة تتحط
+        // فنفس الحقل — الحفظ العادي للنموذج يرفعها ويعوّض القديمة (بلا سيرفر زايد).
+        var current = input.dataset.currentImage;
+        if (current) {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "btn-admin btn-sm btn-ghost ie-current";
+            btn.textContent = "✂️ عدّل الصورة الحالية (قص / تدوير / قلب)";
+            btn.addEventListener("click", function () {
+                btn.disabled = true;
+                editFromUrl(current, { aspect: parseAspect(input.dataset.imageEditor) }).then(function (file) {
+                    btn.disabled = false;
+                    if (file) {
+                        setFiles(input, [file]);
+                        btn.textContent = "✓ تعدّلت — احفظ باش تتطبّق";
+                    }
+                });
+            });
+            input.insertAdjacentElement("afterend", btn);
+        }
     }
 
-    window.BudacImageEditor = { edit: edit, parseAspect: parseAspect, baseName: baseName };
+    function setFiles(input, files) {
+        var dt = new DataTransfer();
+        files.forEach(function (f) { dt.items.add(f); });
+        input.files = dt.files;
+    }
+
+    window.BudacImageEditor = {
+        edit: edit, editFromUrl: editFromUrl, parseAspect: parseAspect, baseName: baseName
+    };
 
     document.addEventListener("DOMContentLoaded", function () {
         Array.prototype.forEach.call(

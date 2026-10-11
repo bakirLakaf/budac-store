@@ -125,10 +125,24 @@
 </form>
 
 {% if products %}
+{# ⚠️ الحذف والنسخ فكل سطر فيهم <form> — ما نقدروش نلفّو الجدول فـ<form> (ممنوع تداخل).
+   فالـcheckbox ترتبط بالنموذج بـform="bulkProductsForm". #}
+<form id="bulkProductsForm" method="post" action="{{ url_for('admin.products_bulk_status') }}"
+      class="bulk-bar bulk-bar-info" hidden>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="back" value="{{ request.full_path.rstrip('?') }}">
+    <span><strong id="bulkCount">0</strong> منتج مختار</span>
+    <button type="submit" name="action" value="activate" class="btn-admin btn-sm"
+            onclick="return confirm('تفعّل المنتجات المختارة؟ تبان للزبائن فالمتجر.')">✓ تفعيل المختارة</button>
+    <button type="submit" name="action" value="deactivate" class="btn-admin btn-sm btn-outline"
+            onclick="return confirm('تعطّل المنتجات المختارة؟ ما تبانش للزبائن.')">⊘ تعطيل المختارة</button>
+</form>
+
 <div class="admin-table-wrap">
 <table class="admin-table">
     <thead>
         <tr>
+            <th><input type="checkbox" id="bulkAll" aria-label="اختار الكل"></th>
             <th>صورة</th><th>الاسم</th><th>التصنيف</th><th>السعر</th>
             <th>تنويعات</th><th>الحالة</th><th></th>
         </tr>
@@ -136,6 +150,8 @@
     <tbody>
         {% for p in products %}
         <tr>
+            <td><input type="checkbox" class="bulk-check" name="product_ids" value="{{ p.id }}"
+                       form="bulkProductsForm" aria-label="اختار {{ p.name }}"></td>
             <td>
                 {% if p.image_filename %}
                     <img class="thumb-sm"
@@ -187,4 +203,29 @@
 </div>
 {% endif %}
 
+
+<script>
+/* اختيار متعدّد للمنتجات (تفعيل/تعطيل دفعة وحدة) */
+(function () {
+    var all = document.getElementById('bulkAll');
+    var bar = document.getElementById('bulkProductsForm');
+    var count = document.getElementById('bulkCount');
+    if (!all || !bar) return;
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('.bulk-check'));
+
+    function refresh() {
+        var n = boxes.filter(function (b) { return b.checked; }).length;
+        count.textContent = n;
+        bar.hidden = n === 0;
+        all.indeterminate = n > 0 && n < boxes.length;
+        all.checked = n === boxes.length && n > 0;
+    }
+    all.addEventListener('change', function () {
+        boxes.forEach(function (b) { b.checked = all.checked; });
+        refresh();
+    });
+    boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+    refresh();
+})();
+</script>
 {% endblock %}

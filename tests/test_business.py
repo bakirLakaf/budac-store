@@ -325,7 +325,7 @@ def test_failed_zr_send_releases_the_claim(app, seed):
 
 
 def test_already_sent_order_cannot_be_claimed(app, seed):
-    """طلبية عندها رقم تتبّع = تبعثات خلاص، ما تتبعثش مرة ثانية."""
+    """طلبية عندها رقم تتبّع = تبعثت خلاص، ما تتبعثش مرة ثانية."""
     from routes.admin import _claim_order_for_zr
 
     with app.app_context():

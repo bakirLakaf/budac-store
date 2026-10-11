@@ -55,7 +55,8 @@
 
             <label class="field">
                 <span>صورة البانر</span>
-                <input type="file" name="banner" accept="image/*" data-image-editor="16/9">
+                <input type="file" name="banner" accept="image/*" data-image-editor="16/9"
+                       {% if offer and offer.banner_filename %}data-current-image="{{ url_for('static', filename='img/offers/' + offer.banner_filename) }}"{% endif %}>
                 {% if offer and offer.banner_filename %}
                     <img class="banner-preview" src="{{ url_for('static', filename='img/offers/' + offer.banner_filename) }}" alt="">
                 {% endif %}

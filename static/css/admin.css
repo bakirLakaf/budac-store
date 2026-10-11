@@ -2335,3 +2335,9 @@ body.ie-open { overflow: hidden; }
 /* ---------- استيراد Excel + ZIP الصور (v163) ---------- */
 .xl-form { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
 .xl-file { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #6b6258; }
+
+.img-btn-edit { font-size: 15px; }
+.ie-current { margin-top: 6px; }
+
+/* شريط الاختيار المتعدّد للمنتجات: هادئ (ماشي أحمر كيما الحذف) */
+.bulk-bar.bulk-bar-info { background: #eef4ee; border-color: #cfe0cf; }

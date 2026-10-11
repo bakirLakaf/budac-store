@@ -816,7 +816,7 @@ def product_image_upload(product_id):
 
     file = request.files.get("image")
     if not file or not file.filename:
-        return jsonify({"ok": False, "message": "ما وصلاتش حتى صورة"}), 400
+        return jsonify({"ok": False, "message": "ما وصلتش حتى صورة"}), 400
 
     try:
         filename = save_image(file, "products", base_name=product.slug)
@@ -854,6 +854,114 @@ def product_image_upload(product_id):
         "is_main": product.image_filename == filename,
         "is_extra": is_extra,
         "message": "تمت إضافة الصورة التوضيحية" if is_extra else "تمت إضافة الصورة",
+    })
+
+
+@admin_bp.route("/products/bulk-status", methods=["POST"])
+@login_required
+def products_bulk_status():
+    """
+    تفعيل ولا تعطيل عدة منتجات دفعة وحدة (من صفحة «المنتجات»).
+
+    قواعد الأمان:
+      • «بلا سعر» (السعر 0) ما نفعّلوهش: الزبون يقدر يطلبو بدراهم 0.
+        نقولو للأدمن يحط السعر أولاً.
+      • منتج بلا صورة نفعّلوه (قرارك)، بصح نحذّرو باش ما يبانش فارغ فالمتجر.
+      • نفس المنتج يتبعث مرتين (checkbox مزدوجة) ← نحيّدو التكرار.
+    """
+    action = request.form.get("action")
+    ids = list(dict.fromkeys(request.form.getlist("product_ids", type=int)))[:500]
+
+    # نرجعو للصفحة بنفس الفلاتر (فقط مسارات لوحة المنتجات — ماكاين redirect مفتوح)
+    back = request.form.get("back") or ""
+    if not back.startswith("/admin/products"):
+        back = url_for("admin.products_list")
+    go_back = redirect(back)
+
+    if action not in ("activate", "deactivate"):
+        flash("إجراء غير معروف", "error")
+        return go_back
+    if not ids:
+        flash("ما اخترت حتى منتج", "warning")
+        return go_back
+
+    products = Product.query.filter(Product.id.in_(ids)).all()
+    activate = action == "activate"
+
+    changed = already = 0
+    unpriced, no_image = [], []
+    for product in products:
+        if product.is_active == activate:
+            already += 1
+            continue
+        if activate and not (product.price and product.price > 0):
+            unpriced.append(product.name)
+            continue
+        product.is_active = activate
+        changed += 1
+        if activate and not product.image_filename:
+            no_image.append(product.name)
+
+    if changed:
+        audit.record(
+            AdminAction.PRODUCT_BULK, "product", None,
+            f"{'تفعيل' if activate else 'تعطيل'} {changed} منتج",
+        )
+    db.session.commit()
+
+    verb = "تفعّل" if activate else "تعطّل"
+    if changed:
+        flash(f"{verb} {changed} منتج", "success")
+    if already:
+        flash(f"{already} كانو {'مفعّلين' if activate else 'معطّلين'} من قبل", "info")
+    if unpriced:
+        flash("ما تفعّلوش (بلا سعر — حط السعر أولاً): " + " | ".join(unpriced[:10]), "warning")
+    if no_image:
+        flash("تفعّلو بصح بلا صورة: " + " | ".join(no_image[:10]), "warning")
+    return go_back
+
+
+@admin_bp.route("/products/<int:product_id>/images/<int:image_id>/replace", methods=["POST"])
+@login_required
+def product_image_replace(product_id, image_id):
+    """
+    يعوّض صورة موجودة بنسخة معدّلة (قص/تدوير/قلب من المحرّر) فنفس البلاصة.
+
+    تبقى: الترتيب، «رئيسية»، الوصف، وربط الموديلات (نعيدو توجيهها للملف الجديد).
+    ⚠️ الملف القديم ما نمسحوهش إلا إذا ما بقى حتى منتج (ولا موديل) يستعملو —
+       المنتج المنسوخ (product_duplicate) يشارك نفس الملفات.
+    """
+    image = ProductImage.query.filter_by(id=image_id, product_id=product_id).first_or_404()
+    product = image.product
+
+    upload = request.files.get("image")
+    if not upload or not upload.filename:
+        return jsonify({"ok": False, "message": "ما وصلتش حتى صورة"}), 400
+
+    old = image.image_filename
+    try:
+        new = save_image(upload, "products", base_name=product.slug)
+    except UploadError as e:
+        return jsonify({"ok": False, "message": str(e)}), 400
+
+    image.image_filename = new
+    if product.image_filename == old:
+        product.image_filename = new
+    relinked = (
+        ProductVariant.query
+        .filter_by(product_id=product.id, image_filename=old)
+        .update({"image_filename": new}, synchronize_session=False)
+    )
+    db.session.flush()
+    purge_unused_image_files([old])
+    db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "filename": new,
+        "url": url_for("static", filename=f"img/products/{new}"),
+        "relinked_variants": relinked,
+        "message": "تبدّلت الصورة",
     })
 
 
@@ -1160,7 +1268,7 @@ def variant_image(variant_id):
 
     variant.image_filename = filename
     db.session.commit()
-    return reply(True, f"تربطات صورة «{variant.label}»")
+    return reply(True, f"تربطت صورة «{variant.label}»")
 
 
 @admin_bp.route("/variants/<int:variant_id>/tiers", methods=["POST"])
@@ -1706,7 +1814,7 @@ def _guard_editable(order):
     """يرجّع رسالة خطأ إذا الطلبية ما تتعدّلش، ولا None إذا مليح."""
     if not order.is_editable:
         if order.tracking_number:
-            return ("الطلبية اتبعثات لشركة التوصيل — التعديل عندنا "
+            return ("الطلبية اتبعثت لشركة التوصيل — التعديل عندنا "
                     "ما يوصلهمش. اتصل بيهم أول.")
         return f"الطلبية «{order.status_label}» ما تتعدّلش."
     return None
@@ -2127,7 +2235,7 @@ def order_create_reward_coupon(order_id):
         return back
 
     if status == "not_delivered":
-        flash("الكوبون يتصنع للطلبية اللي وصلات للزبون برك (تم التسليم)", "error")
+        flash("الكوبون يتصنع للطلبية اللي وصلت للزبون برك (تم التسليم)", "error")
     elif status == "bad_phone":
         flash("رقم الزبون ماشي صالح — ما نقدروش نربطو الكوبون بيه", "error")
     elif status == "existing":
@@ -2521,7 +2629,7 @@ def _claim_order_for_zr(order_id):
     if order is None:
         return False, "الطلبية ما بقاتش موجودة"
     if order.tracking_number:
-        return False, f"هاد الطلبية تبعثات من قبل — رقم التتبّع: {order.tracking_number}"
+        return False, f"هاد الطلبية تبعثت من قبل — رقم التتبّع: {order.tracking_number}"
     return False, "الطلبية راهي فطريق الإرسال درك. استنى شوية وشوف من جديد."
 
 
@@ -2646,7 +2754,7 @@ def order_send_to_carrier(order_id):
 
     db.session.commit()
 
-    flash(f"✓ تبعثات لـZR Express — رقم التتبّع: {order.tracking_number}", "success")
+    flash(f"✓ تبعثت لـZR Express — رقم التتبّع: {order.tracking_number}", "success")
     return redirect(url_for("admin.order_detail", order_id=order.id))
 
 
@@ -2700,7 +2808,7 @@ def order_refresh_tracking(order_id):
     order = db.session.get(Order, order_id) or abort(404)
 
     if not order.tracking_number:
-        flash("هاد الطلبية ما تبعثاتش لشركة التوصيل بعد", "warning")
+        flash("هاد الطلبية ما تبعثتش لشركة التوصيل بعد", "warning")
         return redirect(url_for("admin.order_detail", order_id=order.id))
 
     try:
@@ -2764,7 +2872,7 @@ def order_refresh_tracking(order_id):
             db.session.commit()
         except Exception:
             db.session.rollback()
-        status_msg = (f"حالة ZR تحدّثات بصح ما قدرناش نبدّلو حالة الطلبية: {e}",
+        status_msg = (f"حالة ZR تحدّثت بصح ما قدرناش نبدّلو حالة الطلبية: {e}",
                       "warning")
     except Exception:
         db.session.rollback()
@@ -2858,7 +2966,7 @@ def orders_refresh_all_tracking():
                 "refresh_all_tracking: فشلت %s: %s", order.order_number, e)
 
     if not total_candidates:
-        flash("ماكاين حتى طلبية تستنى تحديث (كلها مسلّمة أو ما تبعثاتش لـZR)", "info")
+        flash("ماكاين حتى طلبية تستنى تحديث (كلها مسلّمة أو ما تبعثتش لـZR)", "info")
         return redirect(url_for("admin.orders_list"))
 
     flash(
@@ -3590,7 +3698,7 @@ def order_delete(order_id):
        مازال محجوز عندها. لازم نرجّعوه قبل الحذف، وإلا المخزون
        ينقص بلا سبب ويولّي غلط بصمت.
 
-    2) **الطرد عند ZR**: إذا الطلبية تبعثات، حذفها من عندنا
+    2) **الطرد عند ZR**: إذا الطلبية تبعثت، حذفها من عندنا
        **ما يلغيش الطرد عند ZR**. نحذّرو الأدمن باش يلغيه يدويًا.
     """
     order = Order.query.get_or_404(order_id)
@@ -3866,7 +3974,7 @@ def shipping_sync_zr():
     if result["changed"]:
         flash(
             f"✅ تحدّثو {result['changed']} ولاية "
-            f"({result['unchanged']} بلا تبديل، {result['from_zr']} وصلاتنا من ZR)",
+            f"({result['unchanged']} بلا تبديل، {result['from_zr']} وصلتنا من ZR)",
             "success",
         )
         # نعرضو أول التبديلات باش الأدمن يشوف واش صرا

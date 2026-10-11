@@ -17,7 +17,11 @@ function makeWindow() {
   w.__calls = [];
   w.Cropper = class {
     constructor(img, opts) { w.__calls.push(["init", opts.aspectRatio, opts.checkOrientation, opts.viewMode]); }
+    constructor_state() {}
     rotate(d) { w.__calls.push(["rotate", d]); }
+    scaleX(v) { this._sx = v; w.__calls.push(["scaleX", v]); }
+    scaleY(v) { this._sy = v; w.__calls.push(["scaleY", v]); }
+    getData() { return { scaleX: this._sx || 1, scaleY: this._sy || 1 }; }
     reset() { w.__calls.push(["reset"]); }
     setAspectRatio(a) { w.__calls.push(["ratio", a]); }
     getCroppedCanvas() { return w.document.createElement("canvas"); }
@@ -108,6 +112,44 @@ const ok = (c, m) => { if (!c) { failed++; console.log("FAIL:", m); } else conso
   ok(w.__calls[0] && Math.abs(w.__calls[0][1] - 16 / 9) < 1e-9, "حقل البانر يفتح المحرّر بنسبة 16:9");
   click(w, '[data-act="ok"]'); await tick(); await tick();
   ok(input.files.length === 1 && input.files[0].name === "banner.jpg", "input.files تتبدّل بالصورة المقصوصة");
+
+
+  // 11) القلب: أفقي وعمودي، ثاني ضغطة ترجّعو
+  w = makeWindow(); p = w.BudacImageEditor.edit([file(w, "f.jpg")]); await tick();
+  click(w, '[data-act="flip-h"]'); click(w, '[data-act="flip-h"]'); click(w, '[data-act="flip-v"]');
+  const flips = w.__calls.filter(c => c[0] === "scaleX" || c[0] === "scaleY");
+  ok(JSON.stringify(flips) === JSON.stringify([["scaleX", -1], ["scaleX", 1], ["scaleY", -1]]), "قلب أفقي (مرتين) وعمودي");
+  click(w, '[data-act="cancel"]'); await p;
+
+  // 12) editFromUrl: يجيب الصورة ← محرّر ← File جديد
+  w = makeWindow();
+  w.fetch = async (u) => ({ ok: true, blob: async () => new w.Blob(["img"], { type: "image/webp" }) });
+  p = w.BudacImageEditor.editFromUrl("/static/img/products/p-abc123.webp?v=1"); await tick(); await tick();
+  ok(Number.isNaN(w.__calls[0][1]), "الصورة الموجودة تتفتح بشكل «حر»");
+  click(w, '[data-act="rot-right"]'); click(w, '[data-act="ok"]');
+  out = await p; ok(out && out.name === "p-abc123.jpg" && out.type === "image/jpeg", "editFromUrl يرجّع File معدّل");
+
+  // 13) «خلّيها كيما هي» / إلغاء / فشل الجلب ← null (ما نبدّلو والو)
+  w = makeWindow(); w.fetch = async () => ({ ok: true, blob: async () => new w.Blob(["i"], { type: "image/png" }) });
+  p = w.BudacImageEditor.editFromUrl("/a.png"); await tick(); await tick(); click(w, '[data-act="asis"]');
+  ok((await p) === null, "كيما هي ← null");
+  w = makeWindow(); w.fetch = async () => ({ ok: true, blob: async () => new w.Blob(["i"], { type: "image/png" }) });
+  p = w.BudacImageEditor.editFromUrl("/a.png"); await tick(); await tick(); click(w, '[data-act="cancel"]');
+  ok((await p) === null, "إلغاء ← null");
+  w = makeWindow(); w.fetch = async () => ({ ok: false, status: 404 });
+  ok((await w.BudacImageEditor.editFromUrl("/missing.png")) === null, "فشل الجلب ← null");
+
+  // 14) data-current-image: زر «عدّل الصورة الحالية» يحط النتيجة فنفس الحقل
+  w = makeWindow();
+  w.DataTransfer = class { constructor() { this.items = { add: (f) => (this._f = this._f || []).push(f) }; } get files() { return this._f; } };
+  w.fetch = async () => ({ ok: true, blob: async () => new w.Blob(["i"], { type: "image/webp" }) });
+  const inp = w.document.getElementById("f"); inp.dataset.currentImage = "/static/img/offers/b.webp";
+  Object.defineProperty(inp, "files", { configurable: true, writable: true, value: [] });   // jsdom: FileList حقيقي ما يقبلش المحاكاة
+  w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
+  const cbtn = w.document.querySelector(".ie-current");
+  ok(!!cbtn && cbtn.textContent.includes("عدّل الصورة الحالية"), "زر الصورة الحالية يتزاد جنب الحقل");
+  cbtn.click(); await tick(); await tick(); click(w, '[data-act="ok"]'); await tick(); await tick();
+  ok(inp.files && inp.files.length === 1 && inp.files[0].name === "b.jpg" && cbtn.textContent.includes("احفظ"), "النتيجة تتحط فالحقل + رسالة «احفظ»");
 
   console.log(failed ? `\n${failed} FAILED` : "\nALL PASSED"); process.exit(failed ? 1 : 0);
 })();

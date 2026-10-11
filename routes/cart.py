@@ -603,13 +603,13 @@ def my_order_cancel(number):
     if not order.customer_can_edit:
         return jsonify({
             "ok": False,
-            "message": "الطلبية خرجات للتوصيل — تواصل معانا فالواتساب",
+            "message": "الطلبية خرجت للتوصيل — تواصل معانا فالواتساب",
         }), 400
 
     order.status = Order.STATUS_CANCELLED
     db.session.commit()
 
-    return jsonify({"ok": True, "message": "اتلغات الطلبية"})
+    return jsonify({"ok": True, "message": "اتلغت الطلبية"})
 
 
 @cart_bp.route("/my-orders/<number>/note", methods=["POST"])
@@ -629,7 +629,7 @@ def my_order_note(number):
     if not order.customer_can_edit:
         return jsonify({
             "ok": False,
-            "message": "الطلبية خرجات للتوصيل — تواصل معانا فالواتساب",
+            "message": "الطلبية خرجت للتوصيل — تواصل معانا فالواتساب",
         }), 400
 
     note = (request.form.get("note") or "").strip()

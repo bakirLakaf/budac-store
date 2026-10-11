@@ -1212,7 +1212,7 @@ def test_reward_message_and_button(logged_in_admin, app, seed):
         # ⚠️ لهجة جزائرية: ما نستعملوش كلمات مغربية
         words = set(msg.replace("\n", " ").replace("*", " ").split())
         for banned in ("ديال", "دابا", "بغيت", "غادي", "شنو", "مزيان", "فين",
-                       "غير", "خاص", "مش", "عجباتك"):
+                       "غير", "خاص", "مش", "عجباتك", "وصلاتك", "وصلات", "تحوّزها"):
             assert banned not in words
 
     html = logged_in_admin.get(f"/admin/orders/{oid}").get_data(as_text=True)
@@ -1500,7 +1500,7 @@ def test_unknown_placeholders_never_break_sending(app, seed):
 
 def test_wa_templates_page_and_nav(logged_in_admin, app, seed):
     html = logged_in_admin.get("/admin/whatsapp-templates").get_data(as_text=True)
-    for label in ("تأكيد الطلبية", "الطلبية خرجات", "كوبون مكافأة", "سلة متروكة"):
+    for label in ("تأكيد الطلبية", "الطلبية خرجت", "كوبون مكافأة", "سلة متروكة"):
         assert label in html
     assert "معاك BUDAC" in html
     dash = logged_in_admin.get("/admin/").get_data(as_text=True)
@@ -1757,3 +1757,208 @@ def test_import_route_allows_bigger_request_than_global_limit(logged_in_admin, a
 def test_products_page_has_zip_input(logged_in_admin, app, seed):
     html = logged_in_admin.get("/admin/products").get_data(as_text=True)
     assert 'name="images_zip"' in html and 'accept=".zip"' in html
+
+
+# ══════════════════════════════════════════════════════════════
+# v164: تفعيل دفعة وحدة + تعديل الصور الموجودة (قص/تدوير/قلب)
+# ══════════════════════════════════════════════════════════════
+
+def _mk_product(app, slug, price=100, active=False, image=None, name=None):
+    from models import Product
+    with app.app_context():
+        p = Product(name=name or slug, slug=slug, price=price, is_active=active,
+                    image_filename=image)
+        db.session.add(p); db.session.commit()
+        return p.id
+
+
+def _bulk(client, action, ids, back=None):
+    data = {"action": action, "product_ids": ids}
+    if back is not None:
+        data["back"] = back
+    return client.post("/admin/products/bulk-status", data=data)
+
+
+def test_bulk_activate_products_with_guards(logged_in_admin, app, seed):
+    from models import Product, AdminAction
+    a = _mk_product(app, "bk-a", 100, image="x.webp", name="مقبض أ")
+    b = _mk_product(app, "bk-b", 100, image=None, name="مقبض ب")        # بلا صورة ← يتفعّل مع تحذير
+    c = _mk_product(app, "bk-c", 0, image="y.webp", name="بلا سعر")      # السعر 0 ← ما يتفعّلش
+    r = _bulk(logged_in_admin, "activate", [a, a, b, c, b])               # تكرار (checkbox مزدوجة)
+    assert r.status_code == 302
+    with app.app_context():
+        assert db.session.get(Product, a).is_active is True
+        assert db.session.get(Product, b).is_active is True
+        assert db.session.get(Product, c).is_active is False
+        assert AdminAction.query.filter_by(action=AdminAction.PRODUCT_BULK).count() == 1
+    html = logged_in_admin.get("/admin/products").get_data(as_text=True)
+    assert "تفعّل 2 منتج" in html and "بلا سعر" in html and "بلا صورة" in html
+
+
+def test_bulk_deactivate_and_noop_cases(logged_in_admin, app, seed):
+    from models import Product
+    a = _mk_product(app, "bk-d", 100, active=True)
+    b = _mk_product(app, "bk-e", 100, active=False)
+    _bulk(logged_in_admin, "deactivate", [a, b])
+    with app.app_context():
+        assert db.session.get(Product, a).is_active is False
+    # إجراء مجهول / بلا اختيار ← ما يتبدّل والو
+    _bulk(logged_in_admin, "delete-everything", [a])
+    _bulk(logged_in_admin, "activate", [])
+    with app.app_context():
+        assert db.session.get(Product, a).is_active is False
+
+
+def test_bulk_status_back_redirect_is_safe(logged_in_admin, app, seed):
+    a = _mk_product(app, "bk-f", 100)
+    ok = _bulk(logged_in_admin, "activate", [a], back="/admin/products?status=inactive")
+    assert ok.headers["Location"].endswith("/admin/products?status=inactive")
+    evil = _bulk(logged_in_admin, "activate", [a], back="https://evil.example/steal")
+    assert "evil.example" not in evil.headers["Location"]
+    assert evil.headers["Location"].endswith("/admin/products")
+
+
+def test_bulk_status_requires_login(client, app, seed):
+    r = client.post("/admin/products/bulk-status", data={"action": "activate", "product_ids": [1]})
+    assert r.status_code in (302, 401, 400)
+
+
+def test_products_list_has_checkboxes_and_bulk_bar(logged_in_admin, app, seed):
+    _mk_product(app, "bk-g", 100, active=False)
+    html = logged_in_admin.get("/admin/products?status=inactive").get_data(as_text=True)
+    assert 'id="bulkProductsForm"' in html and 'form="bulkProductsForm"' in html
+    assert "تفعيل المختارة" in html and "تعطيل المختارة" in html and 'id="bulkAll"' in html
+
+
+def _upload_via_route(client, pid, color):
+    import io
+    return client.post(f"/admin/products/{pid}/images/upload",
+                       data={"image": (io.BytesIO(_jpeg_bytes(color)), "p.jpg"), "kind": "main"},
+                       content_type="multipart/form-data").get_json()
+
+
+def test_replace_product_image_keeps_position_main_and_variants(logged_in_admin, app, seed):
+    import io, os
+    from models import Product, ProductImage, ProductVariant
+    from services.uploads import get_upload_dir
+    pid = _mk_product(app, "rp-a", 100)
+    first = _upload_via_route(logged_in_admin, pid, (200, 0, 0))
+    second = _upload_via_route(logged_in_admin, pid, (0, 200, 0))
+    assert first["ok"] and second["ok"] and first["is_main"]
+    with app.app_context():
+        db.session.add(ProductVariant(product_id=pid, label="أحمر", image_filename=first["filename"]))
+        db.session.commit()
+        folder = get_upload_dir("products")
+        assert os.path.exists(os.path.join(folder, first["filename"]))
+
+    r = logged_in_admin.post(f"/admin/products/{pid}/images/{first['id']}/replace",
+                             data={"image": (io.BytesIO(_jpeg_bytes((0, 0, 200))), "edited.jpg")},
+                             content_type="multipart/form-data")
+    data = r.get_json()
+    assert r.status_code == 200 and data["ok"] and data["relinked_variants"] == 1
+    new = data["filename"]
+    with app.app_context():
+        p = db.session.get(Product, pid)
+        row = db.session.get(ProductImage, first["id"])
+        assert row.image_filename == new and row.sort_order == 0       # نفس البلاصة
+        assert p.image_filename == new                                  # الرئيسية تبعت
+        assert ProductVariant.query.filter_by(label="أحمر").one().image_filename == new
+        assert db.session.get(ProductImage, second["id"]).image_filename == second["filename"]
+        folder = get_upload_dir("products")
+        assert os.path.exists(os.path.join(folder, new))
+        assert not os.path.exists(os.path.join(folder, first["filename"]))   # القديم تمسح
+
+
+def test_replace_keeps_old_file_when_shared_with_a_copy(logged_in_admin, app, seed):
+    """المنتج المنسوخ يشارك نفس الملفات — ما نمسحوش القديم إذا مازال مستعمل."""
+    import io, os
+    from models import Product, ProductImage
+    from services.uploads import get_upload_dir
+    pid = _mk_product(app, "rp-b", 100)
+    img = _upload_via_route(logged_in_admin, pid, (90, 90, 90))
+    with app.app_context():
+        copy = Product(name="نسخة", slug="rp-b-copy", price=100, image_filename=img["filename"])
+        db.session.add(copy); db.session.flush()
+        db.session.add(ProductImage(product_id=copy.id, image_filename=img["filename"], sort_order=0))
+        db.session.commit()
+    r = logged_in_admin.post(f"/admin/products/{pid}/images/{img['id']}/replace",
+                             data={"image": (io.BytesIO(_jpeg_bytes((1, 2, 3))), "e.jpg")},
+                             content_type="multipart/form-data")
+    assert r.get_json()["ok"]
+    with app.app_context():
+        assert os.path.exists(os.path.join(get_upload_dir("products"), img["filename"]))
+
+
+def test_replace_validation_and_ownership(logged_in_admin, app, seed):
+    import io
+    a = _mk_product(app, "rp-c", 100); b = _mk_product(app, "rp-d", 100)
+    img = _upload_via_route(logged_in_admin, a, (5, 5, 5))
+    url = f"/admin/products/{a}/images/{img['id']}/replace"
+    assert logged_in_admin.post(url, data={}, content_type="multipart/form-data").status_code == 400
+    bad = logged_in_admin.post(url, data={"image": (io.BytesIO(b"not an image"), "x.jpg")},
+                               content_type="multipart/form-data")
+    assert bad.status_code == 400 and not bad.get_json()["ok"]
+    # صورة منتج آخر ← 404
+    assert logged_in_admin.post(f"/admin/products/{b}/images/{img['id']}/replace",
+                                data={"image": (io.BytesIO(_jpeg_bytes()), "x.jpg")},
+                                content_type="multipart/form-data").status_code == 404
+
+
+def test_replace_requires_login(client, app, seed):
+    r = client.post("/admin/products/1/images/1/replace", data={})
+    assert r.status_code in (302, 401, 400)
+
+
+def test_product_form_has_edit_buttons_and_editor_hooks(logged_in_admin, app, seed):
+    pid = _mk_product(app, "rp-e", 100)
+    _upload_via_route(logged_in_admin, pid, (9, 9, 9))
+    html = logged_in_admin.get(f"/admin/products/{pid}/edit").get_data(as_text=True)
+    assert "data-edit" in html and "قص / تدوير / قلب" in html
+    assert "editFromUrl" in html and "/replace" in html
+
+
+def test_offer_form_exposes_current_banner_for_editing(logged_in_admin, app, seed):
+    from models import Offer
+    with app.app_context():
+        o = Offer(title="عرض", slug="offer-edit-test", bundle_price=1000, banner_filename="b.webp", is_active=True)
+        db.session.add(o); db.session.commit(); oid = o.id
+    html = logged_in_admin.get(f"/admin/offers/{oid}/edit").get_data(as_text=True)
+    assert 'data-current-image="' in html and "img/offers/b.webp" in html
+    # عرض جديد بلا بانر ← بلا زر
+    new = logged_in_admin.get("/admin/offers/new").get_data(as_text=True)
+    assert "data-current-image" not in new
+
+
+def test_no_moroccan_or_non_algerian_forms_anywhere_in_project():
+    """
+    حارس اللهجة: ما نخلّيوش كلمات مغربية/مصرية ترجع للنصوص والتعليقات.
+    (الماضي المؤنث الجزائري «-ت»: وصلت، خرجت، رجعت — ماشي «-ات»؛ و«تهزّها» ماشي «تحوّزها».)
+    """
+    import os, re
+    AR = r"\u0621-\u064A"
+    forbidden = (
+        # مغربي
+        "ديال", "ديالي", "ديالك", "ديالو", "دابا", "بغيت", "نبغي", "تبغي", "غادي", "شنو",
+        "مزيان", "فين", "دغيا", "واخا", "عفاك", "خاصني", "خاصك", "خاصو",
+        # ماضي مؤنث بصيغة «-ات» (جزائري: -ت)
+        "وصلات", "وصلاتك", "وصلاتنا", "وصلاتش", "خرجات", "رجعات", "اتبعثات", "تبعثات",
+        "تبعثاتش", "اتلغات", "تربطات", "خلصات",
+        # «حوّز» مغربي ← «هزّ»
+        "تحوّز", "تحوّزها", "يحوّز", "يحوّزها", "نحوّز",
+        # مصري/خليجي/شامي
+        "دلوقتي", "عشان", "ازاي", "ليش", "شحال", "كده", "لسه", "هيك", "كتير", "منيح",
+    )
+    pat = re.compile(rf"(?<![{AR}])({'|'.join(forbidden)})(?![{AR}])")
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    hits = []
+    for dp, dns, fns in os.walk(root):
+        dns[:] = [d for d in dns if d not in ("tests", ".git", "__pycache__", "vendor", "node_modules")]
+        for fn in fns:
+            if not fn.endswith((".py", ".html", ".js")):
+                continue
+            path = os.path.join(dp, fn)
+            for i, line in enumerate(open(path, encoding="utf-8"), 1):
+                m = pat.search(line)
+                if m:
+                    hits.append(f"{os.path.relpath(path, root)}:{i} «{m.group(0)}»")
+    assert not hits, "كلمات غير جزائرية رجعت:\n" + "\n".join(hits[:20])

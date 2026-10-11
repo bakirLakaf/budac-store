@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
 {% block title %}طلبياتي — {{ store_name }}{% endblock %}
-{% block meta_description %}تابع طلبياتك من {{ store_name }} — وين وصلات، وعدّلها قبل ما تخرج للتوصيل.{% endblock %}
+{% block meta_description %}تابع طلبياتك من {{ store_name }} — وين وصلت، وعدّلها قبل ما تخرج للتوصيل.{% endblock %}
 
 {% block content %}
 
 <section class="my-orders">
     <h1 class="page-heading">طلبياتي</h1>
-    <p class="page-sub">تابع طلبياتك وشوف وين وصلات.</p>
+    <p class="page-sub">تابع طلبياتك وشوف وين وصلت.</p>
 
     {# ═══════ إضافة طلبية ═══════
        ⚠️ ماكانش حسابات فالمتجر. رقم الطلبية + الهاتف معًا هما
@@ -143,8 +143,8 @@
             ? '<ul class="mo-steps">' + steps + '</ul>'
             : '<p class="mo-cancelled">'
               + (o.status === 'returned'
-                 ? 'هاد الطلبية رجعات لينا. تواصل معانا باش نعاودو نبعثوها.'
-                 : 'هاد الطلبية اتلغات.')
+                 ? 'هاد الطلبية رجعت لينا. تواصل معانا باش نعاودو نبعثوها.'
+                 : 'هاد الطلبية اتلغت.')
               + '</p>';
 
         var actions = o.can_edit
@@ -154,7 +154,7 @@
               + '<button type="button" class="btn-ghost mo-danger" data-cancel="' + esc(o.number) + '">'
               + 'ألغي الطلبية</button>'
               + '</div>'
-            : '<p class="hint mo-locked">🔒 الطلبية خرجات للتوصيل — '
+            : '<p class="hint mo-locked">🔒 الطلبية خرجت للتوصيل — '
               + 'إذا حبيت تبدّل شي حاجة، تواصل معانا فالواتساب.</p>';
 
         return ''

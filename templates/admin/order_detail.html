@@ -191,7 +191,7 @@
         <p class="hint">
             🔒 الطلبية ما تتعدّلش —
             {% if order.tracking_number %}
-                اتبعثات لـ{{ order.carrier_name or 'شركة التوصيل' }}،
+                اتبعثت لـ{{ order.carrier_name or 'شركة التوصيل' }}،
                 والتعديل عندنا ما يوصلهمش.
             {% else %}
                 حالتها «{{ order.status_label }}».
@@ -340,18 +340,18 @@
 
                 <a class="wa-btn" target="_blank" rel="noopener"
                    href="{{ wa }}{{ order.whatsapp_message('shipped', store_name) | urlencode }}">
-                    🚚 <span>خرجات للتوصيل</span>
+                    🚚 <span>خرجت للتوصيل</span>
                 </a>
 
                 <a class="wa-btn" target="_blank" rel="noopener"
                    href="{{ wa }}{{ order.whatsapp_message('arrived', store_name) | urlencode }}">
-                    📍 <span>وصلات للمكتب</span>
+                    📍 <span>وصلت للمكتب</span>
                 </a>
 
                 <a class="wa-btn wa-warn" target="_blank" rel="noopener"
                    href="{{ wa }}{{ order.whatsapp_message('returned', store_name) | urlencode }}"
                    title="الطرد رجع بلا ما يتسلّم — نسقسيو الزبون واش راح">
-                    ↩️ <span>رجعات لينا</span>
+                    ↩️ <span>رجعت لينا</span>
                 </a>
 
                 <a class="wa-btn wa-warn" target="_blank" rel="noopener"
@@ -459,7 +459,7 @@
                     <button type="submit" class="btn-admin btn-sm btn-ghost">🔄 حدّث حالة التتبّع من ZR</button>
                 </form>
             {% else %}
-                <p class="hint">هاد الطلبية ما تبعثاتش لشركة التوصيل بعد.</p>
+                <p class="hint">هاد الطلبية ما تبعثتش لشركة التوصيل بعد.</p>
 
                 <form method="post" action="{{ url_for('admin.order_send_to_carrier', order_id=order.id) }}"
                       onsubmit="return confirm('تبعث هاد الطلبية لـZR Express؟')">
