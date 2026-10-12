@@ -2013,6 +2013,9 @@ img.thumb-sm:hover {
 }
 .order-card-date { opacity: 0.75; }
 
+/* رقم التتبع: خط ثابت العرض باش الأرقام تتقرا مليح */
+.tracking-cell { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: nowrap; }
+
 .order-card-foot {
     display: flex; flex-wrap: wrap; align-items: center;
     justify-content: space-between; gap: 8px;

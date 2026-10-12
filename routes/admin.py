@@ -3728,6 +3728,41 @@ def order_delete(order_id):
     return redirect(url_for("admin.orders_list"))
 
 
+def _render_bordereaux(orders):
+    """يرسم صفحة البوردرو (A6 لكل طلبية) — الأدمن يطبعها ولا يحفظها PDF."""
+    from services.barcode import code128_svg
+
+    barcodes = {
+        o.id: code128_svg(o.tracking_number or o.order_number) for o in orders
+    }
+    return render_template(
+        "admin/bordereau.html", orders=orders, barcodes=barcodes,
+        sender_phone=current_app.config.get("WHATSAPP_NUMBER"),
+    )
+
+
+@admin_bp.route("/orders/<int:order_id>/bordereau")
+@login_required
+def order_bordereau(order_id):
+    """بوردرو طلبية وحدة."""
+    order = db.get_or_404(Order, order_id)
+    return _render_bordereaux([order])
+
+
+@admin_bp.route("/orders/bordereau", methods=["POST"])
+@login_required
+def orders_bulk_bordereau():
+    """بوردرو للطلبيات المختارة فالقائمة (ورقة لكل طلبية)."""
+    ids = list(dict.fromkeys(request.form.getlist("order_ids", type=int)))
+    if not ids:
+        flash("ما اخترت حتى طلبية", "warning")
+        return redirect(url_for("admin.orders_list"))
+
+    by_id = {o.id: o for o in Order.query.filter(Order.id.in_(ids)).all()}
+    orders = [by_id[i] for i in ids if i in by_id]
+    return _render_bordereaux(orders)
+
+
 @admin_bp.route("/orders/bulk-delete", methods=["POST"])
 @login_required
 def orders_bulk_delete():

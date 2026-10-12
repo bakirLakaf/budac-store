@@ -52,6 +52,11 @@
             🎁 كوبون مكافأة للمختارة
         </button>
     </span>
+    {# 🖨️ بوردرو المختارة: صفحة طباعة فتبويب جديد (ورقة A6 لكل طلبية) #}
+    <button type="submit" class="btn-admin btn-sm"
+            formaction="{{ url_for('admin.orders_bulk_bordereau') }}" formtarget="_blank">
+        🖨️ بوردرو المختارة
+    </button>
     <button type="submit" class="btn-admin btn-sm btn-danger"
             onclick="return confirm('تحذف الطلبيات المختارة نهائيًا؟ ما ترجعش.')">
         🗑️ احذف المختارة
@@ -59,7 +64,7 @@
 </div>
 
 {# ═══════ بطاقات الموبايل ═══════
-   ⚠️ الجدول عندو 10 أعمدة — فشاشة 400px يتقصّ ويولّي الأدمن يزحلق
+   ⚠️ الجدول عندو 12 عمود — فشاشة 400px يتقصّ ويولّي الأدمن يزحلق
    يمينًا ويسارًا. البطاقات توري نفس المعلومات فسطرين واضحين.
    الاثنين موجودين، وCSS يخفي واحد حسب عرض الشاشة. #}
 <div class="order-cards">
@@ -82,6 +87,13 @@
             <span>📦 {{ o.item_count }} قطعة</span>
             <span class="order-card-date">{{ o.created_at.strftime('%m-%d %H:%M') }}</span>
         </div>
+
+        {% if o.carrier_name or o.tracking_number %}
+        <div class="order-card-meta">
+            {% if o.carrier_name %}<span>🚚 {{ o.carrier_name }}</span>{% endif %}
+            {% if o.tracking_number %}<span dir="ltr" class="tracking-cell">{{ o.tracking_number }}</span>{% endif %}
+        </div>
+        {% endif %}
 
         <div class="order-card-foot">
             <strong class="order-card-total">{{ o.total_display }}</strong>
@@ -107,7 +119,7 @@
         <tr>
         <th style="width:34px"><input type="checkbox" id="bulkAll" aria-label="اختر الكل"></th>
         <th>الرقم</th><th>الزبون</th><th>الهاتف</th><th>الولاية</th>
-        <th>قطع</th><th>المجموع</th><th>الحالة</th><th>التاريخ</th><th></th></tr>
+        <th>قطع</th><th>المجموع</th><th>الحالة</th><th>شركة التوصيل</th><th>رقم التتبع</th><th>التاريخ</th><th></th></tr>
     </thead>
     <tbody>
         {% for o in orders %}
@@ -130,6 +142,8 @@
             <td>{{ o.item_count }}</td>
             <td><strong>{{ o.total_display }}</strong></td>
             <td><span class="status-pill status-{{ o.status }}">{{ o.status_label }}</span></td>
+            <td>{{ o.carrier_name or '—' }}</td>
+            <td dir="ltr" class="tracking-cell">{{ o.tracking_number or '—' }}</td>
             <td class="muted-cell">{{ o.created_at.strftime('%m-%d %H:%M') }}</td>
             <td><a href="{{ url_for('admin.order_detail', order_id=o.id) }}" class="btn-admin btn-sm btn-ghost">فتح</a></td>
         </tr>

@@ -1962,3 +1962,75 @@ def test_no_moroccan_or_non_algerian_forms_anywhere_in_project():
                 if m:
                     hits.append(f"{os.path.relpath(path, root)}:{i} «{m.group(0)}»")
     assert not hits, "كلمات غير جزائرية رجعت:\n" + "\n".join(hits[:20])
+
+
+def test_orders_list_shows_carrier_and_tracking_columns(logged_in_admin, app, seed):
+    """قائمة الطلبيات تبيّن «شركة التوصيل» و«رقم التتبع» (— إذا ماكانوش)."""
+    with app.app_context():
+        db.session.add(Order(
+            order_number="BD-COL0001", customer_name="زبون", customer_phone="0555111222",
+            wilaya_code="16", wilaya_name="الجزائر", subtotal=500, shipping_price=0,
+            total=500, status=Order.STATUS_CONFIRMED, delivery_type="home",
+            carrier_name="ZR Express", tracking_number="ZRX-998877",
+        ))
+        db.session.add(Order(
+            order_number="BD-COL0002", customer_name="زبون", customer_phone="0555111333",
+            wilaya_code="16", wilaya_name="الجزائر", subtotal=500, shipping_price=0,
+            total=500, status=Order.STATUS_PENDING, delivery_type="home",
+        ))
+        db.session.commit()
+    html = logged_in_admin.get("/admin/orders").get_data(as_text=True)
+    assert "<th>شركة التوصيل</th><th>رقم التتبع</th>" in html
+    assert "ZR Express" in html and "ZRX-998877" in html
+
+
+def _bordereau_order(app, number, tracking=None):
+    with app.app_context():
+        o = Order(
+            order_number=number, customer_name="دانون عبد الرؤوف",
+            customer_phone="0697015018", wilaya_code="43", wilaya_name="ميلة",
+            commune="شلغوم العيد", address_note="حي 5 جويلية", subtotal=3000,
+            shipping_price=600, total=3600, status=Order.STATUS_CONFIRMED,
+            delivery_type="home", carrier_name="ZR Express", tracking_number=tracking,
+        )
+        db.session.add(o)
+        db.session.commit()
+        return o.id
+
+
+def test_bordereau_single_order_shows_label_and_barcode(logged_in_admin, app, seed):
+    oid = _bordereau_order(app, "BD-BRD0001", tracking="ZRX-998877")
+    resp = logged_in_admin.get(f"/admin/orders/{oid}/bordereau")
+    html = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "ZRX-998877" in html and "<svg" in html
+    assert "دانون عبد الرؤوف" in html and "0697015018" in html
+    assert "3,600 دج" in html and "شلغوم العيد" in html
+
+
+def test_bordereau_without_tracking_falls_back_to_order_number(logged_in_admin, app, seed):
+    oid = _bordereau_order(app, "BD-BRD0002")
+    html = logged_in_admin.get(f"/admin/orders/{oid}/bordereau").get_data(as_text=True)
+    assert "BD-BRD0002" in html and "ما تبعثتش لشركة التوصيل بعد" in html
+
+
+def test_bordereau_bulk_prints_one_label_per_selected_order(logged_in_admin, app, seed):
+    a = _bordereau_order(app, "BD-BRD0003", tracking="T-1")
+    b = _bordereau_order(app, "BD-BRD0004", tracking="T-2")
+    resp = logged_in_admin.post("/admin/orders/bordereau", data={"order_ids": [a, b]})
+    html = resp.get_data(as_text=True)
+    assert html.count('<section class="label">') == 2
+
+
+def test_bordereau_bulk_requires_login_and_selection(app, logged_in_admin, seed):
+    empty = logged_in_admin.post("/admin/orders/bordereau", data={})
+    assert empty.status_code == 302     # ما اخترت حتى طلبية → رجوع للقائمة
+    anon = app.test_client()            # ⚠️ عميل جديد: `client` هو نفسو logged_in_admin
+    assert anon.post("/admin/orders/bordereau", data={"order_ids": [1]}).status_code in (302, 401, 403)
+    assert anon.get("/admin/orders/1/bordereau").status_code in (302, 401, 403)
+
+
+def test_orders_list_has_bulk_bordereau_button(logged_in_admin, app, seed):
+    _bordereau_order(app, "BD-BRD0005")
+    html = logged_in_admin.get("/admin/orders").get_data(as_text=True)
+    assert "بوردرو المختارة" in html

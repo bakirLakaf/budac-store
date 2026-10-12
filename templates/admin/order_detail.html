@@ -442,6 +442,8 @@
 
         <h2 class="section-title">شركة التوصيل</h2>
         <div class="carrier-panel">
+            <a href="{{ url_for('admin.order_bordereau', order_id=order.id) }}" target="_blank"
+               class="btn-admin btn-sm btn-ghost">🖨️ بوردرو (طباعة / PDF)</a>
             {% if order.tracking_number %}
                 <div class="info-row">
                     <span>رقم التتبّع</span>
