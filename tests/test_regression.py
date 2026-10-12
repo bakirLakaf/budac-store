@@ -2033,4 +2033,107 @@ def test_bordereau_bulk_requires_login_and_selection(app, logged_in_admin, seed)
 def test_orders_list_has_bulk_bordereau_button(logged_in_admin, app, seed):
     _bordereau_order(app, "BD-BRD0005")
     html = logged_in_admin.get("/admin/orders").get_data(as_text=True)
-    assert "بوردرو المختارة" in html
+    assert "بوردرو ZR للمختارة" in html and "بوردرو بسيط" in html
+
+
+# ─────────── بوردرو ZR الرسمي ───────────
+
+def _fake_pdf_bytes():
+    from pypdf import PdfWriter
+    from io import BytesIO
+    w = PdfWriter()
+    w.add_blank_page(width=297, height=420)
+    out = BytesIO()
+    w.write(out)
+    return out.getvalue()
+
+
+def test_get_label_files_posts_expected_payload_and_parses_response():
+    from unittest import mock
+    from services import zrexpress
+    fake = {"parcelLabelFiles": [{"trackingNumber": "A-1", "fileUrl": "https://x.blob.core.windows.net/a.pdf"}],
+            "failedTrackingNumbers": ["B-2"]}
+    with mock.patch.object(zrexpress, "_request", return_value=fake) as m:
+        urls, failed = zrexpress.get_label_files(["A-1", "B-2", "C-3"], "a6")
+    m.assert_called_once_with("POST", "/parcels/labels/individual/pdf",
+                              json={"trackingNumbers": ["A-1", "B-2", "C-3"], "format": "a6"})
+    assert urls == {"A-1": "https://x.blob.core.windows.net/a.pdf"}
+    assert "B-2" in failed and "C-3" in failed       # ما رجعش = فاشل
+
+
+def test_zr_label_single_redirects_to_pdf_url(logged_in_admin, app, seed):
+    from unittest import mock
+    oid = _bordereau_order(app, "BD-ZRL0001", tracking="ZR-111")
+    url = "https://store.blob.core.windows.net/labels/zr-111.pdf?sig=abc"
+    with mock.patch("services.zrexpress.get_label_files", return_value=({"ZR-111": url}, [])):
+        resp = logged_in_admin.get(f"/admin/orders/{oid}/zr-label")
+    assert resp.status_code == 302 and resp.headers["Location"] == url
+
+
+def test_zr_label_single_without_tracking_redirects_with_message(logged_in_admin, app, seed):
+    oid = _bordereau_order(app, "BD-ZRL0002")
+    resp = logged_in_admin.get(f"/admin/orders/{oid}/zr-label", follow_redirects=True)
+    assert "ما تبعثتش لـZR" in resp.get_data(as_text=True)
+
+
+def test_zr_label_rejects_unsafe_urls(logged_in_admin, app, seed):
+    from unittest import mock
+    oid = _bordereau_order(app, "BD-ZRL0003", tracking="ZR-222")
+    for bad in ("http://evil.example/a.pdf", "https://127.0.0.1/a.pdf", "https://localhost/a.pdf"):
+        with mock.patch("services.zrexpress.get_label_files", return_value=({"ZR-222": bad}, [])):
+            resp = logged_in_admin.get(f"/admin/orders/{oid}/zr-label")
+        assert resp.status_code == 302 and resp.headers["Location"].endswith(f"/admin/orders/{oid}")
+
+
+def test_zr_labels_bulk_merges_pdfs_and_skips_unsent(logged_in_admin, app, seed):
+    from unittest import mock
+    from io import BytesIO
+    from pypdf import PdfReader
+    a = _bordereau_order(app, "BD-ZRL0004", tracking="ZR-A")
+    b = _bordereau_order(app, "BD-ZRL0005", tracking="ZR-B")
+    c = _bordereau_order(app, "BD-ZRL0006")                      # ما تبعثتش
+    urls = {"ZR-A": "https://s.blob.core.windows.net/a.pdf", "ZR-B": "https://s.blob.core.windows.net/b.pdf"}
+    with mock.patch("services.zrexpress.get_label_files", return_value=(urls, [])) as m, \
+         mock.patch("routes.admin._download_label_pdf", return_value=_fake_pdf_bytes()):
+        resp = logged_in_admin.post("/admin/orders/zr-labels", data={"order_ids": [a, b, c]})
+    assert resp.status_code == 200 and resp.mimetype == "application/pdf"
+    assert len(PdfReader(BytesIO(resp.data)).pages) == 2
+    assert m.call_args.args[0] == ["ZR-A", "ZR-B"]               # c ما دخلش
+
+
+def test_zr_labels_bulk_requires_selection_and_login(app, logged_in_admin, seed):
+    assert logged_in_admin.post("/admin/orders/zr-labels", data={}).status_code == 302
+    anon = app.test_client()
+    assert anon.post("/admin/orders/zr-labels", data={"order_ids": [1]}).status_code in (302, 401, 403)
+    assert anon.get("/admin/orders/1/zr-label").status_code in (302, 401, 403)
+
+
+def test_order_detail_shows_zr_label_button_only_when_sent(logged_in_admin, app, seed):
+    sent = _bordereau_order(app, "BD-ZRL0007", tracking="ZR-777")
+    unsent = _bordereau_order(app, "BD-ZRL0008")
+    assert "بوردرو ZR الرسمي" in logged_in_admin.get(f"/admin/orders/{sent}").get_data(as_text=True)
+    assert "بوردرو ZR الرسمي" not in logged_in_admin.get(f"/admin/orders/{unsent}").get_data(as_text=True)
+
+
+def test_download_label_pdf_validates_size_and_type():
+    from unittest import mock
+    import pytest
+    from routes.admin import _download_label_pdf
+
+    def fake_get(data):
+        resp = mock.Mock()
+        resp.raise_for_status.return_value = None
+        resp.raw.read.return_value = data
+        return resp
+
+    url = "https://s.blob.core.windows.net/a.pdf"
+    with mock.patch("requests.get", return_value=fake_get(b"%PDF-1.4 ok")):
+        assert _download_label_pdf(url).startswith(b"%PDF")
+    with mock.patch("requests.get", return_value=fake_get(b"<html>no</html>")):
+        with pytest.raises(ValueError):
+            _download_label_pdf(url)
+    with mock.patch("requests.get", return_value=fake_get(b"%PDF" + b"0" * (5 * 1024 * 1024 + 1))):
+        with pytest.raises(ValueError):
+            _download_label_pdf(url)
+    with pytest.raises(ValueError):
+        _download_label_pdf("http://insecure.example/a.pdf")

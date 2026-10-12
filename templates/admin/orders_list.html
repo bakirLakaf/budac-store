@@ -52,10 +52,15 @@
             🎁 كوبون مكافأة للمختارة
         </button>
     </span>
-    {# 🖨️ بوردرو المختارة: صفحة طباعة فتبويب جديد (ورقة A6 لكل طلبية) #}
+    {# 🖨️ بوردرو ZR الرسمي (PDF واحد) — للطلبيات اللي تبعثت لـZR برك #}
     <button type="submit" class="btn-admin btn-sm"
+            formaction="{{ url_for('admin.orders_bulk_zr_labels') }}" formtarget="_blank">
+        🖨️ بوردرو ZR للمختارة
+    </button>
+    {# بوردرو بسيط يصنعو الموقع: يخدم حتى للطلبيات اللي ما تبعثتش لـZR #}
+    <button type="submit" class="btn-admin btn-sm btn-ghost"
             formaction="{{ url_for('admin.orders_bulk_bordereau') }}" formtarget="_blank">
-        🖨️ بوردرو المختارة
+        🖨️ بوردرو بسيط
     </button>
     <button type="submit" class="btn-admin btn-sm btn-danger"
             onclick="return confirm('تحذف الطلبيات المختارة نهائيًا؟ ما ترجعش.')">

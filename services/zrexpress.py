@@ -661,6 +661,42 @@ def get_parcel_status(tracking_number):
     }
 
 
+def get_label_files(tracking_numbers, fmt="a6"):
+    """
+    الملصق (البوردرو) الرسمي تاع ZR Express بصيغة PDF.
+
+    المسار: `POST /parcels/labels/individual/pdf` بجسم
+    `{"trackingNumbers": [...], "format": "a6" | "a4"}` — a6 = ملصق فورقة،
+    a4 = 4 ملصقات فورقة. يرجّع رابط PDF **مؤقت** (SAS) لكل رقم تتبّع.
+
+    المصدر: مشروع CodFlow (Apache-2.0)، مجرَّب على API الإنتاج تاع ZR.
+    ⚠️ ما جرّبناهش بمفاتيحنا: إذا ZR بدّلت المسار، `LAST_EXCHANGE` (صفحة
+    التكاملات) يبيّن الرد الحقيقي.
+
+    يرجّع (urls, failed): urls = {tracking_number: file_url}.
+    """
+    numbers = [str(n).strip() for n in tracking_numbers if n and str(n).strip()]
+    if not numbers:
+        return {}, []
+
+    data = _request(
+        "POST", "/parcels/labels/individual/pdf",
+        json={"trackingNumbers": numbers, "format": fmt},
+    )
+
+    urls = {}
+    for item in (data.get("parcelLabelFiles") or []):
+        number = item.get("trackingNumber")
+        file_url = item.get("fileUrl")
+        if number and file_url:
+            urls[str(number)] = file_url
+
+    failed = [str(n) for n in (data.get("failedTrackingNumbers") or [])]
+    # أي رقم ما رجعش لا فالملفات لا فالفاشلين نعتبروه فاشل
+    failed += [n for n in numbers if n not in urls and n not in failed]
+    return urls, failed
+
+
 def _plain_state(text):
     """نص بحروف صغيرة وبلا تشكيل لاتيني (Livré → livre) باش المقارنة تكون سهلة."""
     import unicodedata

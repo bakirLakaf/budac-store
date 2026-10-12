@@ -3763,6 +3763,160 @@ def orders_bulk_bordereau():
     return _render_bordereaux(orders)
 
 
+def _is_safe_label_url(url):
+    """نقبلو غير روابط https عامة (ماشي localhost ولا IP) — الرابط يجي من ZR."""
+    from urllib.parse import urlparse
+    import ipaddress
+
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https" or not host or host == "localhost":
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False            # IP مباشر = مرفوض
+    except ValueError:
+        return True
+
+
+def _download_label_pdf(url):
+    """ينزّل PDF تاع ملصق (حد 5 ميغا، مهلة 20 ثانية) ويرجّع bytes."""
+    import requests as _rq
+
+    if not _is_safe_label_url(url):
+        raise ValueError("رابط الملصق غير مقبول")
+    resp = _rq.get(url, timeout=20, stream=True)
+    resp.raise_for_status()
+    data = resp.raw.read(5 * 1024 * 1024 + 1, decode_content=True)
+    if len(data) > 5 * 1024 * 1024:
+        raise ValueError("ملف الملصق كبير بزاف")
+    if not data.startswith(b"%PDF"):
+        raise ValueError("الملف راجع ماشي PDF")
+    return data
+
+
+@admin_bp.route("/orders/<int:order_id>/zr-label")
+@login_required
+def order_zr_label(order_id):
+    """البوردرو **الرسمي** تاع ZR Express لطلبية وحدة (يفتح PDF)."""
+    from services.zrexpress import get_label_files, ZRError
+
+    order = db.get_or_404(Order, order_id)
+    back = redirect(url_for("admin.order_detail", order_id=order.id))
+
+    if not order.tracking_number:
+        flash("هاد الطلبية ما تبعثتش لـZR Express بعد — ما كاينش بوردرو رسمي", "warning")
+        return back
+
+    try:
+        urls, failed = get_label_files([order.tracking_number], "a6")
+    except ZRError as e:
+        flash(str(e), "error")
+        return back
+    except Exception:
+        current_app.logger.exception("order_zr_label: خطأ غير متوقع %s", order.order_number)
+        flash("صار خطأ غير متوقع فجلب البوردرو من ZR. جرّب مرة أخرى.", "error")
+        return back
+
+    url = urls.get(order.tracking_number)
+    if not url or not _is_safe_label_url(url):
+        flash("ZR ما عطاتش الملصق تاع هاد الطرد (رقم التتبع: "
+              f"{order.tracking_number}). جرّب «بوردرو بسيط».", "error")
+        return back
+    return redirect(url)
+
+
+@admin_bp.route("/orders/zr-labels", methods=["POST"])
+@login_required
+def orders_bulk_zr_labels():
+    """بوردرو ZR الرسمي للطلبيات المختارة: ملف PDF واحد، ورقة لكل طرد."""
+    from concurrent.futures import ThreadPoolExecutor
+    from io import BytesIO
+    from flask import Response
+    from pypdf import PdfReader, PdfWriter
+    from services.zrexpress import get_label_files, ZRError
+
+    MAX_LABELS = 40
+    back = redirect(url_for("admin.orders_list"))
+
+    ids = list(dict.fromkeys(request.form.getlist("order_ids", type=int)))
+    if not ids:
+        flash("ما اخترت حتى طلبية", "warning")
+        return back
+
+    by_id = {o.id: o for o in Order.query.filter(Order.id.in_(ids)).all()}
+    orders = [by_id[i] for i in ids if i in by_id]
+    sent = [o for o in orders if o.tracking_number]
+    skipped = len(orders) - len(sent)
+
+    if not sent:
+        flash("ولا وحدة من الطلبيات المختارة تبعثت لـZR — ما كاينش بوردرو رسمي", "warning")
+        return back
+    if len(sent) > MAX_LABELS:
+        flash(f"بزاف: اختار {MAX_LABELS} طلبية كحد أقصى فالمرة", "warning")
+        return back
+
+    try:
+        urls, failed = get_label_files([o.tracking_number for o in sent], "a6")
+    except ZRError as e:
+        flash(str(e), "error")
+        return back
+    except Exception:
+        current_app.logger.exception("orders_bulk_zr_labels: خطأ غير متوقع")
+        flash("صار خطأ غير متوقع فجلب البوردرو من ZR. جرّب مرة أخرى.", "error")
+        return back
+
+    # ننزّلو الملفات بالتوازي، ونحافظو على ترتيب الاختيار
+    def fetch(order):
+        url = urls.get(order.tracking_number)
+        if not url:
+            return order, None
+        try:
+            return order, _download_label_pdf(url)
+        except Exception:
+            current_app.logger.warning("تعذّر تنزيل ملصق %s", order.tracking_number, exc_info=True)
+            return order, None
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(fetch, sent))
+
+    writer = PdfWriter()
+    missing = []
+    for order, data in results:
+        if not data:
+            missing.append(order.order_number)
+            continue
+        try:
+            for page in PdfReader(BytesIO(data)).pages:
+                writer.add_page(page)
+        except Exception:
+            missing.append(order.order_number)
+
+    if not len(writer.pages):
+        flash("ما قدرناش نجيبو أي ملصق من ZR. جرّب «بوردرو بسيط».", "error")
+        return back
+
+    out = BytesIO()
+    writer.write(out)
+
+    # ⚠️ التنبيه يبان فالصفحة الجاية تاع الأدمن (التبويب الجديد PDF ما يعرضوش)
+    notes = []
+    if skipped:
+        notes.append(f"{skipped} طلبية ما تبعثتش لـZR")
+    if missing:
+        notes.append("بلا ملصق: " + "، ".join(missing[:8]))
+    if notes:
+        flash(" · ".join(notes), "warning")
+
+    return Response(
+        out.getvalue(), mimetype="application/pdf",
+        headers={"Content-Disposition": "inline; filename=zr-labels.pdf"},
+    )
+
+
 @admin_bp.route("/orders/bulk-delete", methods=["POST"])
 @login_required
 def orders_bulk_delete():
