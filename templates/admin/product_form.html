@@ -1750,13 +1750,12 @@ function initUploader(box) {
         var chosen = Array.prototype.slice.call(picker.files || []);
         if (!chosen.length) return;
 
-        // ✂️ قص وتدوير قبل الرفع (static/js/image-editor.js). الصور الأساسية
-        // نقترحو لها مربّع 1:1 (كيما تبان فالمتجر)، والتوضيحية شكل حر.
+        // ✂️ قص وتدوير قبل الرفع (static/js/image-editor.js). الشكل الافتراضي «حر»:
+        // الصورة تبقى كاملة (التدوير ما يقصّهاش). بطاقات القوائم تقص روحها بـCSS،
+        // وصفحة المنتج تعرض الصورة كاملة. «1:1» يبقى متاح كزر.
         // إذا المحرّر ما تحمّلش لأي سبب، نرفعو الصور كيما هي.
         var editing = window.BudacImageEditor
-            ? window.BudacImageEditor.edit(chosen, {
-                  aspect: box.dataset.kind === 'extra' ? NaN : 1
-              })
+            ? window.BudacImageEditor.edit(chosen, { aspect: NaN })
             : Promise.resolve(chosen);
 
         editing.then(function (files) {

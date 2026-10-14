@@ -7,6 +7,7 @@
 """
 
 import io
+import os
 
 import pytest
 
@@ -1576,7 +1577,7 @@ def test_admin_pages_load_image_editor_script(logged_in_admin, app, seed):
 def test_product_form_routes_uploads_through_editor(logged_in_admin, app, seed):
     html = logged_in_admin.get("/admin/products/new").get_data(as_text=True)
     assert "BudacImageEditor.edit" in html
-    assert "aspect: box.dataset.kind === 'extra' ? NaN : 1" in html   # الأساسية 1:1، التوضيحية حرّة
+    assert "edit(chosen, { aspect: NaN })" in html   # v170: الكل «حر» باش الصورة تبقى كاملة
 
 
 def test_category_and_offer_file_inputs_use_editor(logged_in_admin, app, seed):
@@ -2137,3 +2138,36 @@ def test_download_label_pdf_validates_size_and_type():
             _download_label_pdf(url)
     with pytest.raises(ValueError):
         _download_label_pdf("http://insecure.example/a.pdf")
+
+
+# ─────────── التدوير بلا قص + عرض الصورة كاملة فصفحة المنتج ───────────
+
+def _read_static(rel):
+    root = os.path.dirname(os.path.dirname(__file__))
+    with open(os.path.join(root, rel), encoding="utf-8") as fh:
+        return fh.read()
+
+
+def test_image_editor_refits_whole_image_after_every_rotation():
+    """التدوير يعاود يحط الصورة كاملة فالحاوية، والإطار يغطيها (ماشي يقص)."""
+    js = _read_static("static/js/image-editor.js")
+    assert "function fitFullImage" in js
+    assert "cropper.rotate(-90); fitFullImage(cropper, currentAspect)" in js
+    assert "cropper.rotate(90); fitFullImage(cropper, currentAspect)" in js
+
+
+def test_product_images_default_to_free_crop_so_rotation_keeps_whole_image():
+    html = _read_static("templates/admin/product_form.html")
+    assert "edit(chosen, { aspect: NaN })" in html
+
+
+def test_product_page_shows_full_image_while_cards_stay_cropped():
+    css = _read_static("static/css/style.css")
+
+    def rule_block(selector):
+        start = css.index(selector + " {")
+        return css[start:css.index("}", start)]
+
+    assert "object-fit: contain" in rule_block(".product-gallery-main img")
+    assert "object-fit: contain" in rule_block(".gallery-thumb img")
+    assert "object-fit: cover" in rule_block(".product-card-image img")   # الصفحة الأولى/القوائم

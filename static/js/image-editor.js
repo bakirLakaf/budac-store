@@ -151,6 +151,28 @@
         return ui;
     }
 
+    // ───────────────────────── تدوير بلا قص ─────────────────────────
+    /**
+     * بعد كل تدوير: الصورة كاملة تتحط فالحاوية (متوسّطة)، وإطار القص يغطّيها كلها.
+     * بدون هادي، Cropper يخلّي الإطار القديم والصورة المدوّرة تفيض على الحاوية،
+     * ويطلع الإطار يقص جزء منها. مع نسبة ثابتة (1:1 مثلا) الإطار يكون أكبر مستطيل
+     * بهاد النسبة داخل الصورة، والمستخدم يقدر يوسّعو بـ«حر».
+     */
+    function fitFullImage(cropper, aspect) {
+        if (!cropper) { return; }
+        var box = cropper.getContainerData();
+        var cv = cropper.getCanvasData();
+        var ratio = cv.naturalWidth / cv.naturalHeight;
+        var w = box.width, h = w / ratio;
+        if (h > box.height) { h = box.height; w = h * ratio; }
+
+        // نمسحو الإطار مؤقتا: وهو موجود، Cropper ما يخلّيش الصورة تصغر تحتو
+        cropper.clear();
+        cropper.setCanvasData({ left: (box.width - w) / 2, top: (box.height - h) / 2, width: w });
+        cropper.crop();
+        cropper.setAspectRatio(aspect);   // يعاود يحسب الإطار على الصورة كاملة
+    }
+
     // ───────────────────────── تعديل صورة وحدة ─────────────────────────
     /** يرجع {action: ok|asis|asis-all|skip|cancel, file?} */
     function editOne(file, index, total, aspect) {
@@ -160,6 +182,7 @@
             return new Promise(function (resolve) {
                 var cropper = null;
                 var finished = false;
+                var currentAspect = aspect;   // النسبة الحالية (تتبدّل بأزرار الشكل)
 
                 u.title.textContent = "قصّ وتدوير — صورة " + (index + 1) + " من " + total;
                 u.name.textContent = file.name || "";
@@ -216,13 +239,14 @@
 
                     if (btn.dataset.ratio) {
                         var a = btn.dataset.ratio === "free" ? NaN : Number(btn.dataset.ratio);
+                        currentAspect = a;
                         if (cropper) { cropper.setAspectRatio(a); }
                         setActive(btn.dataset.ratio);
                         return;
                     }
                     switch (btn.dataset.act) {
-                        case "rot-left":  if (cropper) { cropper.rotate(-90); } break;
-                        case "rot-right": if (cropper) { cropper.rotate(90); } break;
+                        case "rot-left":  if (cropper) { cropper.rotate(-90); fitFullImage(cropper, currentAspect); } break;
+                        case "rot-right": if (cropper) { cropper.rotate(90); fitFullImage(cropper, currentAspect); } break;
                         case "flip-h":    if (cropper) { cropper.scaleX(cropper.getData().scaleX === -1 ? 1 : -1); } break;
                         case "flip-v":    if (cropper) { cropper.scaleY(cropper.getData().scaleY === -1 ? 1 : -1); } break;
                         case "reset":     if (cropper) { cropper.reset(); } break;
@@ -366,7 +390,8 @@
     }
 
     window.BudacImageEditor = {
-        edit: edit, editFromUrl: editFromUrl, parseAspect: parseAspect, baseName: baseName
+        edit: edit, editFromUrl: editFromUrl, parseAspect: parseAspect, baseName: baseName,
+        _fitFullImage: fitFullImage   // للاختبارات برك
     };
 
     document.addEventListener("DOMContentLoaded", function () {
