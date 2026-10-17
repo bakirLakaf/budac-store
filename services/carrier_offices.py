@@ -41,6 +41,12 @@ OFFICE_FILES = {
     "worldexpress": "world_offices.json",   # 95 مكتب فـ54 ولاية
 }
 
+# شركات مكاتبها تجي من الـAPI مباشرة (مخزّنة فالخدمة نفسها 6 ساعات) وماشي من ملف.
+# Yalidine: GET /centers — ما نخزّنوش الفشل هنا باش يرجع يخدم كي ترجع الشبكة.
+LIVE_LOADERS = {
+    "yalidine": ("services.yalidine", "centers_as_offices"),
+}
+
 _cache = {}
 
 
@@ -51,6 +57,19 @@ def _load(carrier_code):
     ⚠️ الملف الناقص ماشي خطأ: الشركة تقدر تكون بلا مكاتب بعد.
     نرجّعو قائمة فارغة، والواجهة توري رسالة مفهومة بدل ما تطيح.
     """
+    if carrier_code in LIVE_LOADERS:
+        module_name, func_name = LIVE_LOADERS[carrier_code]
+        try:
+            import importlib
+            return getattr(importlib.import_module(module_name), func_name)()
+        except Exception as e:  # noqa: BLE001 — الشبكة طاحت: قائمة فارغة، ماشي 500
+            try:
+                from flask import current_app
+                current_app.logger.warning("🏢 مكاتب %s: فشل الجلب: %s", carrier_code, e)
+            except Exception:
+                pass
+            return []
+
     if carrier_code in _cache:
         return _cache[carrier_code]
 

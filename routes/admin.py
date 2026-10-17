@@ -2668,6 +2668,8 @@ def order_send_to_carrier(order_id):
     # World Express تخدم بمنصة ECOTRACK — منطق مختلف تمامًا عن ZR
     if order.carrier_code == "worldexpress":
         return _send_order_to_world(order_id)
+    if order.carrier_code == "yalidine":
+        return _send_order_to_yalidine(order_id)
 
     if not is_configured():
         flash(
@@ -2885,6 +2887,91 @@ def order_world_label(order_id):
                     headers={"Content-Disposition": f'inline; filename="world-{safe}.pdf"'})
 
 
+def _send_order_to_yalidine(order_id):
+    """
+    يبعث الطلبية لـYalidine Express ويسجّل رقم التتبّع.
+
+    نفس ضمانات ZR/World: حجز ذرّي ضد النقرة المزدوجة، والفشل ما يكسرش الطلبية.
+    ما كاينش «تأكيد الإرسال» منفصل: الطرد يتنشأ «en préparation» وYalidine تكمل.
+    """
+    from services import yalidine as yal
+
+    order = db.session.get(Order, order_id) or abort(404)
+    back = redirect(url_for("admin.order_detail", order_id=order_id))
+
+    if not yal.is_configured():
+        flash("مفاتيح Yalidine غير معمّرة. حط YALIDINE_API_ID و YALIDINE_API_TOKEN فملف .env",
+              "error")
+        return back
+
+    claimed, claim_message = _claim_order_for_zr(order_id)
+    if not claimed:
+        flash(claim_message, "warning")
+        return back
+    db.session.expire(order)
+
+    try:
+        result = yal.create_order(order)
+    except yal.YalidineError as e:
+        if e.parcel_may_exist:
+            # 🔴 ممكن الطرد اتنشأ عند Yalidine. نخلّيو الحجز «sending» (يتحرّر
+            # وحدو بعد 3 دقائق) ونسجّلو السبب — باش ما يتخلقش طرد مضاعف.
+            from sqlalchemy import update as sa_update
+            db.session.rollback()
+            db.session.execute(
+                sa_update(Order).where(Order.id == order_id,
+                                       Order.tracking_number.is_(None))
+                .values(send_error=str(e)[:300]))
+            db.session.commit()
+            flash(f"⚠️ {e}", "warning")
+        else:
+            _release_zr_claim(order_id, str(e))
+            flash(f"ما قدرناش نبعثو الطلبية لـYalidine: {e}", "error")
+        return back
+    except Exception:
+        _release_zr_claim(order_id, "خطأ غير متوقّع")
+        current_app.logger.exception(
+            "فشل غير متوقّع فإرسال الطلبية %s لـYalidine", order_id)
+        flash("صرا خطأ غير متوقّع فالإرسال. شوف السجلات وعاود جرّب.", "error")
+        return back
+
+    order.tracking_number = result["tracking_number"]
+    order.send_state = Order.ZR_SENT
+    order.send_error = None
+    order.carrier_state = "en_preparation"
+    audit.record(AdminAction.SHIPMENT_SENT, "order", order.order_number,
+                 f"Yalidine — تتبّع: {order.tracking_number}")
+    if order.status == Order.STATUS_PENDING:
+        order.status = Order.STATUS_CONFIRMED
+    db.session.commit()
+
+    flash(f"✓ تبعثت لـYalidine — رقم التتبّع: {order.tracking_number}", "success")
+    return back
+
+
+@admin_bp.route("/orders/<int:order_id>/yalidine-label")
+@login_required
+def order_yalidine_label(order_id):
+    """البوردرو **الرسمي** تاع Yalidine — نحوّلو لرابطهم (فيه توكن، ما نخزّنوهش)."""
+    from services import yalidine as yal
+
+    order = db.get_or_404(Order, order_id)
+    back = redirect(url_for("admin.order_detail", order_id=order.id))
+    if order.carrier_code != "yalidine" or not order.tracking_number:
+        flash("هاد الطلبية ما تبعثتش لـYalidine — ما كاينش بوردرو رسمي", "warning")
+        return back
+    try:
+        url = yal.get_label_url(order.tracking_number)
+    except yal.YalidineError as e:
+        flash(str(e), "error")
+        return back
+    except Exception:
+        current_app.logger.exception("order_yalidine_label: خطأ غير متوقع %s", order.order_number)
+        flash("صار خطأ غير متوقع فجلب البوردرو. جرّب مرة أخرى.", "error")
+        return back
+    return redirect(url)
+
+
 def _normalize_zr_state(status):
     """يستخرج نص حالة ZR من الرد (مهما كان شكلو). يرجع None إذا ما لقاش."""
     state = status.get("state") if isinstance(status, dict) else None
@@ -2909,6 +2996,8 @@ def _decide_status_change(order, new_state):
     """
     if order.carrier_code == "worldexpress":
         from services.worldexpress import map_state_to_order_status
+    elif order.carrier_code == "yalidine":
+        from services.yalidine import map_state_to_order_status
     else:
         from services.zrexpress import map_state_to_order_status
 
@@ -2943,10 +3032,14 @@ def order_refresh_tracking(order_id):
 
     # World Express: نفس المنطق بعميل ECOTRACK (الاسم المستعار يخلّي الباقي يخدم كيما هو)
     is_world = order.carrier_code == "worldexpress"
-    carrier_label = "World Express" if is_world else "ZR"
+    is_yalidine = order.carrier_code == "yalidine"
+    carrier_label = "World Express" if is_world else ("Yalidine" if is_yalidine else "ZR")
     if is_world:
         from services.worldexpress import (
             get_order_status as get_parcel_status, WorldError as ZRError)
+    elif is_yalidine:
+        from services.yalidine import (
+            get_order_status as get_parcel_status, YalidineError as ZRError)
 
     try:
         status = get_parcel_status(order.tracking_number)
@@ -3071,7 +3164,16 @@ def orders_refresh_all_tracking():
             break
 
         try:
-            status = get_parcel_status(order.tracking_number)
+            # كل طلبية تتفحص عند شركتها (World/Yalidine ماشي ZR)
+            fetch_status, label = get_parcel_status, "ZR"
+            if order.carrier_code == "worldexpress":
+                from services.worldexpress import get_order_status as fetch_status
+                label = "World Express"
+            elif order.carrier_code == "yalidine":
+                from services.yalidine import get_order_status as fetch_status
+                label = "Yalidine"
+
+            status = fetch_status(order.tracking_number)
             new_state = _normalize_zr_state(status)
             if not new_state:
                 raise ZRError("رد بلا حالة")
@@ -3081,7 +3183,7 @@ def orders_refresh_all_tracking():
 
             if kind == "change":
                 _change_order_status(
-                    order, target, note=f" (تلقائي من ZR: {new_state})")
+                    order, target, note=f" (تلقائي من {label}: {new_state})")
                 changed += 1
             elif kind == "unknown":
                 unknown += 1
@@ -3092,7 +3194,7 @@ def orders_refresh_all_tracking():
 
             db.session.commit()
             checked += 1
-            if order.carrier_code not in (None, "", "zrexpress"):
+            if order.carrier_code not in (None, "", "zrexpress", "worldexpress", "yalidine"):
                 carrier_mismatch.append(
                     f"{order.order_number} ({order.carrier_name or order.carrier_code})")
         except Exception as e:  # noqa: BLE001 — طلبية وحدة ما توقفش الباقي
@@ -3196,9 +3298,11 @@ def integrations():
     from services.zrexpress import sync_communes, ZRError
     from models import Carrier, Commune, CarrierCommune
     from services.worldexpress import is_configured as _world_is_configured
+    from services.yalidine import is_configured as _yalidine_is_configured
 
     zr_result = None
     world_result = None
+    yalidine_result = None
     sync_result = None
     inspect_data = None
 
@@ -3208,6 +3312,11 @@ def integrations():
         if action == "zr":
             ok, message = test_connection()
             zr_result = {"ok": ok, "message": message}
+
+        elif action == "yalidine":
+            from services import yalidine as _yal
+            ok, message = _yal.test_connection()
+            yalidine_result = {"ok": ok, "message": message}
 
         elif action == "world":
             from services import worldexpress as _world
@@ -3266,6 +3375,8 @@ def integrations():
         zr_result=zr_result,
         world_configured=_world_is_configured(),
         world_result=world_result,
+        yalidine_configured=_yalidine_is_configured(),
+        yalidine_result=yalidine_result,
         sync_result=sync_result,
         inspect_data=inspect_data,
         linked_communes=linked,

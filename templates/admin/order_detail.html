@@ -442,10 +442,15 @@
 
         <h2 class="section-title">شركة التوصيل</h2>
         {% set is_world = (order.carrier_code == 'worldexpress') %}
+        {% set is_yalidine = (order.carrier_code == 'yalidine') %}
+        {% set carrier_title = 'World Express' if is_world else ('Yalidine' if is_yalidine else 'ZR Express') %}
         <div class="carrier-panel">
             {% if order.tracking_number and is_world %}
             <a href="{{ url_for('admin.order_world_label', order_id=order.id) }}" target="_blank"
                class="btn-admin btn-sm">🖨️ بوردرو World الرسمي</a>
+            {% elif order.tracking_number and is_yalidine %}
+            <a href="{{ url_for('admin.order_yalidine_label', order_id=order.id) }}" target="_blank"
+               class="btn-admin btn-sm">🖨️ بوردرو Yalidine الرسمي</a>
             {% elif order.tracking_number %}
             <a href="{{ url_for('admin.order_zr_label', order_id=order.id) }}" target="_blank"
                class="btn-admin btn-sm">🖨️ بوردرو ZR الرسمي</a>
@@ -466,7 +471,7 @@
 
                 <form method="post" action="{{ url_for('admin.order_refresh_tracking', order_id=order.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-admin btn-sm btn-ghost">🔄 حدّث حالة التتبّع من {{ 'World Express' if is_world else 'ZR' }}</button>
+                    <button type="submit" class="btn-admin btn-sm btn-ghost">🔄 حدّث حالة التتبّع من {{ 'World Express' if is_world else ('Yalidine' if is_yalidine else 'ZR') }}</button>
                 </form>
 
                 {% if is_world and order.carrier_state in (None, '', 'prete_a_expedier') %}
@@ -488,14 +493,19 @@
                 {% endif %}
 
                 <form method="post" action="{{ url_for('admin.order_send_to_carrier', order_id=order.id) }}"
-                      onsubmit="return confirm('تبعث هاد الطلبية لـ{{ 'World Express' if is_world else 'ZR Express' }}؟')">
+                      onsubmit="return confirm('تبعث هاد الطلبية لـ{{ carrier_title }}؟')">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-admin btn-block">📦 ابعث لـ{{ 'World Express' if is_world else 'ZR Express' }}</button>
+                    <button type="submit" class="btn-admin btn-block">📦 ابعث لـ{{ carrier_title }}</button>
                 </form>
 
                 {% if is_world %}
                 <p class="hint">
                     يحتاج WORLD_API_TOKEN فـ.env —
+                    <a href="{{ url_for('admin.integrations') }}">شوف التكاملات</a>
+                </p>
+                {% elif is_yalidine %}
+                <p class="hint">
+                    يحتاج YALIDINE_API_ID و YALIDINE_API_TOKEN و YALIDINE_FROM_WILAYA فـ.env —
                     <a href="{{ url_for('admin.integrations') }}">شوف التكاملات</a>
                 </p>
                 {% else %}
@@ -544,7 +554,7 @@
                 الحذف <strong>نهائي</strong> وما يترجعش.
                 المخزون يرجع تلقائيًا للمنتجات.
                 {% if order.tracking_number %}
-                <br>⚠️ هاد الطلبية مبعوثة لـ{{ 'World Express' if order.carrier_code == 'worldexpress' else 'ZR' }} — الحذف هنا
+                <br>⚠️ هاد الطلبية مبعوثة لـ{{ 'World Express' if order.carrier_code == 'worldexpress' else ('Yalidine' if order.carrier_code == 'yalidine' else 'ZR') }} — الحذف هنا
                 <strong>ما يلغيش الطرد</strong> عندهم.
                 {% endif %}
             </p>

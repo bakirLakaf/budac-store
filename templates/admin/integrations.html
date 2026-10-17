@@ -171,15 +171,36 @@ ZR_API_KEY=xxxxx</pre>
 <div class="integration-card">
     <div class="ic-head">
         <div>
-            <h2 class="ic-title">World Express &amp; Yalidine</h2>
-            <p class="ic-sub">التكامل التلقائي مازال ما تبناش</p>
+            <h2 class="ic-title">Yalidine Express</h2>
+            <p class="ic-sub">إرسال الطلبيات، التتبّع، البوردرو الرسمي، ومكاتب الاستلام</p>
         </div>
-        <span class="tag">يدوي</span>
+        {% if yalidine_configured %}
+            <span class="tag tag-ok">مربوط</span>
+        {% else %}
+            <span class="tag">غير مربوط</span>
+        {% endif %}
     </div>
+
+    {% if yalidine_configured %}
+    <p class="hint">المفاتيح معمّرة. جرّب الاتصال قبل أول طلبية حقيقية (يتأكّد حتى من ولاية المرسل).</p>
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="test" value="yalidine">
+        <button type="submit" class="btn-admin">اختبر الاتصال</button>
+    </form>
+    {% if yalidine_result %}
+    <div class="test-result {{ 'is-ok' if yalidine_result.ok else 'is-error' }}">
+        {{ yalidine_result.message }}
+    </div>
+    {% endif %}
+    {% else %}
     <p class="hint">
-        الأسعار والولايات تخدم عادي فالموقع. الإرسال يتم يدويًا من موقع الشركة.
-        إذا عندك مفاتيح API لوحدة منهم، نقدرو نزيدو التكامل بنفس الطريقة.
+        باش تربطها: من لوحة Yalidine ← <strong>API</strong>، وحط
+        <code>YALIDINE_API_ID</code> و<code>YALIDINE_API_TOKEN</code> و
+        <code>YALIDINE_FROM_WILAYA</code> (ولايتك بالحروف اللاتينية، مثلا Batna)
+        فملف <code>.env</code> (ماشي فالكود).
     </p>
+    {% endif %}
 </div>
 
 {% endblock %}
