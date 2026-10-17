@@ -17,6 +17,8 @@
 """
 
 import json
+import re
+import time
 import os
 
 import requests
@@ -1425,60 +1427,158 @@ def sync_shipping_rates():
 # مختبر الإرسال — نعزلو سبب الـ400 بدل ما نخمّنو
 # ═══════════════════════════════════════════════════════════
 
-def search_hubs(page_size=500):
+_hubs_cache = (0.0, [])
+_HUBS_TTL = 1800   # 30 دقيقة
+
+
+def clear_hubs_cache():
+    global _hubs_cache
+    _hubs_cache = (0.0, [])
+
+
+def search_hubs(page_size=100, max_pages=30, force=False):
     """
-    قائمة مراكز/مكاتب ZR — من `POST /hubs/search`.
+    **كل** مراكز/مكاتب ZR — من `POST /hubs/search`، بالترقيم.
 
-    🔴 هاد المسار هو اللي كان ناقصنا.
-    جرّبنا 11 اسمًا (`/pickup-points`، `/offices`، `/desks`...) وكلهم
-    404. التوثيق الرسمي ورّى أن ZR يسمّيهم **hubs**، وأسماء مكاتبهم
-    تبدا بـ«Hub» فعلاً («Hub Setif 19 مكتب سطيف») — كان لازم ننتبهو.
+    🔴 غلطة v170/v171: كنا نجيبو الصفحة الأولى برك (`pageSize: 500`). ZR
+    يقصّ الصفحة لحدّو (~100 عنصر)، والمكاتب اللي بعد الصفحة الأولى —
+    كيما «Hub Ain Temouchent 46» — ما كانت تظهرلنا أبدًا، فالإرسال يفشل بـ
+    «ما لقيناش مكتب». التشخيص الحقيقي (حجم الرد 72 ألف حرف ≈ 100 عنصر).
 
-    الأرجح أن `pickupPointId` يستنّى **UUID تاع الـhub** ماشي اسمو،
-    وهذا يفسّر الـ400 الفارغ.
+    نفس درس المناطق: ما نثقوش فـ`pageSize`، ونوقفو على **الفراغ أو التكرار**
+    ماشي على «الصفحة ناقصة». ونحفظو النتيجة 30 دقيقة.
     """
-    # 🔴 `_request(method, path, **kwargs)` — الجسم لازم `json=`.
-    # بلاه: TypeError → صفحة 500 كاملة بدل رسالة خطأ. (غلطة صدرت مني
-    # وطاحت فالإنتاج — علاش زدنا فحصًا يمنعها تحت.)
-    data = _request("POST", "/hubs/search",
-                    json={"pageNumber": 1, "pageSize": page_size})
+    global _hubs_cache
 
-    items = data.get("items") if isinstance(data, dict) else data
-    return items or []
+    stamp, cached = _hubs_cache
+    if cached and not force and time.time() - stamp < _HUBS_TTL:
+        return cached
+
+    best = []
+    last_error = None
+
+    for _style, build in _PAGINATION_STYLES:
+        seen_ids = set()
+        items = []
+        first_len = None
+        ended = None                      # "empty" | "dup" | "max"
+        page = 1
+
+        while page <= max_pages:
+            try:
+                data = _request("POST", "/hubs/search", json=build(page, page_size))
+            except ZRError as e:
+                last_error = e
+                ended = "error"
+                break
+
+            batch = _extract_items(data)
+            if first_len is None:
+                first_len = len(batch)
+            if not batch:
+                ended = "empty"
+                break
+
+            fresh = [h for h in batch if h.get("id") and h["id"] not in seen_ids]
+            for h in fresh:
+                seen_ids.add(h["id"])
+                items.append(h)
+            if not fresh:
+                ended = "dup"             # نفس الصفحة تتعاود — الترقيم مايتطبّقش
+                break
+            page += 1
+        else:
+            ended = "max"
+
+        if len(items) > len(best):
+            best = items
+
+        # الترقيم خدم (أكثر من صفحة) ولا الصفحة التالية فارغة = القائمة كاملة
+        if ended in ("empty", "max") or (first_len and len(items) > first_len):
+            break
+
+    if not best:
+        if last_error:
+            raise last_error
+        return []
+
+    _hubs_cache = (time.time(), best)
+    return best
 
 
-def find_hub_id(office_name, wilaya_code=None):
+def _norm_hub_text(text):
+    """نص مبسّط للمقارنة: بلا تشكيل/حروف كبيرة/«Hub»، وحروف عربية موحّدة."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(text or ""))
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower()
+    t = (t.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+          .replace("ى", "ي").replace("ة", "ه"))
+    t = re.sub(r"\bhub\b", " ", t)
+    return re.sub(r"[^a-z0-9\u0600-\u06ff]+", " ", t).strip()
+
+
+def _hub_name(h):
+    return (h.get("name") or h.get("label") or "").strip()
+
+
+def _hub_wilaya(h):
+    """رمز ولاية الـhub (رقمين): من الرمز البريدي، وإلا من الرقم فالاسم."""
+    postal = str(((h.get("address") or {}).get("postalCode")) or "")
+    if len(postal) >= 2 and postal[:2].isdigit():
+        return postal[:2]
+    m = re.search(r"(?<!\d)(\d{2})(?!\d)", _hub_name(h))
+    return m.group(1) if m else None
+
+
+def find_hub_id(office_name, wilaya_code=None, hubs=None):
     """
-    يدوّر على UUID تاع مكتب من اسمو.
+    يدوّر على UUID تاع مكتب من اسمو. يرجّع (id, اسم_الـhub) ولا (None, None).
 
-    ⚠️ المطابقة متسامحة: أسماء ZR فيها خليط عربي/لاتيني وأرقام
-    («Hub Setif 19 مكتب سطيف»). نطابقو بالاسم الكامل أولاً، ومن بعد
-    بالجزء اللاتيني، ومن بعد بالولاية إذا بقى مكتب واحد فيها.
+    الترتيب (من الأدق للأقل): الاسم الكامل ← الاسم المبسّط ← واحد يحتوي
+    الآخر ← أقرب اسم فنفس الولاية (تشابه ≥ 0.85 وبفارق واضح على الثاني) ←
+    مكتب استلام وحيد فالولاية. ما نخمّنوش إذا كان فيه التباس.
     """
-    hubs = search_hubs()
+    from difflib import SequenceMatcher
+
+    if hubs is None:
+        hubs = search_hubs()
     wanted = (office_name or "").strip().lower()
-
-    def hub_name(h):
-        return (h.get("name") or h.get("label") or "").strip()
+    if not wanted:
+        return None, None
 
     # 1) تطابق كامل
     for h in hubs:
-        if hub_name(h).lower() == wanted:
-            return h.get("id"), hub_name(h)
+        if _hub_name(h).lower() == wanted:
+            return h.get("id"), _hub_name(h)
 
-    # 2) واحد يحتوي الآخر
+    # 2) تطابق بعد التبسيط
+    wanted_n = _norm_hub_text(office_name)
     for h in hubs:
-        n = hub_name(h).lower()
-        if n and (n in wanted or wanted in n):
-            return h.get("id"), hub_name(h)
+        if wanted_n and _norm_hub_text(_hub_name(h)) == wanted_n:
+            return h.get("id"), _hub_name(h)
 
-    # 3) الولاية فيها مكتب واحد برك
-    if wilaya_code:
-        code = str(wilaya_code).zfill(2)
-        same = [h for h in hubs
-                if str(h.get("wilayaCode") or h.get("territoryCode") or "").zfill(2) == code]
-        if len(same) == 1:
-            return same[0].get("id"), hub_name(same[0])
+    # 3) واحد يحتوي الآخر
+    for h in hubs:
+        n = _hub_name(h).lower()
+        if n and (n in wanted or wanted in n):
+            return h.get("id"), _hub_name(h)
+
+    # 4) نفس الولاية
+    code = str(wilaya_code).zfill(2) if wilaya_code else None
+    same = [h for h in hubs if code and _hub_wilaya(h) == code]
+    pool = [h for h in same if h.get("isPickupPoint", True)] or same
+
+    scored = sorted(
+        ((SequenceMatcher(None, wanted_n, _norm_hub_text(_hub_name(h))).ratio(), h)
+         for h in pool),
+        key=lambda x: x[0], reverse=True)
+    if scored and scored[0][0] >= 0.85 and (
+            len(scored) == 1 or scored[0][0] - scored[1][0] >= 0.05):
+        return scored[0][1].get("id"), _hub_name(scored[0][1])
+
+    # 5) مكتب استلام وحيد فالولاية
+    if len(pool) == 1:
+        return pool[0].get("id"), _hub_name(pool[0])
 
     return None, None
 
@@ -1521,7 +1621,16 @@ def resolve_hub_id(order):
         return None, f"فشل جلب المكاتب من ZR: {e}"
 
     if not hub_id:
-        return None, f"ما لقيناش مكتب «{name}» فقائمة hubs تاع ZR"
+        try:
+            hubs = search_hubs()
+            code = str(order.wilaya_code).zfill(2)
+            near = [_hub_name(h) for h in hubs if _hub_wilaya(h) == code][:3]
+            detail = f" — جبنا {len(hubs)} hub من ZR"
+            if near:
+                detail += "، فنفس الولاية: " + " | ".join(near)
+        except Exception:
+            detail = ""
+        return None, f"ما لقيناش مكتب «{name}» فقائمة hubs تاع ZR{detail}"
 
     return hub_id, None
 
