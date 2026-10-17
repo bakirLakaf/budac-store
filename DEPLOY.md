@@ -115,6 +115,9 @@ Railway يربطها تلقائيًا ويعطي `DATABASE_URL` للتطبيق.
 | `ZR_API_KEY` | من ZR Express |
 | `WORLD_API_TOKEN` | من لوحة ECOTRACK ← API ← «Voir Token» (World Express) |
 | `WORLD_AUTO_VALIDATE` | اختياري: `1` يأكّد الإرسال تلقائيًا، الافتراضي `0` |
+| `YALIDINE_API_ID` / `YALIDINE_API_TOKEN` | من لوحة Yalidine ← API (سرّيين) |
+| `YALIDINE_FROM_WILAYA` | ولاية المرسل بالحروف اللاتينية (مثلا `Batna` ولا `Oum El Bouaghi`) |
+| `YALIDINE_FREESHIPPING` | اختياري: `1` (افتراضي) السعر = مجموع الطلبية؛ `0` الزبون يدفع السعر + التوصيل |
 | `FACEBOOK_PIXEL_ID` | من مدير إعلانات فيسبوك |
 | `TIKTOK_PIXEL_ID` | من TikTok Ads |
 | `YOUCAN_ACCESS_TOKEN` | من YouCan |
