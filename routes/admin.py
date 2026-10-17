@@ -2665,6 +2665,10 @@ def order_send_to_carrier(order_id):
 
     order = db.session.get(Order, order_id) or abort(404)
 
+    # World Express تخدم بمنصة ECOTRACK — منطق مختلف تمامًا عن ZR
+    if order.carrier_code == "worldexpress":
+        return _send_order_to_world(order_id)
+
     if not is_configured():
         flash(
             "مفاتيح ZR Express غير معمّرة. حط ZR_TENANT_ID و ZR_API_KEY فملف .env",
@@ -2758,6 +2762,129 @@ def order_send_to_carrier(order_id):
     return redirect(url_for("admin.order_detail", order_id=order.id))
 
 
+def _send_order_to_world(order_id):
+    """
+    يبعث الطلبية لـWorld Express (ECOTRACK) ويسجّل رقم التتبّع.
+
+    نفس ضمانات ZR: حجز ذرّي ضد النقرة المزدوجة، والفشل ما يكسرش الطلبية.
+    """
+    from services import worldexpress as world
+
+    order = db.session.get(Order, order_id) or abort(404)
+    back = redirect(url_for("admin.order_detail", order_id=order_id))
+
+    if not world.is_configured():
+        flash("توكن World Express غير معمّر. حط WORLD_API_TOKEN فملف .env", "error")
+        return back
+
+    claimed, claim_message = _claim_order_for_zr(order_id)
+    if not claimed:
+        flash(claim_message, "warning")
+        return back
+    db.session.expire(order)
+
+    try:
+        result = world.create_order(order)
+    except world.WorldError as e:
+        if e.parcel_may_exist:
+            # 🔴 ممكن الطرد اتنشأ عند World. نخلّيو الحجز «sending» (يتحرّر
+            # وحدو بعد 3 دقائق) ونسجّلو السبب — باش ما يتخلقش طرد مضاعف.
+            from sqlalchemy import update as sa_update
+            db.session.rollback()
+            db.session.execute(
+                sa_update(Order).where(Order.id == order_id,
+                                       Order.tracking_number.is_(None))
+                .values(send_error=str(e)[:300]))
+            db.session.commit()
+            flash(f"⚠️ {e}", "warning")
+        else:
+            _release_zr_claim(order_id, str(e))
+            flash(f"ما قدرناش نبعثو الطلبية لـWorld Express: {e}", "error")
+        return back
+    except Exception:
+        _release_zr_claim(order_id, "خطأ غير متوقّع")
+        current_app.logger.exception(
+            "فشل غير متوقّع فإرسال الطلبية %s لـWorld Express", order_id)
+        flash("صرا خطأ غير متوقّع فالإرسال. شوف السجلات وعاود جرّب.", "error")
+        return back
+
+    order.tracking_number = result["tracking_number"]
+    order.send_state = Order.ZR_SENT
+    order.send_error = None
+    order.carrier_state = "prete_a_expedier"
+    audit.record(AdminAction.SHIPMENT_SENT, "order", order.order_number,
+                 f"World Express — تتبّع: {order.tracking_number}")
+    if order.status == Order.STATUS_PENDING:
+        order.status = Order.STATUS_CONFIRMED
+    db.session.commit()
+
+    flash(f"✓ تبعثت لـWorld Express — رقم التتبّع: {order.tracking_number}", "success")
+
+    if world.auto_validate_enabled():
+        _validate_world_order(order)
+    else:
+        flash("الطرد مازال «prête à expédier» عند World. اضغط «تأكيد الإرسال» "
+              "باش تسلّموه للشركة (بعدها ما يتبدّلش).", "info")
+    return back
+
+
+def _validate_world_order(order, ask_collection=None):
+    """يأكّد الإرسال (Expédier). يرجّع True/False ويعرض الرسالة."""
+    from services import worldexpress as world
+
+    try:
+        message = world.validate_order(order.tracking_number, ask_collection)
+    except world.WorldError as e:
+        flash(f"ما قدرناش نأكّدو الإرسال عند World Express: {e}", "error")
+        return False
+    order.carrier_state = "expediee"
+    audit.record(AdminAction.SHIPMENT_SENT, "order", order.order_number,
+                 f"World Express — تأكيد الإرسال: {order.tracking_number}")
+    db.session.commit()
+    flash(f"✓ تأكّد الإرسال عند World Express ({message})", "success")
+    return True
+
+
+@admin_bp.route("/orders/<int:order_id>/world-validate", methods=["POST"])
+@login_required
+def order_world_validate(order_id):
+    """يأكّد إرسال الطرد (Expédier) عند World Express — ما يتبدّلش بعدها."""
+    order = db.get_or_404(Order, order_id)
+    if order.carrier_code != "worldexpress" or not order.tracking_number:
+        flash("هاد الطلبية ما تبعثتش لـWorld Express", "warning")
+    else:
+        _validate_world_order(
+            order, ask_collection=(request.form.get("ask_collection") == "1") or None)
+    return redirect(url_for("admin.order_detail", order_id=order.id))
+
+
+@admin_bp.route("/orders/<int:order_id>/world-label")
+@login_required
+def order_world_label(order_id):
+    """البوردرو **الرسمي** تاع World Express (PDF)."""
+    from flask import Response
+    from services import worldexpress as world
+
+    order = db.get_or_404(Order, order_id)
+    back = redirect(url_for("admin.order_detail", order_id=order.id))
+    if order.carrier_code != "worldexpress" or not order.tracking_number:
+        flash("هاد الطلبية ما تبعثتش لـWorld Express — ما كاينش بوردرو رسمي", "warning")
+        return back
+    try:
+        pdf = world.get_label_pdf(order.tracking_number)
+    except world.WorldError as e:
+        flash(str(e), "error")
+        return back
+    except Exception:
+        current_app.logger.exception("order_world_label: خطأ غير متوقع %s", order.order_number)
+        flash("صار خطأ غير متوقع فجلب البوردرو. جرّب مرة أخرى.", "error")
+        return back
+
+    safe = "".join(c for c in order.tracking_number if c.isalnum())[:40] or "label"
+    return Response(pdf, mimetype="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="world-{safe}.pdf"'})
+
+
 def _normalize_zr_state(status):
     """يستخرج نص حالة ZR من الرد (مهما كان شكلو). يرجع None إذا ما لقاش."""
     state = status.get("state") if isinstance(status, dict) else None
@@ -2780,7 +2907,10 @@ def _decide_status_change(order, new_state):
       "locked"  → الطلبية مسلّمة/ملغاة/راجعة، ما نلمسوهاش
       "unknown" → حالة ZR ما تتعرفش
     """
-    from services.zrexpress import map_state_to_order_status
+    if order.carrier_code == "worldexpress":
+        from services.worldexpress import map_state_to_order_status
+    else:
+        from services.zrexpress import map_state_to_order_status
 
     target = map_state_to_order_status(new_state, order.delivery_type)
     if target is None:
@@ -2810,6 +2940,13 @@ def order_refresh_tracking(order_id):
     if not order.tracking_number:
         flash("هاد الطلبية ما تبعثتش لشركة التوصيل بعد", "warning")
         return redirect(url_for("admin.order_detail", order_id=order.id))
+
+    # World Express: نفس المنطق بعميل ECOTRACK (الاسم المستعار يخلّي الباقي يخدم كيما هو)
+    is_world = order.carrier_code == "worldexpress"
+    carrier_label = "World Express" if is_world else "ZR"
+    if is_world:
+        from services.worldexpress import (
+            get_order_status as get_parcel_status, WorldError as ZRError)
 
     try:
         status = get_parcel_status(order.tracking_number)
@@ -2853,7 +2990,7 @@ def order_refresh_tracking(order_id):
                 "warning")
         elif kind == "change":
             msgs = _change_order_status(
-                order, target, note=f" (تلقائي من ZR: {new_state})")
+                order, target, note=f" (تلقائي من {carrier_label}: {new_state})")
             status_msg = (
                 f"حالة الطلبية ولات: {Order.STATUS_LABELS[target]}", "success")
             for text, category in msgs:
@@ -3058,8 +3195,10 @@ def integrations():
 
     from services.zrexpress import sync_communes, ZRError
     from models import Carrier, Commune, CarrierCommune
+    from services.worldexpress import is_configured as _world_is_configured
 
     zr_result = None
+    world_result = None
     sync_result = None
     inspect_data = None
 
@@ -3069,6 +3208,11 @@ def integrations():
         if action == "zr":
             ok, message = test_connection()
             zr_result = {"ok": ok, "message": message}
+
+        elif action == "world":
+            from services import worldexpress as _world
+            ok, message = _world.test_connection()
+            world_result = {"ok": ok, "message": message}
 
         elif action == "inspect":
             # تشخيص: نوريّو البيانات الخام باش نعرفو بنيتها الحقيقية
@@ -3120,6 +3264,8 @@ def integrations():
         "admin/integrations.html",
         zr_configured=is_configured(),
         zr_result=zr_result,
+        world_configured=_world_is_configured(),
+        world_result=world_result,
         sync_result=sync_result,
         inspect_data=inspect_data,
         linked_communes=linked,

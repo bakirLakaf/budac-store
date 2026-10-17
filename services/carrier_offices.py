@@ -122,6 +122,26 @@ def get_office_wilayas(carrier_code):
     }
 
 
+def get_office(carrier_code, name, wilaya_code=None):
+    """
+    يرجّع المكتب كامل (بالبلدية تاعو) من اسمو — ولا None إذا ما لقاهش.
+
+    نحتاجوها كي نبعثو طلبية مكتب لـWorld Express: ECOTRACK يستنّى **بلدية**
+    المكتب، والزبون اختار الاسم برك.
+    """
+    target = (name or "").strip().lower()
+    if not target:
+        return None
+    wanted = str(wilaya_code).zfill(2) if wilaya_code else None
+    for o in _load(carrier_code):
+        if (o.get("name") or "").strip().lower() != target:
+            continue
+        if wanted and str(o.get("wilaya_code", "")).zfill(2) != wanted:
+            continue
+        return o
+    return None
+
+
 def clear_cache(carrier_code=None):
     """يفرّغ الذاكرة — بعد تحديث ملف المكاتب."""
     if carrier_code:
@@ -148,7 +168,7 @@ def sync_rates_from_file(carrier_code):
     يحدّث أسعار شركة من جدولها الرسمي المخزّن عندنا.
 
     ⚠️ علاش ملف وماشي API؟
-    World Express ما عندناش مفاتيح API معاه — الإرسال يدوي. لكن
+    World Express (ECOTRACK) الإرسال التلقائي يخدم من v171 (WORLD_API_TOKEN). لكن
     جدول أسعارهم منشور، فنخزّنوه ونقارنو بيه بضغطة بدل ما نقلّبو
     58 خانة بالعين.
 

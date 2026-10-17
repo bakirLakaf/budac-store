@@ -6,6 +6,39 @@
 <div class="integration-card">
     <div class="ic-head">
         <div>
+            <h2 class="ic-title">World Express</h2>
+            <p class="ic-sub">إرسال الطلبيات وتتبّعها (منصة ECOTRACK)</p>
+        </div>
+        {% if world_configured %}
+            <span class="tag tag-ok">مربوط</span>
+        {% else %}
+            <span class="tag">غير مربوط</span>
+        {% endif %}
+    </div>
+
+    {% if world_configured %}
+    <p class="hint">التوكن معمّر. جرّب الاتصال قبل أول طلبية حقيقية.</p>
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="test" value="world">
+        <button type="submit" class="btn-admin">اختبر الاتصال</button>
+    </form>
+    {% if world_result %}
+    <div class="test-result {{ 'is-ok' if world_result.ok else 'is-error' }}">
+        {{ world_result.message }}
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="hint">
+        باش تربطها: من لوحة ECOTRACK ← <strong>API</strong> ← «Voir Token»، وحط التوكن
+        فـ<code>WORLD_API_TOKEN</code> فملف <code>.env</code> (ماشي فالكود).
+    </p>
+    {% endif %}
+</div>
+
+<div class="integration-card">
+    <div class="ic-head">
+        <div>
             <h2 class="ic-title">ZR Express</h2>
             <p class="ic-sub">إرسال الطلبيات تلقائيًا وتتبّعها</p>
         </div>
