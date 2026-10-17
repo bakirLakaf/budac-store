@@ -175,6 +175,7 @@ def clear_cache(carrier_code=None):
 
 RATE_FILES = {
     "worldexpress": "world_rates.json",   # 57 ولاية، من جدول World الرسمي
+    "yalidine": "yalidine_rates.json",    # 58 ولاية، من عقد Yalidine (Tarif ECOMMERCE، الانطلاق: أم البواقي)
     # ⚠️ ZR عندو API حيّ (زر «زامن أسعار ZR»)، وهو المصدر الأول.
     # هاد الملف نسخة احتياطية: كي المفاتيح تطيح ولا الـAPI ما يجاوبش،
     # نرجّعو للأسعار المعروفة بدل ما نبقاو بلا والو.
