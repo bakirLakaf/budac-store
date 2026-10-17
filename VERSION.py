@@ -1,4 +1,4 @@
 """رقم الإصدار — يبان فسجلات Railway وفأسفل لوحة التحكم."""
 
-VERSION = "v171"
-BUILD_NOTE = "ربط World Express (ECOTRACK): إرسال + تتبّع + بوردرو"
+VERSION = "v172"
+BUILD_NOTE = "إصلاح بحث مكاتب ZR (الترقيم) + ربط World Express"
