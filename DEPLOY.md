@@ -113,6 +113,8 @@ Railway يربطها تلقائيًا ويعطي `DATABASE_URL` للتطبيق.
 |---|---|
 | `ZR_TENANT_ID` | من ZR Express |
 | `ZR_API_KEY` | من ZR Express |
+| `WORLD_API_TOKEN` | من لوحة ECOTRACK ← API ← «Voir Token» (World Express) |
+| `WORLD_AUTO_VALIDATE` | اختياري: `1` يأكّد الإرسال تلقائيًا، الافتراضي `0` |
 | `FACEBOOK_PIXEL_ID` | من مدير إعلانات فيسبوك |
 | `TIKTOK_PIXEL_ID` | من TikTok Ads |
 | `YOUCAN_ACCESS_TOKEN` | من YouCan |
