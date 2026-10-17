@@ -1055,12 +1055,14 @@ def test_bulk_refresh_reports_order_and_carrier_for_unknown_state(
         o.carrier_name = "World Express"
         db.session.commit()
 
-    with patch("services.zrexpress.get_parcel_status",
-               return_value={"state": "حالة غريبة", "state_id": None,
-                             "updated_at": None, "raw": {}}):
+    # v173: كل طلبية تتفحص عند شركتها — World Express ماشي ZR
+    with patch("services.worldexpress.get_order_status",
+               return_value={"state": "حالة غريبة", "raw": {}}) as world_call, \
+         patch("services.zrexpress.get_parcel_status") as zr_call:
         resp = logged_in_admin.post("/admin/orders/refresh-all-tracking",
                                     follow_redirects=True)
     page = resp.get_data(as_text=True)
+    assert world_call.call_count == 1 and zr_call.call_count == 0
     assert "BD-WRL-A" in page and "World Express" in page and "حالة غريبة" in page
     with app.app_context():
         assert db.session.get(Order, oid).status == Order.STATUS_CONFIRMED
