@@ -21,26 +21,43 @@
             <span class="ship-count" id="shipCount">{{ wilayas | length }} ولاية</span>
         </div>
 
+        {# خلية سعر: الأرخص يتعلّم بالأخضر وعلامة ✓ #}
+        {% macro price_cell(value, best, tone) %}
+        <td class="ship-tone-{{ tone }}{{ ' is-best' if value and best and value == best else '' }}">
+            {% if value %}<strong>{{ "{:,}".format(value) }}</strong>{% if best and value == best %}<span class="ship-best-mark" title="الأرخص">✓</span>{% endif %}
+            {% else %}<span class="ship-no">—</span>{% endif %}
+        </td>
+        {% endmacro %}
+
+        {% macro carrier_logo(c, cls) %}
+            {% if carrier_logos.get(c.code) %}
+            <img class="{{ cls }} ship-logo-{{ c.code }}"
+                 src="{{ url_for('static', filename=carrier_logos[c.code]) }}"
+                 alt="{{ c.name }}" loading="lazy">
+            {% else %}<span class="ship-carrier-name">{{ c.name }}</span>{% endif %}
+        {% endmacro %}
+
+        {# ═══ سطح المكتب والتابلت: جدول برأس ثابت ═══ #}
         <div class="ship-table-wrap">
             <table class="ship-table">
+                <colgroup>
+                    <col class="ship-col-w">
+                    {% for c in carriers %}<col><col>{% endfor %}
+                </colgroup>
                 <thead>
                     <tr>
                         <th class="ship-w">الولاية</th>
                         {% for c in carriers %}
-                        <th colspan="2" class="ship-carrier" title="{{ c.name }}">
-                            {% if carrier_logos.get(c.code) %}
-                            <img class="ship-logo ship-logo-{{ c.code }}"
-                                 src="{{ url_for('static', filename=carrier_logos[c.code]) }}"
-                                 alt="{{ c.name }}" width="120" height="40">
-                            {% else %}{{ c.name }}{% endif %}
+                        <th colspan="2" class="ship-carrier ship-tone-{{ loop.index0 % 2 }}" title="{{ c.name }}">
+                            {{ carrier_logo(c, 'ship-logo') }}
                         </th>
                         {% endfor %}
                     </tr>
                     <tr class="ship-sub">
                         <th class="ship-w"></th>
                         {% for c in carriers %}
-                        <th>🏠 للمنزل</th>
-                        <th>🏢 للمكتب</th>
+                        <th class="ship-carrier ship-tone-{{ loop.index0 % 2 }}"><span class="ship-pill">🏠 للمنزل</span></th>
+                        <th class="ship-tone-{{ loop.index0 % 2 }}"><span class="ship-pill">🏢 للمكتب</span></th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -51,17 +68,9 @@
                             <span class="ship-code">{{ w.code }}</span>{{ w.name }}
                         </td>
                         {% for c in carriers %}
-                            {% set pr = w.prices.get(c.code) %}
-                            <td>
-                                {% if pr and pr.home %}
-                                <strong>{{ "{:,}".format(pr.home) }}</strong>
-                                {% else %}<span class="ship-no">—</span>{% endif %}
-                            </td>
-                            <td>
-                                {% if pr and pr.office %}
-                                <strong>{{ "{:,}".format(pr.office) }}</strong>
-                                {% else %}<span class="ship-no">—</span>{% endif %}
-                            </td>
+                            {% set pr = w.prices.get(c.code) or {} %}
+                            {{ price_cell(pr.get('home'), w.best_home, loop.index0 % 2) }}
+                            {{ price_cell(pr.get('office'), w.best_office, loop.index0 % 2) }}
                         {% endfor %}
                     </tr>
                     {% endfor %}
@@ -69,9 +78,38 @@
             </table>
         </div>
 
+        {# ═══ الهاتف: بطاقة لكل ولاية (الشركات جنب بعض، بلا تمرير أفقي) ═══ #}
+        <div class="ship-cards" id="shipCards">
+            {% for w in wilayas %}
+            <article class="ship-card" data-name="{{ w.name }}" data-code="{{ w.code }}">
+                <header class="ship-card-head">
+                    <span class="ship-code">{{ w.code }}</span>
+                    <h2>{{ w.name }}</h2>
+                </header>
+                <div class="ship-card-grid">
+                    <span></span>
+                    <span class="ship-pill">🏠 للمنزل</span>
+                    <span class="ship-pill">🏢 للمكتب</span>
+                    {% for c in carriers %}
+                        {% set pr = w.prices.get(c.code) or {} %}
+                        <span class="ship-card-carrier">{{ carrier_logo(c, 'ship-card-logo') }}</span>
+                        {% for kind, best in (('home', w.best_home), ('office', w.best_office)) %}
+                            {% set v = pr.get(kind) %}
+                            <span class="ship-card-price{{ ' is-best' if v and best and v == best else '' }}">
+                                {% if v %}<strong>{{ "{:,}".format(v) }}</strong>{% if best and v == best %}<span class="ship-best-mark">✓</span>{% endif %}
+                                {% else %}<span class="ship-no">—</span>{% endif %}
+                            </span>
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+
         <p class="ship-empty" id="shipEmpty" hidden>ما لقيناش هاد الولاية.</p>
 
         <ul class="ship-notes">
+            <li><span class="ship-best-legend">✓ 123</span> الأرخص فهاد الولاية (بين الشركات اللي تخدم فيها).</li>
             <li><strong>—</strong> معناها الخدمة غير متوفرة لهاد الولاية بهاد الشركة.</li>
             <li>🏢 <strong>للمكتب</strong> أرخص — تروح تاخذ الطرد من مكتب الشركة.</li>
             <li>الأسعار قابلة للتغيير حسب تسعير شركات التوصيل.</li>
@@ -88,9 +126,11 @@
     var input = document.getElementById('shipSearch');
     if (!input) return;
 
+    // الجدول (سطح المكتب) + البطاقات (الهاتف) — نفس البحث لاثنين
     var rows = Array.prototype.slice.call(
-        document.querySelectorAll('#shipBody tr')
+        document.querySelectorAll('#shipBody tr, .ship-card')
     );
+    var tableRows = document.querySelectorAll('#shipBody tr');
     var count = document.getElementById('shipCount');
     var empty = document.getElementById('shipEmpty');
 
@@ -103,7 +143,7 @@
                 || row.dataset.name.indexOf(q) !== -1
                 || row.dataset.code.indexOf(q) === 0;
             row.hidden = !hit;
-            if (hit) shown++;
+            if (hit && row.tagName === 'TR') shown++;
         });
 
         count.textContent = shown + ' ولاية';

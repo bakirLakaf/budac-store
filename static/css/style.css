@@ -3190,6 +3190,7 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
 
 /* ═══════════ صفحة أسعار التوصيل ═══════════ */
 .ship-page { padding: 34px 0 54px; }
+.ship-page .container-narrow { max-width: 860px; }
 .page-heading {
     margin: 0 0 10px;
     font-size: clamp(24px, 5vw, 32px); font-weight: 800;
@@ -3213,10 +3214,10 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
 }
 .ship-count { font-size: 13px; font-weight: 700; color: var(--color-ink-soft); }
 
-/* ⚠️ تمرير أفقي: 3 شركات × عمودين = 7 أعمدة، ما تدخلش فالهاتف */
+/* ── الجدول ── */
 .ship-table-wrap {
-    /* ⚠️ overflow:clip ما يصنعش حاوية تمرير → رأس الجدول يثبت مع سحب الصفحة.
-       (overflow:auto كان يمنع الثبات). الهاتف يرجع للتمرير الداخلي تحت. */
+    /* ⚠️ overflow:clip ما يصنعش حاوية تمرير → الرأس يثبت مع سحب الصفحة.
+       (overflow:auto كان يمنع الثبات). التابلت الضيّق يرجع للتمرير الداخلي تحت. */
     overflow: visible;
     overflow: clip;
     border: 1px solid var(--color-border);
@@ -3224,11 +3225,13 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
     background: #fff;
 }
 
-/* separate بدل collapse: الحدود ما تتحركش مع الخلايا الثابتة */
-.ship-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }
+/* separate + fixed: أعمدة متساوية، والحدود ما تتحركش مع الخلايا الثابتة */
+.ship-table {
+    width: 100%; table-layout: fixed;
+    border-collapse: separate; border-spacing: 0; font-size: 14px;
+}
+.ship-col-w { width: 22%; }                 /* الباقي يتقسم بالتساوي على 6 أعمدة */
 
-/* رأس ثابت على سطرين: الشركات (بشعاراتها) ثم «للمنزل / للمكتب».
-   خلفية فاتحة باش تبان الشعارات (فيها أسود وأزرق). */
 .ship-table thead th {
     position: sticky; z-index: 3;
     background: #fff; color: var(--color-ink);
@@ -3237,28 +3240,48 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
     box-sizing: border-box;
 }
 .ship-table thead tr:first-child th {
-    top: 0; height: 62px; padding: 8px 12px;
+    top: 0; height: 66px; padding: 8px 10px;
     border-bottom: 1px solid var(--color-border);
 }
 .ship-table .ship-sub th {
-    top: 62px;                        /* = ارتفاع السطر الأول */
-    background: #FBF6EE; color: var(--color-ink-soft);
-    font-size: 11.5px; font-weight: 600;
-    padding: 6px 10px;
+    top: 66px;                          /* = ارتفاع السطر الأول */
+    padding: 7px 6px;
     border-bottom: 2px solid var(--color-primary);
 }
-.ship-carrier { border-inline-start: 1px solid var(--color-border); }
 
-.ship-logo { display: block; margin: 0 auto; height: 40px; width: auto; max-width: 100%; object-fit: contain; }
-.ship-logo-worldexpress { height: 46px; }
+/* شعار موحّد: صندوق بحجم ثابت + contain باش ما يطغاش شعار على شعار */
+.ship-logo {
+    display: block; margin: 0 auto;
+    width: auto; height: auto; max-width: 118px; max-height: 40px;
+    object-fit: contain;
+}
+.ship-logo-worldexpress { max-height: 48px; max-width: 48px; }
+.ship-carrier-name { font-weight: 800; color: var(--color-primary); }
+
+/* تظليل متناوب لكل شركة (عمودين): العين تتبع الشركة وهي تنزل */
+.ship-tone-0 { background-color: #fff; }
+.ship-tone-1 { background-color: #FBF7F0; }
+.ship-table thead .ship-tone-1 { background-color: #F6EFE3; }
+.ship-carrier { border-inline-start: 1px solid var(--color-border); }
+.ship-table tbody td.ship-tone-0:nth-child(2n),     /* بداية كل شركة: فاصل أوضح */
+.ship-table tbody td.ship-tone-1:nth-child(2n) { border-inline-start: 1px solid var(--color-border); }
+
+/* «للمنزل / للمكتب» — أقراص واضحة */
+.ship-pill {
+    display: inline-block; padding: 3px 9px; border-radius: 999px;
+    background: rgba(46, 26, 71, 0.07); color: var(--color-primary);
+    font-size: 12px; font-weight: 700; white-space: nowrap;
+}
+.ship-table .ship-sub { background: #FBF6EE; }
+.ship-table .ship-sub .ship-w { background: #FBF6EE; z-index: 4; }
 
 .ship-table tbody td {
-    padding: 10px 12px;
+    padding: 11px 8px;
     border-top: 1px solid #F0EAE0;
     text-align: center;
     font-variant-numeric: tabular-nums;
+    transition: background-color .12s ease;
 }
-.ship-table tbody tr:nth-child(even) { background: #FDFAF5; }
 .ship-table tbody tr[hidden] { display: none; }
 
 /* عمود الولاية ثابت عند التمرير — الزبون ما يضيّعش السطر */
@@ -3268,22 +3291,33 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
     background: #fff;
     font-weight: 600;
     white-space: nowrap;
+    padding-inline: 12px !important;
 }
-.ship-table tbody tr:nth-child(even) .ship-w { background: #FDFAF5; }
 .ship-table thead .ship-w { background: #fff; z-index: 4; color: var(--color-primary); }
-.ship-table .ship-sub .ship-w { background: #FBF6EE; z-index: 4; }
-.ship-table tbody .ship-w { z-index: 1; }                 /* تحت الرأس الثابت */
-/* الجدول أعرض من الحاوية الضيّقة العادية (7 أعمدة + شعارات) */
-.ship-page .container-narrow { max-width: 860px; }
+.ship-table tbody .ship-w { z-index: 1; }              /* تحت الرأس الثابت */
+
+/* الوقوف على سطر: يتلوّن كامل السطر */
+.ship-table tbody tr:hover td { background-color: #F3ECFA; }
+.ship-table tbody tr:hover .ship-w { background-color: #EBE1F6; }
 
 .ship-code {
-    display: inline-block; margin-inline-end: 7px;
-    padding: 1px 6px; border-radius: 5px;
-    background: var(--color-bg); color: var(--color-ink-soft);
-    font-size: 11.5px; font-weight: 700;
+    display: inline-block; margin-inline-end: 8px;
+    min-width: 26px; padding: 2px 6px; border-radius: 6px;
+    background: rgba(46, 26, 71, 0.09); color: var(--color-primary);
+    font-size: 12px; font-weight: 800; text-align: center;
 }
 
 .ship-no { color: #C9BFAE; }
+
+/* أرخص سعر */
+.ship-table tbody td.is-best,
+.ship-card-price.is-best { background-color: #E6F4EA; color: #17663B; }
+.ship-table tbody tr:hover td.is-best { background-color: #D3ECDA; }
+.ship-best-mark { margin-inline-start: 4px; font-size: 11.5px; font-weight: 800; }
+.ship-best-legend {
+    display: inline-block; padding: 1px 8px; border-radius: 6px;
+    background: #E6F4EA; color: #17663B; font-weight: 800;
+}
 
 .ship-empty {
     margin-top: 18px; padding: 20px;
@@ -3299,48 +3333,89 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
     background: #F6EFE3; border-radius: var(--radius-md);
 }
 .ship-notes li {
-    font-size: 13.5px; line-height: 1.8;
+    font-size: 13.5px; line-height: 1.9;
     color: var(--color-ink-soft);
 }
 
-@media (max-width: 640px) {
-    .ship-table { font-size: 13px; }
-    .ship-table tbody td, .ship-table thead th { padding: 8px 9px; }
-    .ship-logo { height: 32px; }
-    .ship-logo-worldexpress { height: 38px; }
-    .ship-table thead tr:first-child th { height: 52px; padding: 6px 9px; }
-    .ship-table .ship-sub th { top: 52px; }
+/* ── الهاتف: بطاقات (مخفية على الشاشات الكبيرة) ── */
+.ship-cards { display: none; }
+.ship-card[hidden] { display: none; }
+
+@media (max-width: 900px) {
+    /* تابلت ضيّق: الجدول يتمرّر داخل إطار والرأس ثابت داخلو */
+    .ship-table-wrap { overflow: auto; -webkit-overflow-scrolling: touch; max-height: 72vh; }
+    .ship-table { table-layout: auto; }
+    .ship-col-w { width: auto; }
 }
 
-/* الهاتف: 7 أعمدة تحتاج تمرير أفقي → الغلاف يولّي حاوية تمرير بارتفاع محدود،
-   والرأس يثبت داخلها (الثبات على الصفحة كاملة ما يتجمعش مع التمرير الأفقي). */
-@media (max-width: 900px) {
-    .ship-table-wrap {
-        overflow: auto; -webkit-overflow-scrolling: touch;
-        max-height: 72vh;
+@media (max-width: 700px) {
+    .ship-table-wrap { display: none; }
+    .ship-cards { display: grid; gap: 12px; }
+
+    .ship-card {
+        background: #fff; border: 1px solid var(--color-border);
+        border-radius: var(--radius-md); overflow: hidden;
     }
+    .ship-card-head {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 14px; background: #FBF6EE;
+        border-bottom: 1px solid var(--color-border);
+    }
+    .ship-card-head h2 { margin: 0; font-size: 16px; font-weight: 800; color: var(--color-ink); }
+    .ship-card-grid {
+        display: grid; grid-template-columns: 1.1fr 1fr 1fr;
+        align-items: center; text-align: center;
+        padding: 8px 8px 10px; row-gap: 4px; column-gap: 6px;
+    }
+    .ship-card-grid > .ship-pill { justify-self: center; }
+    .ship-card-carrier { display: flex; align-items: center; justify-content: flex-start; padding-inline-start: 6px; min-height: 40px; }
+    .ship-card-logo { width: auto; height: auto; max-width: 86px; max-height: 26px; object-fit: contain; }
+    .ship-card-logo.ship-logo-worldexpress { max-width: 32px; max-height: 32px; }
+    .ship-card-price { padding: 8px 4px; border-radius: 8px; font-size: 15px; font-variant-numeric: tabular-nums; }
 }
 
 /* ---------- شريط شركات التوصيل (الواجهة الرئيسية) ---------- */
-.carriers-strip { padding: 22px 0 6px; text-align: center; }
+.carriers-strip { padding: 26px 0 8px; text-align: center; }
 .carriers-strip-title {
-    margin: 0 0 12px; font-size: 13.5px; font-weight: 600;
+    margin: 0 0 14px; font-size: 13.5px; font-weight: 600;
     color: var(--color-ink-soft);
 }
-.carriers-strip-logos {
-    display: flex; justify-content: center; align-items: center;
-    flex-wrap: wrap; gap: 14px 38px;
+.carriers-strip-cards {
+    display: flex; justify-content: center; align-items: stretch;
+    flex-wrap: wrap; gap: 14px;
     list-style: none; margin: 0; padding: 0;
 }
-.carriers-strip-logos a { display: block; transition: transform .2s ease, opacity .2s ease; opacity: .92; }
-.carriers-strip-logos a:hover { transform: translateY(-2px); opacity: 1; }
-.carrier-logo { display: block; height: 52px; width: auto; }
-.carrier-logo-worldexpress { height: 62px; }
-.carrier-name { font-weight: 700; color: var(--color-primary); }
+/* العرض على الـ<li> (عنصر الـflex) ماشي على الرابط، وإلا ينكمش */
+.carriers-strip-cards li { flex: 0 0 196px; display: flex; }
+.carrier-card {
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    width: 100%; height: 124px; padding: 14px 12px 11px; box-sizing: border-box;
+    background: #fff; border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 1px 2px rgba(46, 26, 71, 0.04), 0 6px 16px rgba(46, 26, 71, 0.06);
+    color: inherit; text-decoration: none;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.carrier-card:hover, .carrier-card:focus-visible {
+    transform: translateY(-3px); border-color: var(--color-gold);
+    box-shadow: 0 2px 4px rgba(46, 26, 71, 0.06), 0 12px 24px rgba(46, 26, 71, 0.12);
+}
+.carrier-card-logo { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; }
+.carrier-logo { display: block; width: auto; height: auto; max-width: 150px; max-height: 54px; object-fit: contain; }
+.carrier-logo-worldexpress { max-width: 64px; max-height: 64px; }
+.carrier-name { font-weight: 800; color: var(--color-primary); }
+.carrier-card-price {
+    width: 100%; padding-top: 8px; border-top: 1px solid #F0EAE0;
+    font-size: 12.5px; color: var(--color-ink-soft);
+}
+.carrier-card-price strong { color: var(--color-primary); font-size: 14px; font-weight: 800; }
+
 @media (max-width: 640px) {
-    .carriers-strip-logos { gap: 12px 24px; }
-    .carrier-logo { height: 34px; }
-    .carrier-logo-worldexpress { height: 42px; }
+    .carriers-strip-cards { gap: 10px; }
+    .carriers-strip-cards li { flex: 0 0 calc(50% - 5px); max-width: 190px; }
+    .carrier-card { height: 112px; }
+    .carrier-logo { max-width: 120px; max-height: 44px; }
+    .carrier-logo-worldexpress { max-width: 52px; max-height: 52px; }
 }
 
 /* ---------- صور توضيحية ---------- */

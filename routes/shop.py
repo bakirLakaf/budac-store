@@ -726,12 +726,25 @@ CARRIER_LOGOS = {
 
 def _delivery_carriers():
     """شركات التوصيل المفعّلة (للشريط فالواجهة الرئيسية): [{code, name, logo}]."""
-    from models import Carrier
+    from models import Carrier, ShippingRate
 
-    return [
-        {"code": c.code, "name": c.name, "logo": CARRIER_LOGOS.get(c.code)}
-        for c in Carrier.query.filter_by(is_active=True).order_by(Carrier.name).all()
-    ]
+    result = []
+    for c in Carrier.query.filter_by(is_active=True).order_by(Carrier.name).all():
+        # «تبدأ من»: أرخص سعر فكل الولايات (منزل ولا مكتب)، مقرّب بنفس دالة
+        # الجدول والشراء — باش الرقم اللي يشوفو الزبون هنا هو اللي يلقاه فالجدول.
+        lows = [
+            v for v in (
+                db.session.query(func.min(ShippingRate.home_price))
+                .filter(ShippingRate.carrier_id == c.id, ShippingRate.home_price > 0).scalar(),
+                db.session.query(func.min(ShippingRate.office_price))
+                .filter(ShippingRate.carrier_id == c.id, ShippingRate.office_price > 0).scalar(),
+            ) if v
+        ]
+        result.append({
+            "code": c.code, "name": c.name, "logo": CARRIER_LOGOS.get(c.code),
+            "min_price": round_up_to_100(min(lows)) if lows else None,
+        })
+    return result
 
 
 @shop_bp.route("/shipping-prices")
@@ -773,6 +786,15 @@ def shipping_prices():
             }
 
     wilayas = sorted(rows.values(), key=lambda r: r["code"])
+
+    # أرخص سعر فكل ولاية (منزل / مكتب بشكل منفصل) — للتمييز فالجدول.
+    # ما نعلّموش إلا كي يكون فيه شيء نقارنو: شركتين فأكثر وأسعار مختلفة.
+    for w in wilayas:
+        for kind in ("home", "office"):
+            values = [p[kind] for p in w["prices"].values() if p.get(kind)]
+            w["best_" + kind] = (
+                min(values) if len(values) >= 2 and len(set(values)) > 1 else None
+            )
 
     return render_template(
         "shop/shipping_prices.html",
