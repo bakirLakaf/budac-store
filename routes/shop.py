@@ -163,6 +163,7 @@ def home():
         newest=newest,
         best_sellers=best_sellers,
         spotlight=spotlight,
+        delivery_carriers=_delivery_carriers() if is_landing_view else [],
     )
 
 
@@ -714,6 +715,25 @@ def api_calculate(slug):
     return jsonify({"ok": True, "result": result, "type": product.calculator_type})
 
 
+# شعارات شركات التوصيل (PNG بلا خلفية) — المفتاح = كود الشركة فجدول Carrier.
+# شركة بلا شعار هنا تبان باسمها كنص.
+CARRIER_LOGOS = {
+    "zrexpress": "img/carriers/zrexpress.png",
+    "worldexpress": "img/carriers/worldexpress.png",
+    "yalidine": "img/carriers/yalidine.png",
+}
+
+
+def _delivery_carriers():
+    """شركات التوصيل المفعّلة (للشريط فالواجهة الرئيسية): [{code, name, logo}]."""
+    from models import Carrier
+
+    return [
+        {"code": c.code, "name": c.name, "logo": CARRIER_LOGOS.get(c.code)}
+        for c in Carrier.query.filter_by(is_active=True).order_by(Carrier.name).all()
+    ]
+
+
 @shop_bp.route("/shipping-prices")
 def shipping_prices():
     """
@@ -758,4 +778,5 @@ def shipping_prices():
         "shop/shipping_prices.html",
         carriers=carriers,
         wilayas=wilayas,
+        carrier_logos=CARRIER_LOGOS,
     )

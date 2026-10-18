@@ -27,11 +27,17 @@
                     <tr>
                         <th class="ship-w">الولاية</th>
                         {% for c in carriers %}
-                        <th colspan="2" class="ship-carrier">{{ c.name }}</th>
+                        <th colspan="2" class="ship-carrier" title="{{ c.name }}">
+                            {% if carrier_logos.get(c.code) %}
+                            <img class="ship-logo ship-logo-{{ c.code }}"
+                                 src="{{ url_for('static', filename=carrier_logos[c.code]) }}"
+                                 alt="{{ c.name }}" width="120" height="40">
+                            {% else %}{{ c.name }}{% endif %}
+                        </th>
                         {% endfor %}
                     </tr>
                     <tr class="ship-sub">
-                        <th></th>
+                        <th class="ship-w"></th>
                         {% for c in carriers %}
                         <th>🏠 للمنزل</th>
                         <th>🏢 للمكتب</th>

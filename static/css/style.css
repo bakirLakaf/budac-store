@@ -2670,6 +2670,10 @@ html, body {
     max-width: 100%;
     overflow-x: hidden;
 }
+/* ⚠️ body بـ`hidden` يولّي حاوية تمرير (ما تتحرّكش) فيكسّر كل `position: sticky`
+   (رأس جدول الأسعار). `clip` يقصّ نفس الشيء بلا ما يصنع حاوية تمرير.
+   المتصفحات القديمة اللي ما تعرفش clip تبقى على hidden. */
+body { overflow-x: clip; }
 
 /* شبكة أمان: أي عنصر ما يتعداش عرض الشاشة */
 img, video, iframe, table { max-width: 100%; }
@@ -3211,26 +3215,42 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
 
 /* ⚠️ تمرير أفقي: 3 شركات × عمودين = 7 أعمدة، ما تدخلش فالهاتف */
 .ship-table-wrap {
-    overflow-x: auto;
+    /* ⚠️ overflow:clip ما يصنعش حاوية تمرير → رأس الجدول يثبت مع سحب الصفحة.
+       (overflow:auto كان يمنع الثبات). الهاتف يرجع للتمرير الداخلي تحت. */
+    overflow: visible;
+    overflow: clip;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     background: #fff;
 }
 
-.ship-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+/* separate بدل collapse: الحدود ما تتحركش مع الخلايا الثابتة */
+.ship-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }
 
+/* رأس ثابت على سطرين: الشركات (بشعاراتها) ثم «للمنزل / للمكتب».
+   خلفية فاتحة باش تبان الشعارات (فيها أسود وأزرق). */
 .ship-table thead th {
-    padding: 10px 12px;
-    background: var(--color-primary); color: #fff;
+    position: sticky; z-index: 3;
+    background: #fff; color: var(--color-ink);
     font-size: 13px; font-weight: 700;
     text-align: center; white-space: nowrap;
+    box-sizing: border-box;
+}
+.ship-table thead tr:first-child th {
+    top: 0; height: 62px; padding: 8px 12px;
+    border-bottom: 1px solid var(--color-border);
 }
 .ship-table .ship-sub th {
-    background: var(--color-primary-light);
+    top: 62px;                        /* = ارتفاع السطر الأول */
+    background: #FBF6EE; color: var(--color-ink-soft);
     font-size: 11.5px; font-weight: 600;
     padding: 6px 10px;
+    border-bottom: 2px solid var(--color-primary);
 }
-.ship-carrier { border-inline-start: 1px solid rgba(255,255,255,0.2); }
+.ship-carrier { border-inline-start: 1px solid var(--color-border); }
+
+.ship-logo { display: block; margin: 0 auto; height: 40px; width: auto; max-width: 100%; object-fit: contain; }
+.ship-logo-worldexpress { height: 46px; }
 
 .ship-table tbody td {
     padding: 10px 12px;
@@ -3250,7 +3270,11 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
     white-space: nowrap;
 }
 .ship-table tbody tr:nth-child(even) .ship-w { background: #FDFAF5; }
-.ship-table thead .ship-w { background: var(--color-primary); }
+.ship-table thead .ship-w { background: #fff; z-index: 4; color: var(--color-primary); }
+.ship-table .ship-sub .ship-w { background: #FBF6EE; z-index: 4; }
+.ship-table tbody .ship-w { z-index: 1; }                 /* تحت الرأس الثابت */
+/* الجدول أعرض من الحاوية الضيّقة العادية (7 أعمدة + شعارات) */
+.ship-page .container-narrow { max-width: 860px; }
 
 .ship-code {
     display: inline-block; margin-inline-end: 7px;
@@ -3282,6 +3306,41 @@ body:has(.buy-bar:not([hidden])) .cart-float { bottom: 158px; }
 @media (max-width: 640px) {
     .ship-table { font-size: 13px; }
     .ship-table tbody td, .ship-table thead th { padding: 8px 9px; }
+    .ship-logo { height: 32px; }
+    .ship-logo-worldexpress { height: 38px; }
+    .ship-table thead tr:first-child th { height: 52px; padding: 6px 9px; }
+    .ship-table .ship-sub th { top: 52px; }
+}
+
+/* الهاتف: 7 أعمدة تحتاج تمرير أفقي → الغلاف يولّي حاوية تمرير بارتفاع محدود،
+   والرأس يثبت داخلها (الثبات على الصفحة كاملة ما يتجمعش مع التمرير الأفقي). */
+@media (max-width: 900px) {
+    .ship-table-wrap {
+        overflow: auto; -webkit-overflow-scrolling: touch;
+        max-height: 72vh;
+    }
+}
+
+/* ---------- شريط شركات التوصيل (الواجهة الرئيسية) ---------- */
+.carriers-strip { padding: 22px 0 6px; text-align: center; }
+.carriers-strip-title {
+    margin: 0 0 12px; font-size: 13.5px; font-weight: 600;
+    color: var(--color-ink-soft);
+}
+.carriers-strip-logos {
+    display: flex; justify-content: center; align-items: center;
+    flex-wrap: wrap; gap: 14px 38px;
+    list-style: none; margin: 0; padding: 0;
+}
+.carriers-strip-logos a { display: block; transition: transform .2s ease, opacity .2s ease; opacity: .92; }
+.carriers-strip-logos a:hover { transform: translateY(-2px); opacity: 1; }
+.carrier-logo { display: block; height: 52px; width: auto; }
+.carrier-logo-worldexpress { height: 62px; }
+.carrier-name { font-weight: 700; color: var(--color-primary); }
+@media (max-width: 640px) {
+    .carriers-strip-logos { gap: 12px 24px; }
+    .carrier-logo { height: 34px; }
+    .carrier-logo-worldexpress { height: 42px; }
 }
 
 /* ---------- صور توضيحية ---------- */

@@ -96,6 +96,27 @@
     </div>
 </div>
 
+{% if delivery_carriers %}
+<section class="carriers-strip" aria-label="شركات التوصيل">
+    <div class="container">
+        <p class="carriers-strip-title">نوصّلو لـ58 ولاية مع</p>
+        <ul class="carriers-strip-logos">
+            {% for c in delivery_carriers %}
+            <li>
+                <a href="{{ url_for('shop.shipping_prices') }}" title="{{ c.name }} — شوف الأسعار">
+                    {% if c.logo %}
+                    <img class="carrier-logo carrier-logo-{{ c.code }}"
+                         src="{{ url_for('static', filename=c.logo) }}"
+                         alt="{{ c.name }}" loading="lazy" height="44">
+                    {% else %}<span class="carrier-name">{{ c.name }}</span>{% endif %}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</section>
+{% endif %}
+
 {% if offers %}
 <section class="offers-section">
     <div class="container">
