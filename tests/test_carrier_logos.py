@@ -93,13 +93,10 @@ def test_each_carrier_has_its_own_color_class(client, carriers):
         assert ".ship-c-" + code in css
 
 
-def test_home_cards_show_rounded_price_without_starting_from_label(client, carriers):
-    ShippingRate.query.filter(ShippingRate.carrier_id == Carrier.query.filter_by(
-        code="yalidine").first().id).update({"home_price": 590, "office_price": 450})
-    db.session.commit()
+def test_home_cards_show_no_price_at_all(client, carriers):
     html = client.get("/").get_data(as_text=True)
     card = html.split("img/carriers/yalidine.png")[1].split("</a>")[0]
-    assert "تبدأ من" not in card and "<strong>500</strong>" in card     # 450 ← 500 (round_up_to_100)
+    assert "carrier-card-price" not in card and "تبدأ من" not in card and "دج" not in card
 
 
 def test_shipping_page_has_mobile_cards_for_each_wilaya(client, carriers):
