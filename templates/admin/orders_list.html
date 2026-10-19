@@ -12,7 +12,7 @@
 
 <div class="status-tabs">
     <a href="{{ url_for('admin.orders_list') }}" class="status-tab {{ 'is-active' if not current_status }}">
-        الكل <span class="tab-count">{{ counts.values()|sum }}</span>
+        الكل <span class="tab-count">{{ all_count }}</span>
     </a>
     {% for code, label in status_labels.items() %}
     <a href="{{ url_for('admin.orders_list', status=code) }}"

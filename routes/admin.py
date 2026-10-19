@@ -1695,6 +1695,11 @@ def _parse_date(value):
 
 
 
+# ⚠️ «الكل» ما يوريش الطلبيات المنتهية (تم التسليم + راجعة) باش تبقى القائمة
+# فيها غير اللي تحتاج متابعة. تبانو كي تختار تبويبهم، ولا كي تبحث.
+HIDDEN_FROM_ALL = (Order.STATUS_DELIVERED, Order.STATUS_RETURNED)
+
+
 def _order_neighbours(order, args):
     """
     يلقى الطلبية السابقة والتالية داخل نفس الفلترة.
@@ -1712,6 +1717,8 @@ def _order_neighbours(order, args):
     query = Order.query
     if status and status in Order.STATUS_LABELS:
         query = query.filter_by(status=status)
+    elif not search:
+        query = query.filter(Order.status.notin_(HIDDEN_FROM_ALL))
     if search:
         query = query.filter(
             db.or_(
@@ -1745,6 +1752,9 @@ def orders_list():
 
     if status and status in Order.STATUS_LABELS:
         query = query.filter_by(status=status)
+    elif not search:
+        # «الكل» بلا بحث: نخبّيو تم التسليم والراجعة
+        query = query.filter(Order.status.notin_(HIDDEN_FROM_ALL))
 
     if search:
         query = query.filter(
@@ -1767,6 +1777,7 @@ def orders_list():
     return render_template(
         "admin/orders_list.html",
         orders=orders, counts=counts, current_status=status,
+        all_count=sum(n for st, n in counts.items() if st not in HIDDEN_FROM_ALL),
         search=search, status_labels=Order.STATUS_LABELS,
     )
 

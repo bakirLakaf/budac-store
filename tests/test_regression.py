@@ -1328,7 +1328,7 @@ def test_bulk_reward_all_undelivered_creates_nothing(logged_in_admin, app, seed)
 
 def test_orders_list_has_bulk_reward_button(logged_in_admin, app, seed):
     _make_order_for(app, "BD-BR-H", Order.STATUS_DELIVERED, "Test", "0555000999")
-    html = logged_in_admin.get("/admin/orders").get_data(as_text=True)
+    html = logged_in_admin.get("/admin/orders?status=delivered").get_data(as_text=True)
     assert "كوبون مكافأة للمختارة" in html and "bulk-reward" in html
 
 
@@ -1350,7 +1350,7 @@ def test_bulk_reward_handles_duplicated_checkbox_ids(logged_in_admin, app, seed)
 
 def test_orders_list_counts_unique_orders_in_js(logged_in_admin, app, seed):
     _make_order_for(app, "BD-DUP-B", Order.STATUS_DELIVERED, "Test", "0555000222")
-    html = logged_in_admin.get("/admin/orders").get_data(as_text=True)
+    html = logged_in_admin.get("/admin/orders?status=delivered").get_data(as_text=True)
     assert "uniqueValues" in html     # العدّ بالقيم المختلفة، ماشي بعدد الصناديق
 
 
