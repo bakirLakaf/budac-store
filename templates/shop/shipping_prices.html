@@ -3,6 +3,8 @@
 {% block title %}أسعار التوصيل — {{ store_name }}{% endblock %}
 {% block meta_description %}أسعار التوصيل لكل ولايات الجزائر مع {{ store_name }} — الدفع عند الاستلام، توصيل للمنزل أو لمكتب الشركة.{% endblock %}
 
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/shipping-carriers.css') }}">{% endblock %}
+
 {% block content %}
 <section class="ship-page">
     <div class="container container-narrow">
@@ -21,10 +23,10 @@
             <span class="ship-count" id="shipCount">{{ wilayas | length }} ولاية</span>
         </div>
 
-        {# خلية سعر: الأرخص يتعلّم بالأخضر وعلامة ✓ #}
-        {% macro price_cell(value, best, tone) %}
-        <td class="ship-tone-{{ tone }}{{ ' is-best' if value and best and value == best else '' }}">
-            {% if value %}<strong>{{ "{:,}".format(value) }}</strong>{% if best and value == best %}<span class="ship-best-mark" title="الأرخص">✓</span>{% endif %}
+        {# خلية سعر: كل شركة بلونها (ship-c-<code>) #}
+        {% macro price_cell(value, code) %}
+        <td class="ship-c-{{ code }}">
+            {% if value %}<strong>{{ "{:,}".format(value) }}</strong>
             {% else %}<span class="ship-no">—</span>{% endif %}
         </td>
         {% endmacro %}
@@ -48,7 +50,7 @@
                     <tr>
                         <th class="ship-w">الولاية</th>
                         {% for c in carriers %}
-                        <th colspan="2" class="ship-carrier ship-tone-{{ loop.index0 % 2 }}" title="{{ c.name }}">
+                        <th colspan="2" class="ship-carrier ship-c-{{ c.code }}" title="{{ c.name }}">
                             {{ carrier_logo(c, 'ship-logo') }}
                         </th>
                         {% endfor %}
@@ -56,8 +58,8 @@
                     <tr class="ship-sub">
                         <th class="ship-w"></th>
                         {% for c in carriers %}
-                        <th class="ship-carrier ship-tone-{{ loop.index0 % 2 }}"><span class="ship-pill">🏠 للمنزل</span></th>
-                        <th class="ship-tone-{{ loop.index0 % 2 }}"><span class="ship-pill">🏢 للمكتب</span></th>
+                        <th class="ship-carrier ship-c-{{ c.code }}"><span class="ship-pill">🏠 للمنزل</span></th>
+                        <th class="ship-c-{{ c.code }}"><span class="ship-pill">🏢 للمكتب</span></th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -69,8 +71,8 @@
                         </td>
                         {% for c in carriers %}
                             {% set pr = w.prices.get(c.code) or {} %}
-                            {{ price_cell(pr.get('home'), w.best_home, loop.index0 % 2) }}
-                            {{ price_cell(pr.get('office'), w.best_office, loop.index0 % 2) }}
+                            {{ price_cell(pr.get('home'), c.code) }}
+                            {{ price_cell(pr.get('office'), c.code) }}
                         {% endfor %}
                     </tr>
                     {% endfor %}
@@ -92,11 +94,11 @@
                     <span class="ship-pill">🏢 للمكتب</span>
                     {% for c in carriers %}
                         {% set pr = w.prices.get(c.code) or {} %}
-                        <span class="ship-card-carrier">{{ carrier_logo(c, 'ship-card-logo') }}</span>
-                        {% for kind, best in (('home', w.best_home), ('office', w.best_office)) %}
+                        <span class="ship-card-carrier ship-c-{{ c.code }}">{{ carrier_logo(c, 'ship-card-logo') }}</span>
+                        {% for kind in ('home', 'office') %}
                             {% set v = pr.get(kind) %}
-                            <span class="ship-card-price{{ ' is-best' if v and best and v == best else '' }}">
-                                {% if v %}<strong>{{ "{:,}".format(v) }}</strong>{% if best and v == best %}<span class="ship-best-mark">✓</span>{% endif %}
+                            <span class="ship-card-price ship-c-{{ c.code }}">
+                                {% if v %}<strong>{{ "{:,}".format(v) }}</strong>
                                 {% else %}<span class="ship-no">—</span>{% endif %}
                             </span>
                         {% endfor %}
@@ -109,7 +111,6 @@
         <p class="ship-empty" id="shipEmpty" hidden>ما لقيناش هاد الولاية.</p>
 
         <ul class="ship-notes">
-            <li><span class="ship-best-legend">✓ 123</span> الأرخص فهاد الولاية (بين الشركات اللي تخدم فيها).</li>
             <li><strong>—</strong> معناها الخدمة غير متوفرة لهاد الولاية بهاد الشركة.</li>
             <li>🏢 <strong>للمكتب</strong> أرخص — تروح تاخذ الطرد من مكتب الشركة.</li>
             <li>الأسعار قابلة للتغيير حسب تسعير شركات التوصيل.</li>

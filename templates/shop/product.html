@@ -399,11 +399,24 @@
     // تتبدّل غير بالضغط ولا باختيار موديل، ماشي بالمرور.
     var pinnedSrc = mainImg ? mainImg.src : "";
 
+    // أسماء صور المعرض بنفس ترتيب المصغّرات — باش نعرفو فهرس الصورة الحالية
+    var galleryNames = [];
+    try {
+        galleryNames = JSON.parse(document.getElementById("galleryData").textContent).map(String);
+    } catch (e) {}
+
     function setPinned(src) {
         pinnedSrc = src;
         if (mainImg) mainImg.src = src;
         // نعلّمو المصغّرة الموافقة (المقارنة بآخر جزء من الرابط)
         var tail = src.split("/").pop();
+        var gm = document.getElementById("galleryMain");
+        for (var gi = 0; gi < galleryNames.length; gi++) {
+            if (galleryNames[gi].split("/").pop() === tail) {
+                if (gm) gm.dataset.index = gi;
+                break;
+            }
+        }
         thumbs.forEach(function (t) {
             var full = t.getAttribute("data-full") || "";
             t.classList.toggle("is-active", full.split("/").pop() === tail);
@@ -423,7 +436,10 @@
 
         // ---------- الضغط: يثبّت ----------
         thumb.addEventListener("click", function () {
-            if (fullSrc) setPinned(fullSrc);
+            if (!fullSrc) return;
+            setPinned(fullSrc);
+            // الصورة ← الموديل: إذا الصورة تاع موديل، نختارو
+            if (window.__syncVariantFromImage) window.__syncVariantFromImage(fullSrc);
         });
 
         // ⚠️ فالهاتف ماكانش "مرور" — اللمسة تولّي ضغطة مباشرة،
@@ -660,6 +676,10 @@
             lbImage.src = images[lbIndex];
             lbCounter.textContent = lbIndex + 1;
 
+            // نزامنو الصورة الرئيسية والموديل مع اللي راه يشوفو الزبون
+            if (window.__setPinnedImage) window.__setPinnedImage(images[lbIndex]);
+            if (window.__syncVariantFromImage) window.__syncVariantFromImage(images[lbIndex]);
+
             lbThumbs.forEach(function (t, i) {
                 t.classList.toggle("is-active", i === lbIndex);
             });
@@ -815,6 +835,36 @@
         }
     }
 
+    /* ── الصورة ← الموديل ─────────────────────────────────────
+       الضغط على مصغّرة (ولا التنقّل فالمعرض الكبير) يختار الموديل
+       اللي صورتو هي هاد الصورة. الصور اللي ماشي تاع موديل (التوضيحية)
+       ما تبدّل والو. نستعملو chip.click() باش يتحدّث كلش (السعر،
+       الأسعار حسب الكمية، الإجمالي، روابط المشاركة) بنفس طريق الضغط. */
+    var syncingFromImage = false;
+
+    window.__syncVariantFromImage = function (src) {
+        if (!src || !variantChips.length) return;
+        var tail = src.split("/").pop();
+
+        function sameImage(c) {
+            var img = c.getAttribute("data-image") || "";
+            return img !== "" && img.split("/").pop() === tail;
+        }
+
+        // الموديل الحالي صورتو هي هاد الصورة؟ ما نبدّلوش (موديلين يتشاركو صورة)
+        var current = document.querySelector(".variant-chip.is-active");
+        if (current && sameImage(current)) return;
+
+        var target = null;
+        variantChips.forEach(function (c) {
+            if (!target && sameImage(c) && !c.classList.contains("is-out")) target = c;
+        });
+        if (!target) return;
+
+        syncingFromImage = true;
+        try { target.click(); } finally { syncingFromImage = false; }
+    };
+
     variantChips.forEach(function (chip) {
         chip.addEventListener("click", function () {
             if (chip.classList.contains("is-out")) return;
@@ -835,7 +885,8 @@
                 }
 
                 // نمرّرو للصورة فالهاتف باش الزبون يشوف التبديل
-                if (window.innerWidth <= 768 && mainImg) {
+                // (ماشي كي يجي التبديل من الضغط على صورة — راهو قدّام الصورة أصلًا)
+                if (!syncingFromImage && window.innerWidth <= 768 && mainImg) {
                     var top = mainImg.getBoundingClientRect().top + window.scrollY - 70;
                     if (window.scrollY > top) window.scrollTo({ top: top, behavior: "smooth" });
                 }

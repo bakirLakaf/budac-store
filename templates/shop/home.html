@@ -113,7 +113,7 @@
                         {% else %}<span class="carrier-name">{{ c.name }}</span>{% endif %}
                     </span>
                     {% if c.min_price %}
-                    <span class="carrier-card-price">تبدأ من <strong>{{ "{:,}".format(c.min_price) }}</strong> دج</span>
+                    <span class="carrier-card-price"><strong>{{ "{:,}".format(c.min_price) }}</strong> دج</span>
                     {% endif %}
                 </a>
             </li>
