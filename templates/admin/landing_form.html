@@ -8,7 +8,7 @@
     {{ 'تعديل صفحة الهبوط' if page else 'صفحة هبوط جديدة' }}
 </h1>
 
-<form method="post" class="admin-form" style="max-width: 720px;">
+<form method="post" class="admin-form" enctype="multipart/form-data" style="max-width: 720px;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <!-- ═════ الأساسيات ═════ -->
@@ -41,6 +41,68 @@
             </option>
             {% endfor %}
         </select>
+    </label>
+
+    <!-- ═════ باقة (اختياري) ═════ -->
+    <h2 class="form-section-title">باقة بموديلات (اختياري)</h2>
+    <p style="margin: 0 0 12px; color: #6b6478; font-size: 14px;">
+        خليه فارغ لصفحة منتج عادية. إذا حبيت الزبون يختار موديل ويجيه معاه منتج ثابت
+        (مثلاً: غلاف داخلي + غلاف خارجي)، حدّد هنا. <b>سعر الحملة تحت = سعر الباقة كاملة للوحدة.</b>
+    </p>
+
+    <div class="admin-field">
+        <span>الموديلات اللي يختار منها الزبون</span>
+        <div style="max-height: 280px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 8px 12px; background: #fff;">
+            {% for p in products %}
+                {% if p.variants %}
+                    {% for v in p.variants %}
+                    {% set key = p.id ~ ':' ~ v.id %}
+                    <label style="display: flex; gap: 8px; align-items: center; padding: 4px 0;">
+                        <input type="checkbox" name="choice_items" value="{{ key }}"
+                               {{ 'checked' if key in selected_choices }}>
+                        <span>{{ p.name }} — {{ v.label }}</span>
+                    </label>
+                    {% endfor %}
+                {% else %}
+                    {% set key = p.id ~ ':0' %}
+                    <label style="display: flex; gap: 8px; align-items: center; padding: 4px 0;">
+                        <input type="checkbox" name="choice_items" value="{{ key }}"
+                               {{ 'checked' if key in selected_choices }}>
+                        <span>{{ p.name }}</span>
+                    </label>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <small>كل خانة = كارطة فالصفحة بصورتها واسمها (اسم التنويعة).</small>
+    </div>
+
+    <label class="admin-field">
+        <span>منتج ثابت داخل الباقة</span>
+        <select name="fixed_item">
+            <option value="">بلا</option>
+            {% for p in products %}
+                {% if p.variants %}
+                    {% for v in p.variants %}
+                    {% set key = p.id ~ ':' ~ v.id %}
+                    <option value="{{ key }}" {{ 'selected' if key == selected_fixed }}>{{ p.name }} — {{ v.label }}</option>
+                    {% endfor %}
+                {% else %}
+                    {% set key = p.id ~ ':0' %}
+                    <option value="{{ key }}" {{ 'selected' if key == selected_fixed }}>{{ p.name }}</option>
+                {% endif %}
+            {% endfor %}
+        </select>
+        <small>مثلاً: الغلاف الخارجي القري.</small>
+    </label>
+
+    <label class="admin-field">
+        <span>صورة البانر (فوق الصفحة)</span>
+        <input type="file" name="hero" accept="image/*">
+        {% if page and page.hero_image %}
+        <img src="{{ url_for('static', filename='img/products/' + page.hero_image) }}" alt=""
+             style="max-width: 280px; margin-top: 8px; border-radius: 8px; display: block;">
+        {% endif %}
+        <small>فالباقة تبان عريضة 16:9. فالصفحة العادية تبان مربعة.</small>
     </label>
 
     <!-- ═════ المحتوى ═════ -->

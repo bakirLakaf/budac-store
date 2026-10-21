@@ -1758,6 +1758,31 @@ class LandingPage(db.Model):
     product = db.relationship("Product", foreign_keys=[product_id])
     variant = db.relationship("ProductVariant", foreign_keys=[variant_id])
 
+    # ---------- وضع الباقة (اختياري) ----------
+    # صفحة عادية = منتج واحد. إذا زدنا عناصر (LandingItem) تولّي باقة:
+    #   • «choice» → الزبون يختار واحد منهم (مثلاً: موديل الغلاف الداخلي)
+    #   • «fixed»  → دايمًا داخل فالباقة (مثلاً: الغلاف الخارجي القري)
+    # سعر الحملة (campaign_price) هو سعر الباقة كاملة للوحدة الواحدة.
+    items = db.relationship(
+        "LandingItem",
+        back_populates="page",
+        cascade="all, delete-orphan",
+        order_by="LandingItem.sort_order, LandingItem.id",
+    )
+
+    @property
+    def choices(self):
+        return [i for i in self.items if i.role == "choice"]
+
+    @property
+    def fixed_items(self):
+        return [i for i in self.items if i.role == "fixed"]
+
+    @property
+    def is_bundle(self):
+        """واش الصفحة باقة (فيها اختيار موديل ولا عناصر ثابتة)."""
+        return bool(self.items)
+
     @property
     def unit_price(self):
         """السعر المعتمد: سعر الحملة، وإلا سعر التنويعة، وإلا سعر المنتج."""
@@ -1807,6 +1832,58 @@ class LandingPage(db.Model):
 
     def __repr__(self):
         return f"<LandingPage {self.slug}>"
+
+
+class LandingItem(db.Model):
+    """
+    عنصر فباقة صفحة هبوط — منتج (وتنويعة اختيارية) مع دوره.
+
+    role = "choice" → الزبون يختار واحد من هاد العناصر (الموديل)
+    role = "fixed"  → داخل فالباقة دايمًا
+    """
+    __tablename__ = "landing_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    landing_page_id = db.Column(
+        db.Integer, db.ForeignKey("landing_pages.id"), nullable=False, index=True
+    )
+    role = db.Column(db.String(10), nullable=False, default="choice")
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey("product_variants.id"), nullable=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    page = db.relationship("LandingPage", back_populates="items")
+    product = db.relationship("Product", foreign_keys=[product_id])
+    variant = db.relationship("ProductVariant", foreign_keys=[variant_id])
+
+    @property
+    def display_label(self):
+        """الاسم اللي يشوفو الزبون: اسم التنويعة (الموديل)، وإلا اسم المنتج."""
+        if self.variant and self.variant.label:
+            return self.variant.label
+        return self.product.name if self.product else ""
+
+    @property
+    def image_filename(self):
+        if self.variant and self.variant.image_filename:
+            return self.variant.image_filename
+        return self.product.image_filename if self.product else None
+
+    @property
+    def list_price(self):
+        """سعره العادي — نستعملوه برك لتوزيع سعر الباقة على السطور."""
+        if self.variant is not None:
+            return self.variant.effective_price
+        return self.product.price if self.product else 0
+
+    @property
+    def is_available(self):
+        if self.variant is not None and not getattr(self.variant, "is_available", True):
+            return False
+        return bool(self.product and self.product.is_active)
+
+    def __repr__(self):
+        return f"<LandingItem page={self.landing_page_id} {self.role} p={self.product_id} v={self.variant_id}>"
 
 
 class SiteVisit(db.Model):
