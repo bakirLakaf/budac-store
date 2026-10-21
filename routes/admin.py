@@ -26,7 +26,7 @@ import os
 from models import (
     db, Product, Category, ProductImage, ProductVariant,
     Offer, OfferItem, Carrier, ShippingRate, AdminUser, Coupon, Order, OrderItem,
-    AbandonedCart, Review, UpsellRule, LandingPage, StoreSetting,
+    AbandonedCart, Review, UpsellRule, LandingPage, LandingItem, StoreSetting,
     VariantPack, VariantPriceTier, AdminAction,
 )
 from services import audit, ratelimit
@@ -3443,6 +3443,80 @@ def _read_landing_form(data):
     }
 
 
+def _parse_item_key(key):
+    """«12:5» → (12, 5) · «12:0» → (12, None). يرجع None إذا الصيغة غريبة."""
+    try:
+        pid, vid = (key or "").split(":")
+        return int(pid), (int(vid) or None)
+    except (ValueError, TypeError):
+        return None
+
+
+def _save_landing_items(page, data):
+    """
+    يعاود بناء عناصر الباقة من الفورم (نمسحو ونعاودو — أبسط وأأمن).
+
+    choice_items : قائمة «منتج:تنويعة» — الموديلات اللي يختار منها الزبون
+    fixed_item   : عنصر واحد ثابت داخل الباقة (اختياري)
+
+    ⚠️ نتحققو أن التنويعة تابعة فعلاً للمنتج — ما نصدّقوش الفورم.
+    """
+    LandingItem.query.filter_by(landing_page_id=page.id).delete()
+
+    def _make(key, role, order):
+        parsed = _parse_item_key(key)
+        if not parsed:
+            return
+        product_id, variant_id = parsed
+        product = db.session.get(Product, product_id)
+        if not product:
+            return
+        if variant_id:
+            variant = db.session.get(ProductVariant, variant_id)
+            if not variant or variant.product_id != product.id:
+                return
+        db.session.add(LandingItem(
+            landing_page_id=page.id, role=role,
+            product_id=product.id, variant_id=variant_id, sort_order=order,
+        ))
+
+    for order, key in enumerate(data.getlist("choice_items")):
+        _make(key, "choice", order)
+
+    fixed = (data.get("fixed_item") or "").strip()
+    if fixed:
+        _make(fixed, "fixed", 100)
+
+
+def _save_landing_hero(page):
+    """يرفع صورة البانر إذا الأدمن اختار ملف. يرجع رسالة خطأ أو None."""
+    file = request.files.get("hero")
+    if not (file and file.filename):
+        return None
+    try:
+        new_name = save_image(file, "products", base_name=f"lp-{page.slug}")
+    except UploadError as e:
+        return f"صورة مرفوضة: {e}"
+    if page.hero_image:
+        delete_image(page.hero_image, "products")
+    page.hero_image = new_name
+    return None
+
+
+def _landing_form_context(page):
+    """المختار حاليًا فالباقة — باش الفورم يعرضو محدّد."""
+    choice_keys = set()
+    fixed_key = ""
+    if page:
+        for it in page.items:
+            key = f"{it.product_id}:{it.variant_id or 0}"
+            if it.role == "choice":
+                choice_keys.add(key)
+            else:
+                fixed_key = key
+    return {"selected_choices": choice_keys, "selected_fixed": fixed_key}
+
+
 @admin_bp.route("/landing-pages")
 @login_required
 def landing_list():
@@ -3474,17 +3548,26 @@ def landing_new():
             for e in errors:
                 flash(e, "error")
             return render_template("admin/landing_form.html",
-                                   page=None, products=products, form=form)
+                                   page=None, products=products, form=form,
+                                   selected_choices=set(request.form.getlist("choice_items")),
+                                   selected_fixed=request.form.get("fixed_item", ""))
 
         page = LandingPage(**form)
         db.session.add(page)
+        db.session.flush()
+
+        _save_landing_items(page, request.form)
+        hero_error = _save_landing_hero(page)
+        if hero_error:
+            flash(hero_error, "error")
         db.session.commit()
 
         flash(f"تم إنشاء صفحة الهبوط — الرابط: /lp/{page.slug}", "success")
         return redirect(url_for("admin.landing_list"))
 
     return render_template("admin/landing_form.html",
-                           page=None, products=products, form={})
+                           page=None, products=products, form={},
+                           **_landing_form_context(None))
 
 
 @admin_bp.route("/landing-pages/<int:page_id>/edit", methods=["GET", "POST"])
@@ -3513,17 +3596,25 @@ def landing_edit(page_id):
             for e in errors:
                 flash(e, "error")
             return render_template("admin/landing_form.html",
-                                   page=page, products=products, form=form)
+                                   page=page, products=products, form=form,
+                                   selected_choices=set(request.form.getlist("choice_items")),
+                                   selected_fixed=request.form.get("fixed_item", ""))
 
         for key, value in form.items():
             setattr(page, key, value)
+
+        _save_landing_items(page, request.form)
+        hero_error = _save_landing_hero(page)
+        if hero_error:
+            flash(hero_error, "error")
         db.session.commit()
 
         flash("تم حفظ التعديلات", "success")
         return redirect(url_for("admin.landing_list"))
 
     return render_template("admin/landing_form.html",
-                           page=page, products=products, form={})
+                           page=page, products=products, form={},
+                           **_landing_form_context(page))
 
 
 @admin_bp.route("/landing-pages/<int:page_id>/toggle", methods=["POST"])
@@ -3542,6 +3633,8 @@ def landing_toggle(page_id):
 def landing_delete(page_id):
     page = LandingPage.query.get_or_404(page_id)
     name = page.internal_name
+    if page.hero_image:
+        delete_image(page.hero_image, "products")
     db.session.delete(page)
     db.session.commit()
     flash(f"تم حذف صفحة «{name}»", "success")
