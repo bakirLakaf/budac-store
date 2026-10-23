@@ -16,15 +16,15 @@ if errorlevel 1 (
 )
 
 if not exist .env (
-  copy .env.example .env >nul
-  echo [INFO] .env was created from .env.example. Fill it in, then run this file again.
+  copy .env.social.example .env >nul
+  echo [INFO] .env was created from .env.social.example. Fill it in, then run this file again.
   notepad .env
   pause
   exit /b 0
 )
 
 echo [INFO] Installing requirements...
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-standalone.txt
 if errorlevel 1 (
   echo [ERROR] Failed to install requirements.
   pause

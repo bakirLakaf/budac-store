@@ -10,11 +10,11 @@
 
 ## التركيب في المتجر (5 خطوات)
 1. انسخ مجلد `social_publisher/` جنب `app.py` تاع Budac.
-2. زيد محتوى `requirements.txt` في متطلبات المتجر، وانسخ متغيرات `.env.example` لـ `.env` تاعك (لازم: `SP_PUBLIC_BASE_URL`, `SP_SECRET`).
+2. **ما تكتبش فوق ملفات المتجر.** زيد في `requirements.txt` تاع المتجر سطر `APScheduler==3.11.3` برك (شوف `requirements-social.txt`)، وزيد متغيرات `.env.social.example` في متغيرات Railway (لازم: `SP_PUBLIC_BASE_URL`, `SP_SECRET`, `SP_TEMP_DIR`).
 3. في `app.py`:
 ```python
 from social_publisher import init_social_publisher
-init_social_publisher(app, admin_required=اسم_الـdecorator_تاع_الأدمن)
+init_social_publisher(app, admin_required=اسم_الـdecorator_تاع_الأدمن, limiter=limiter)  # limiter = Flask-Limiter تاعك (اختياري)
 ```
 4. افتح `social_publisher/adapter.py` وعدّل الـ 3 استعلامات SQL (`SQL_SEARCH`, `SQL_PRODUCT`, `SQL_IMAGES`) على أسماء جداولك الحقيقية، وقيم `BUDAC_UPLOADS_DIR/URL`.
 5. زيد رابط في لوحة التحكم لـ `/admin/social/`.
@@ -22,7 +22,9 @@ init_social_publisher(app, admin_required=اسم_الـdecorator_تاع_الأد
 **مهم في السيرفر:**
 - المسار `/sp/pub/...` لازم يكون **عام** (بلا تسجيل دخول) وعلى https، لأن فيسبوك وانستغرام يجبدو منو الملفات. الرابط موقّع ويخدم غير ما دام المنشور ما كملش.
 - في nginx: `client_max_body_size 110M;` (على قد `SP_MAX_VIDEO_MB`).
-- لو المتجر يستعمل Flask-WTF CSRF، الفورم يدخل التوكن وحدو.
+- Flask-WTF CSRF: الفورم يدخل التوكن وحدو (متجرّب).
+- Flask-Limiter: مرّر `limiter=limiter` باش الرابط العام ما يتحدّش (فيسبوك وانستغرام يجبدو الملفات بطلبات متتالية).
+- Railway: `DATABASE_URL` بـ `postgresql+psycopg://` يخدم (الأداة تشيل `+psycopg` وحدها). حط `SP_TEMP_DIR` على مسار الـ volume (مثلا `/data/sp_tmp`) باش الملفات المؤقتة ما تتمسحش مع كل deploy.
 
 ## ربط Meta (فيسبوك + انستغرام)
 1. حساب انستغرام لازم **Business أو Creator** ومربوط بصفحة الفيسبوك.
@@ -37,10 +39,10 @@ init_social_publisher(app, admin_required=اسم_الـdecorator_تاع_الأد
 - الربط: عبّي `TIKTOK_CLIENT_KEY/SECRET/REDIRECT_URI` ثم زر "ربط تيك توك" في اللوحة. الصور (بدل الفيديو) تحتاج تتحقق من دومين المتجر في إعدادات تطبيق تيك توك.
 
 ## تجربة محلية على Windows (بلا المتجر)
-ضع ملف المنتجات باسم `budac-products.xlsx` جنب `start_bot.bat`، وعبّي `.env` (فيه `ADMIN_PASSWORD`)، وشغّل `start_bot.bat`. يفتح على `http://localhost:PORT/` . (النشر الحقيقي يحتاج رابط عام https، يعني سيرفر ولا نفق.)
+ضع ملف المنتجات باسم `budac-products.xlsx` جنب `start_bot.bat`، وانسخ `.env.social.example` لـ `.env` وعبّيه (فيه `ADMIN_PASSWORD`)، وشغّل `start_bot.bat`. يفتح على `http://localhost:PORT/` . (النشر الحقيقي يحتاج رابط عام https، يعني سيرفر ولا نفق.)
 
 ## اختبارات
-`TEST_DATABASE_URL=postgresql://user:pw@localhost/test_db python -m pytest -q tests` (12 اختبار، Meta مزيّف، تحذف جداول `sp_*` في قاعدة الاختبار).
+`TEST_DATABASE_URL=postgresql://user:pw@localhost/test_db python -m pytest -q tests` (15 اختبار، Meta مزيّف، يغطي Flask-WTF و Flask-Limiter، تحذف جداول `sp_*` في قاعدة الاختبار).
 
 ## تنبيهات صريحة
 - **الكود تجرّب على PostgreSQL حقيقي مع Meta مزيّف.** ما جرّبتوش على فيسبوك/انستغرام/تيك توك الحقيقيين (البيئة ما تسمحش). أول تجربة تكون على منشور تجريبي.
