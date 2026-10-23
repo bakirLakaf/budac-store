@@ -117,7 +117,7 @@ Railway يربطها تلقائيًا ويعطي `DATABASE_URL` للتطبيق.
 | `WORLD_AUTO_VALIDATE` | اختياري: `1` يأكّد الإرسال تلقائيًا، الافتراضي `0` |
 | `YALIDINE_API_ID` / `YALIDINE_API_TOKEN` | من لوحة Yalidine ← API (سرّيين) |
 | `YALIDINE_FROM_WILAYA` | ولاية المرسل بالحروف اللاتينية (مثلا `Batna` ولا `Oum El Bouaghi`) |
-| `YALIDINE_FREESHIPPING` | اختياري: `1` (افتراضي) السعر = مجموع الطلبية؛ `0` الزبون يدفع السعر + التوصيل |
+| `YALIDINE_FREESHIPPING` | اختياري: `0` (افتراضي) الزبون يدفع المنتجات + التوصيل (Yalidine تزيد التوصيل)؛ `1` السعر = مجموع الطلبية والتوصيل يتخصم من رصيدك |
 | `FACEBOOK_PIXEL_ID` | من مدير إعلانات فيسبوك |
 | `TIKTOK_PIXEL_ID` | من TikTok Ads |
 | `YOUCAN_ACCESS_TOKEN` | من YouCan |

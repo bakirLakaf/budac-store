@@ -211,12 +211,38 @@ def test_create_home_order_sends_expected_parcel(api):
     assert (p["weight"], p["length"], p["width"], p["height"]) == (1, 20, 15, 10)
 
 
+def test_customer_pays_products_plus_shipping_by_default(api):
+    api.routes.set("/parcels/", FakeResp(200, OK_CREATE), "POST")
+    yal.create_order(fake_order(total=2500, shipping_price=500, shipping_discount=0))
+    p = posts(api)[0]["json"][0]
+    # Yalidine تزيد ثمن التوصيل بروحها ← نبعثو سعر المنتجات برك
+    assert p["price"] == 2000 and p["declared_value"] == 2000
+    assert p["freeshipping"] is False
+
+
+def test_free_shipping_orders_stay_freeshipping(api):
+    api.routes.set("/parcels/", FakeResp(200, OK_CREATE), "POST")
+    yal.create_order(fake_order(total=2000, shipping_price=0))
+    yal.create_order(fake_order(total=2300, shipping_price=500, shipping_discount=200))
+    for call in posts(api):
+        assert call["json"][0]["freeshipping"] is True
+    assert [c["json"][0]["price"] for c in posts(api)] == [2000, 2300]
+
+
+def test_env_one_forces_old_total_price_mode(api, monkeypatch):
+    monkeypatch.setenv("YALIDINE_FREESHIPPING", "1")
+    api.routes.set("/parcels/", FakeResp(200, OK_CREATE), "POST")
+    yal.create_order(fake_order(total=2500, shipping_price=500))
+    p = posts(api)[0]["json"][0]
+    assert p["price"] == 2500 and p["freeshipping"] is True
+
+
 def test_env_overrides_apply(api, monkeypatch):
     monkeypatch.setenv("YALIDINE_FREESHIPPING", "0")
     monkeypatch.setenv("YALIDINE_INSURANCE", "1")
     monkeypatch.setenv("YALIDINE_WEIGHT", "3")
     api.routes.set("/parcels/", FakeResp(200, OK_CREATE), "POST")
-    yal.create_order(fake_order())
+    yal.create_order(fake_order(shipping_price=500))
     p = posts(api)[0]["json"][0]
     assert p["freeshipping"] is False and p["do_insurance"] is True and p["weight"] == 3
 

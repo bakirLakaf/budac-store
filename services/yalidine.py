@@ -9,9 +9,11 @@
     YALIDINE_API_TOKEN      التوكن (سرّي)
     YALIDINE_FROM_WILAYA    اسم ولاية المرسل (أنت) كيما فـ/wilayas تاع Yalidine
                             بالحروف اللاتينية، مثلا: Batna  ·  Alger  ·  Oran
-    YALIDINE_FREESHIPPING   «1» (افتراضي): السعر المبعوث = مجموع الطلبية (يشمل التوصيل)
-                            والزبون يدفع هاد المبلغ برك، وYalidine تخصم ثمن التوصيل
-                            من مستحقاتك. «0»: الزبون يدفع السعر + ثمن التوصيل.
+    YALIDINE_FREESHIPPING   «0» (افتراضي): الزبون يدفع ثمن المنتجات + ثمن التوصيل؛ نبعثو
+                            سعر المنتجات برك وYalidine تزيد التوصيل (ما تخصم من رصيدك).
+                            «1»: السعر المبعوث = مجموع الطلبية (يشمل التوصيل) والتوصيل
+                            يتخصم من رصيدك — يحتاج رصيد كافي فـYalidine.
+                            الطلبيات بتوصيل مجاني تتبعث دايمًا بـfreeshipping=true.
     YALIDINE_INSURANCE      «0» (افتراضي) — «1» يفعّل التأمين (1.5% من القيمة المصرّحة)
     YALIDINE_WEIGHT / _LENGTH / _WIDTH / _HEIGHT
                             مقاسات الطرد الافتراضية (كغ / سم). الافتراضي 1 / 20 / 15 / 10
@@ -453,6 +455,18 @@ def build_parcel(order, dest):
     firstname, familyname = split_name(order.customer_name)
     total = int(round(order.total))
 
+    # ⚠️ من يدفع التوصيل؟
+    #  • الافتراضي (YALIDINE_FREESHIPPING=0): الزبون يدفع ثمن المنتجات + ثمن التوصيل.
+    #    نبعثو لـYalidine سعر المنتجات برك (مجموع الطلبية − التوصيل) وهي تزيد
+    #    ثمن التوصيل وتحصّل الكل من الزبون — بلا ما تخصم من رصيدك.
+    #  • كي الطلبية فيها توصيل مجاني (سعر التوصيل 0 ولا كوبون توصيل)، نبعثو
+    #    freeshipping=True والمتجر هو اللي يدفع التوصيل (يتخصم من رصيد Yalidine).
+    #  • YALIDINE_FREESHIPPING=1: نفرضو النظام القديم دايمًا (price = المجموع).
+    ship = int(round(getattr(order, "shipping_price", 0) or 0))
+    ship_discount = int(round(getattr(order, "shipping_discount", 0) or 0))
+    merchant_pays = _flag("YALIDINE_FREESHIPPING", False) or ship <= 0 or ship_discount > 0
+    price = total if merchant_pays else max(total - ship, 0)
+
     address = _cut(order.address_note)
     if dest["is_stopdesk"]:
         address = _cut(f"مكتب: {order.pickup_point_name}")
@@ -468,14 +482,14 @@ def build_parcel(order, dest):
         "to_commune_name": dest["to_commune_name"],
         "to_wilaya_name": dest["to_wilaya_name"],
         "product_list": PRODUCT_LABEL,
-        "price": min(total, MAX_PRICE),                 # المبلغ للتحصيل من الزبون
+        "price": min(price, MAX_PRICE),                 # سعر المنتجات للتحصيل (Yalidine تزيد التوصيل)
         "do_insurance": _flag("YALIDINE_INSURANCE", False),
-        "declared_value": min(total, MAX_PRICE),
+        "declared_value": min(price, MAX_PRICE),
         "length": _int_env("YALIDINE_LENGTH", 20),
         "width": _int_env("YALIDINE_WIDTH", 15),
         "height": _int_env("YALIDINE_HEIGHT", 10),
         "weight": _int_env("YALIDINE_WEIGHT", 1),
-        "freeshipping": _flag("YALIDINE_FREESHIPPING", True),
+        "freeshipping": bool(merchant_pays),
         "is_stopdesk": bool(dest["is_stopdesk"]),
         "has_exchange": False,
     }
