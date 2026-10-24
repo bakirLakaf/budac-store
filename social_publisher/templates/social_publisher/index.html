@@ -1,197 +1,208 @@
-<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>النشر على السوشيال ميديا</title>
+{% extends "admin/base_admin.html" %}
+
+{% block title %}النشر على السوشيال ميديا — {{ store_name }}{% endblock %}
+
+{% block content %}
 <style>
-  :root { --bg:#f6f4ef; --card:#fff; --ink:#23201b; --mut:#7a746a; --line:#e4dfd5; --brand:#8a5a2b; --ok:#2e7d32; --bad:#c62828; --warn:#b26a00; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#1b1916; --card:#25221e; --ink:#efeae0; --mut:#a39c90; --line:#3a352e; --brand:#d8a15f; } }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font-family:"Segoe UI",Tahoma,Arial,sans-serif; line-height:1.6; }
-  .wrap { max-width:860px; margin:0 auto; padding:16px; }
-  h1 { font-size:1.4rem; margin:8px 0 4px; } h2 { font-size:1.05rem; margin:0 0 10px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:14px 0; }
-  .chips { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  .chip { padding:3px 10px; border-radius:99px; font-size:.85rem; border:1px solid var(--line); }
-  .chip.on { color:var(--ok); border-color:var(--ok); } .chip.off { color:var(--mut); }
-  .msg { padding:10px 14px; border-radius:8px; margin:10px 0; } .msg.ok { background:#e7f4e8; color:#1b5e20; } .msg.bad { background:#fdeaea; color:#8e1b1b; }
-  label.f { display:block; font-weight:600; margin:12px 0 6px; }
-  textarea, input[type=text], input[type=datetime-local], input[type=search] { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:transparent; color:inherit; font:inherit; }
-  textarea { min-height:150px; resize:vertical; }
-  .row { display:flex; flex-wrap:wrap; gap:14px; align-items:center; } .small { font-size:.85rem; color:var(--mut); }
-  button, .btn { cursor:pointer; border:1px solid var(--line); background:transparent; color:inherit; padding:8px 14px; border-radius:8px; font:inherit; }
-  button.primary { background:var(--brand); color:#fff; border-color:var(--brand); font-weight:600; padding:11px 22px; }
-  .results { margin-top:8px; display:grid; gap:6px; } .res { display:flex; gap:10px; align-items:center; padding:6px; border:1px solid var(--line); border-radius:8px; cursor:pointer; }
-  .res:hover { border-color:var(--brand); } .res img, .ph { width:44px; height:44px; object-fit:cover; border-radius:6px; background:var(--line); }
-  .grid { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
-  .thumb { position:relative; width:92px; } .thumb img { width:92px; height:92px; object-fit:cover; border-radius:8px; border:2px solid var(--line); display:block; }
-  .thumb input { position:absolute; top:6px; right:6px; width:18px; height:18px; }
-  table { width:100%; border-collapse:collapse; font-size:.92rem; } th, td { text-align:right; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
-  .st-done { color:var(--ok); } .st-failed, .st-partial { color:var(--bad); } .st-scheduled, .st-publishing { color:var(--warn); }
-  .err { color:var(--bad); font-size:.82rem; } .actions form { display:inline; } .actions button { padding:3px 9px; font-size:.82rem; }
-  #check-out { margin-top:8px; font-size:.9rem; white-space:pre-line; }
+  .sp-card { background: var(--a-surface); border: 1px solid var(--a-border); border-radius: var(--a-radius); padding: 18px; margin: 0 0 18px; }
+  .sp-card h2 { font-size: 16px; margin: 0 0 12px; color: var(--a-primary); }
+  .sp-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .sp-chip { padding: 3px 12px; border-radius: 99px; font-size: 13px; border: 1px solid var(--a-border); color: var(--a-text-soft); }
+  .sp-chip.on { color: var(--a-ok); border-color: var(--a-ok); }
+  .sp-label { display: block; font-weight: 700; margin: 16px 0 6px; }
+  .sp-card textarea, .sp-card input[type=search], .sp-card input[type=datetime-local] {
+    width: 100%; padding: 10px; border: 1px solid var(--a-border); border-radius: 8px; font: inherit; background: #fff; color: var(--a-text); }
+  .sp-card textarea { min-height: 150px; resize: vertical; }
+  .sp-card input[type=datetime-local] { width: auto; }
+  .sp-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .sp-small { font-size: 13px; color: var(--a-text-soft); }
+  .sp-results { display: grid; gap: 6px; margin-top: 8px; }
+  .sp-res { display: flex; gap: 10px; align-items: center; padding: 6px; border: 1px solid var(--a-border); border-radius: 8px; cursor: pointer; }
+  .sp-res:hover { border-color: var(--a-gold); }
+  .sp-res img, .sp-ph { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background: var(--a-border); }
+  .sp-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .sp-thumb { position: relative; width: 92px; }
+  .sp-thumb img { width: 92px; height: 92px; object-fit: cover; border-radius: 8px; border: 2px solid var(--a-border); display: block; }
+  .sp-thumb input { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; }
+  .sp-file { width: 92px; height: 92px; border-radius: 8px; border: 2px dashed var(--a-border); display: flex; align-items: center;
+    justify-content: center; text-align: center; font-size: 12px; padding: 4px; overflow: hidden; word-break: break-all; }
+  .sp-st-done { color: var(--a-ok); } .sp-st-failed, .sp-st-partial { color: var(--a-danger); }
+  .sp-st-scheduled, .sp-st-publishing { color: var(--a-warning); }
+  .sp-err { color: var(--a-danger); font-size: 12px; }
+  .sp-actions form { display: inline; }
+  #sp-check-out { font-size: 13px; white-space: pre-line; margin-top: 6px; }
 </style>
-</head>
-<body>
-<div class="wrap">
-  <h1>📣 النشر على السوشيال ميديا</h1>
-  <div class="chips">
+
+<div class="page-head">
+    <h1>📣 النشر على السوشيال ميديا</h1>
+</div>
+
+<div class="sp-chips">
     {% for n in ['facebook','instagram','tiktok'] %}
-      <span class="chip {{ 'on' if configured[n] else 'off' }}">{{ labels[n] }}: {{ 'مربوط' if configured[n] else 'غير مربوط' }}</span>
+        <span class="sp-chip {{ 'on' if configured[n] }}">{{ labels[n] }}: {{ 'مربوط' if configured[n] else 'غير مربوط' }}</span>
     {% endfor %}
-    {% if tiktok_connect and not configured['tiktok'] %}<a class="btn" href="{{ prefix }}/tiktok/connect">ربط تيك توك</a>{% endif %}
-    <button type="button" id="check-btn">فحص الاتصال</button>
-  </div>
-  <div id="check-out"></div>
+    {% if tiktok_connect and not configured['tiktok'] %}<a class="btn-admin btn-sm" href="{{ prefix }}/tiktok/connect">ربط تيك توك</a>{% endif %}
+    <button type="button" class="btn-admin btn-sm btn-ghost" id="sp-check-btn">فحص الاتصال</button>
+</div>
+<div id="sp-check-out"></div>
 
-  {% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
-  {% if err %}<div class="msg bad">{{ err }}</div>{% endif %}
+{% if msg %}<div class="flash flash-success">{{ msg }}</div>{% endif %}
+{% if err %}<div class="flash flash-error">{{ err }}</div>{% endif %}
 
-  <form class="card" method="post" action="{{ prefix }}/posts" enctype="multipart/form-data" id="post-form">
-    {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+<form class="sp-card" method="post" action="{{ prefix }}/posts" enctype="multipart/form-data" id="sp-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <h2>منشور جديد</h2>
 
-    <label class="f">1) منتج من المتجر (اختياري)</label>
-    <input type="search" id="q" placeholder="قلّب على منتج بالاسم…" autocomplete="off">
-    <div class="results" id="results"></div>
-    <div id="picked" hidden>
-      <div class="row" style="margin-top:8px"><strong id="picked-name"></strong>
-        <button type="button" id="insert-info">إدراج الاسم والسعر والرابط في النص</button>
-        <button type="button" id="clear-product">إلغاء المنتج</button></div>
-      <div class="small">اختار الصور اللي تحب تنشرها (ما راحش تتكرر في السيرفر، نستعملو الصور تاع المتجر كيما هي):</div>
-      <div class="grid" id="gallery"></div>
-      <input type="hidden" name="product_id" id="product_id">
+    <label class="sp-label">1) منتج من المتجر (اختياري)</label>
+    <input type="search" id="sp-q" placeholder="قلّب على منتج بالاسم…" autocomplete="off">
+    <div class="sp-results" id="sp-results"></div>
+    <div id="sp-picked" hidden>
+        <div class="sp-row" style="margin-top:8px">
+            <strong id="sp-picked-name"></strong>
+            <button type="button" class="btn-admin btn-sm btn-ghost" id="sp-insert">إدراج الاسم والسعر والرابط في النص</button>
+            <button type="button" class="btn-admin btn-sm btn-ghost" id="sp-clear">إلغاء المنتج</button>
+        </div>
+        <div class="sp-small">اختار الصور اللي تحب تنشرها. صور المتجر ما تتكوبيش في السيرفر، نستعملوها كيما هي:</div>
+        <div class="sp-grid" id="sp-gallery"></div>
+        <input type="hidden" name="product_id" id="sp-product-id">
     </div>
 
-    <label class="f">2) النص</label>
-    <textarea name="caption" id="caption" placeholder="اكتب المنشور هنا…">{{ form.caption or '' }}</textarea>
-    <div class="small"><span id="count">0</span> حرف — انستغرام الحد 2200</div>
+    <label class="sp-label">2) النص</label>
+    <textarea name="caption" id="sp-caption" placeholder="اكتب المنشور هنا…">{{ form.caption or '' }}</textarea>
+    <div class="sp-small"><span id="sp-count">0</span> حرف — انستغرام الحد 2200</div>
 
-    <label class="f">3) صور أو فيديو من عندك (اختياري)</label>
-    <input type="file" name="files" id="files" multiple accept=".jpg,.jpeg,.png,.webp,.mp4,.mov">
-    <div class="small">حتى {{ max_images }} صور، ولا فيديو واحد (حتى {{ max_video_mb }}MB). تتحذف من السيرفر بعد ما ينتشر المنشور.</div>
-    <div class="grid" id="previews"></div>
+    <label class="sp-label">3) صور أو فيديو من عندك (اختياري)</label>
+    <input type="file" name="files" id="sp-files" multiple accept=".jpg,.jpeg,.png,.webp,.mp4,.mov">
+    <div class="sp-small">حتى {{ max_images }} صور، ولا فيديو واحد (حتى {{ max_video_mb }}MB). تتحذف من السيرفر بعد ما ينتشر المنشور.</div>
+    <div class="sp-grid" id="sp-previews"></div>
 
-    <label class="f">4) المنصات</label>
-    <div class="row">
-      {% for n in ['facebook','instagram','tiktok'] %}
+    <label class="sp-label">4) المنصات</label>
+    <div class="sp-row">
+        {% for n in ['facebook','instagram','tiktok'] %}
         <label><input type="checkbox" name="platforms" value="{{ n }}"
-          {{ 'checked' if (form.platforms is defined and n in (form.platforms or [])) or (not form.platforms and configured[n] and n != 'tiktok') }}
-          {{ 'disabled' if not configured[n] }}> {{ labels[n] }}{{ '' if configured[n] else ' (غير مربوط)' }}</label>
-      {% endfor %}
+            {{ 'checked' if (form.platforms is defined and n in (form.platforms or [])) or (not form.platforms and configured[n] and n != 'tiktok') }}
+            {{ 'disabled' if not configured[n] }}> {{ labels[n] }}{{ '' if configured[n] else ' (غير مربوط)' }}</label>
+        {% endfor %}
     </div>
 
-    <label class="f">5) الوقت</label>
-    <div class="row">
-      <label><input type="radio" name="mode" value="now" {{ 'checked' if form.mode != 'schedule' }}> انشر درك</label>
-      <label><input type="radio" name="mode" value="schedule" {{ 'checked' if form.mode == 'schedule' }}> جدولة</label>
-      <input type="datetime-local" name="scheduled_at" id="when" value="{{ form.scheduled_at or '' }}" style="width:auto">
-      <span class="small">(توقيت الجزائر)</span>
+    <label class="sp-label">5) الوقت</label>
+    <div class="sp-row">
+        <label><input type="radio" name="mode" value="now" {{ 'checked' if form.mode != 'schedule' }}> انشر درك</label>
+        <label><input type="radio" name="mode" value="schedule" {{ 'checked' if form.mode == 'schedule' }}> جدولة</label>
+        <input type="datetime-local" name="scheduled_at" id="sp-when" value="{{ form.scheduled_at or '' }}">
+        <span class="sp-small">(توقيت الجزائر)</span>
     </div>
 
-    <div style="margin-top:16px"><button class="primary" id="submit-btn" type="submit">انشر</button></div>
-  </form>
+    <div style="margin-top:18px"><button class="btn-admin" id="sp-submit" type="submit">انشر</button></div>
+</form>
 
-  <div class="card">
+<div class="sp-card">
     <h2>آخر المنشورات</h2>
     {% if posts %}
-    <table>
-      <tr><th>#</th><th>النص</th><th>الحالة</th><th>الوقت</th><th></th></tr>
-      {% for p in posts %}
-      <tr>
-        <td>{{ p.id }}</td>
-        <td>{{ (p.caption or '—')[:70] }}{{ '…' if p.caption and p.caption|length > 70 }}<div class="small">{{ p.media_count }} ملف</div></td>
-        <td><span class="st-{{ p.status }}">{{ p.status|sp_status }}</span>
-          {% for r in p.results or [] %}
-            <div class="small">{{ labels[r.platform] }}: {{ r.status|sp_status }}</div>
-            {% if r.error %}<div class="err">{{ r.error }}</div>{% endif %}
-          {% endfor %}</td>
-        <td class="small">{{ (p.scheduled_at if p.status == 'scheduled' else (p.finished_at or p.created_at))|sp_local }}</td>
-        <td class="actions">
-          {% for a, t in [('retry','إعادة'),('cancel','إلغاء'),('delete','حذف')] %}
-            {% if (a == 'retry' and p.status in ['failed','partial']) or (a == 'cancel' and p.status == 'scheduled') or (a == 'delete' and p.status in ['done','failed','partial','cancelled']) %}
-            <form method="post" action="{{ prefix }}/posts/{{ p.id }}/{{ a }}">
-              {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
-              <button {{ 'onclick="return confirm(\'متأكد؟\')"'|safe if a != 'retry' }}>{{ t }}</button></form>
-            {% endif %}
-          {% endfor %}
-        </td>
-      </tr>
-      {% endfor %}
+    <table class="admin-table">
+        <tr><th>#</th><th>النص</th><th>الحالة</th><th>الوقت</th><th></th></tr>
+        {% for p in posts %}
+        <tr>
+            <td>{{ p.id }}</td>
+            <td>{{ (p.caption or '—')[:70] }}{{ '…' if p.caption and p.caption|length > 70 }}<div class="sp-small">{{ p.media_count }} ملف</div></td>
+            <td><span class="sp-st-{{ p.status }}">{{ p.status|sp_status }}</span>
+                {% for r in p.results or [] %}
+                    <div class="sp-small">{{ labels[r.platform] }}: {{ r.status|sp_status }}</div>
+                    {% if r.error %}<div class="sp-err">{{ r.error }}</div>{% endif %}
+                {% endfor %}</td>
+            <td class="sp-small">{{ (p.scheduled_at if p.status == 'scheduled' else (p.finished_at or p.created_at))|sp_local }}</td>
+            <td class="sp-actions">
+                {% for a, t in [('retry','إعادة'),('cancel','إلغاء'),('delete','حذف')] %}
+                    {% if (a == 'retry' and p.status in ['failed','partial']) or (a == 'cancel' and p.status == 'scheduled') or (a == 'delete' and p.status in ['done','failed','partial','cancelled']) %}
+                    <form method="post" action="{{ prefix }}/posts/{{ p.id }}/{{ a }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn-admin btn-sm btn-ghost" {{ 'onclick="return confirm(\'متأكد؟\')"'|safe if a != 'retry' }}>{{ t }}</button>
+                    </form>
+                    {% endif %}
+                {% endfor %}
+            </td>
+        </tr>
+        {% endfor %}
     </table>
-    {% else %}<div class="small">ما كاين حتى منشور باقي.</div>{% endif %}
-  </div>
+    {% else %}<div class="sp-small">ما كاين حتى منشور باقي.</div>{% endif %}
 </div>
 
 <script>
-const PREFIX = {{ prefix|tojson }};
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let product = null;
+(function () {
+  const PREFIX = {{ prefix|tojson }};
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let product = null;
 
-// عدّاد الأحرف
-const cap = $('caption'); const upd = () => $('count').textContent = cap.value.length; cap.addEventListener('input', upd); upd();
+  const cap = $('sp-caption');
+  const upd = () => $('sp-count').textContent = cap.value.length;
+  cap.addEventListener('input', upd); upd();
 
-// البحث عن منتج
-let timer;
-async function search() {
-  const q = $('q').value.trim();
-  const r = await fetch(`${PREFIX}/api/products?q=${encodeURIComponent(q)}`);
-  const items = r.ok ? await r.json() : [];
-  $('results').innerHTML = items.map(i => `<div class="res" data-id="${esc(i.id)}">
-    ${i.thumb ? `<img src="${esc(i.thumb)}" alt="">` : '<div class="ph"></div>'}
-    <div><div>${esc(i.name)}</div><div class="small">${esc(i.price)} دج</div></div></div>`).join('');
-}
-$('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 300); });
-$('q').addEventListener('focus', () => { if (!$('results').children.length) search(); });
-$('results').addEventListener('click', async (e) => {
-  const el = e.target.closest('.res'); if (!el) return;
-  const r = await fetch(`${PREFIX}/api/products/${encodeURIComponent(el.dataset.id)}`);
-  if (!r.ok) return;
-  product = await r.json();
-  $('product_id').value = product.id; $('picked-name').textContent = product.name; $('picked').hidden = false;
-  $('gallery').innerHTML = product.images.map(i => `<label class="thumb"><img src="${esc(i.url)}" alt="">
-    <input type="checkbox" name="gallery" value="${esc(i.id)}" checked></label>`).join('')
-    || '<span class="small">هاد المنتج ما عندوش صور.</span>';
-  $('results').innerHTML = ''; $('q').value = '';
-});
-$('clear-product').onclick = () => { product = null; $('product_id').value = ''; $('picked').hidden = true; $('gallery').innerHTML = ''; };
-$('insert-info').onclick = () => {
-  if (!product) return;
-  const t = `${product.name}\nالسعر: ${product.price} دج\n${product.url}`;
-  cap.value = cap.value ? cap.value + '\n\n' + t : t; upd(); cap.focus();
-};
-
-// معاينة الملفات المرفوعة (في المتصفح برك، ما تروحش للسيرفر قبل ما تضغط انشر)
-$('files').addEventListener('change', (e) => {
-  $('previews').innerHTML = '';
-  for (const f of e.target.files) {
-    const url = URL.createObjectURL(f);
-    const el = document.createElement('div'); el.className = 'thumb';
-    el.innerHTML = f.type.startsWith('video') ? `<video src="${url}" style="width:92px;height:92px;object-fit:cover;border-radius:8px"></video>` : `<img src="${url}" alt="">`;
-    $('previews').appendChild(el);
+  // البحث عن منتج
+  let timer;
+  async function search() {
+    const r = await fetch(`${PREFIX}/api/products?q=${encodeURIComponent($('sp-q').value.trim())}`, {credentials: 'same-origin'});
+    const items = r.ok ? await r.json() : [];
+    $('sp-results').innerHTML = items.map(i => `<div class="sp-res" data-id="${esc(i.id)}">
+      ${i.thumb ? `<img src="${esc(i.thumb)}" alt="">` : '<div class="sp-ph"></div>'}
+      <div><div>${esc(i.name)}</div><div class="sp-small">${esc(i.price)} دج</div></div></div>`).join('');
   }
-});
+  $('sp-q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 300); });
+  $('sp-q').addEventListener('focus', () => { if (!$('sp-results').children.length) search(); });
+  $('sp-results').addEventListener('click', async (e) => {
+    const el = e.target.closest('.sp-res'); if (!el) return;
+    const r = await fetch(`${PREFIX}/api/products/${encodeURIComponent(el.dataset.id)}`, {credentials: 'same-origin'});
+    if (!r.ok) return;
+    product = await r.json();
+    $('sp-product-id').value = product.id; $('sp-picked-name').textContent = product.name; $('sp-picked').hidden = false;
+    $('sp-gallery').innerHTML = product.images.map(i => `<label class="sp-thumb"><img src="${esc(i.thumb)}" alt="">
+      <input type="checkbox" name="gallery" value="${esc(i.id)}" checked></label>`).join('')
+      || '<span class="sp-small">هاد المنتج ما عندوش صور.</span>';
+    $('sp-results').innerHTML = ''; $('sp-q').value = '';
+  });
+  $('sp-clear').onclick = () => { product = null; $('sp-product-id').value = ''; $('sp-picked').hidden = true; $('sp-gallery').innerHTML = ''; };
+  $('sp-insert').onclick = () => {
+    if (!product) return;
+    const t = `${product.name}\nالسعر: ${product.price} دج\n${product.url}`;
+    cap.value = cap.value ? cap.value + '\n\n' + t : t; upd(); cap.focus();
+  };
 
-// زر الإرسال حسب الوضع
-const modeEls = document.querySelectorAll('input[name=mode]');
-function syncMode() {
-  const sch = document.querySelector('input[name=mode]:checked').value === 'schedule';
-  $('submit-btn').textContent = sch ? 'جدول المنشور' : 'انشر درك'; $('when').required = sch;
-}
-modeEls.forEach(el => el.addEventListener('change', syncMode)); syncMode();
-$('when').addEventListener('input', () => { document.querySelector('input[name=mode][value=schedule]').checked = true; syncMode(); });
-$('post-form').addEventListener('submit', () => { $('submit-btn').disabled = true; $('submit-btn').textContent = 'راهو يتبعث…'; });
+  // معاينة الملفات المرفوعة (في المتصفح برك). الفيديو: نوري الاسم (CSP تمنع معاينة blob للفيديو)
+  $('sp-files').addEventListener('change', (e) => {
+    $('sp-previews').innerHTML = '';
+    for (const f of e.target.files) {
+      const el = document.createElement('div'); el.className = 'sp-thumb';
+      if (f.type.startsWith('video')) {
+        el.innerHTML = `<div class="sp-file">🎬 ${esc(f.name)}</div>`;
+      } else {
+        el.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="">`;
+      }
+      $('sp-previews').appendChild(el);
+    }
+  });
 
-// فحص الاتصال
-$('check-btn').onclick = async () => {
-  $('check-out').textContent = 'نفحص…';
-  const r = await fetch(`${PREFIX}/check`); const d = await r.json();
-  $('check-out').textContent = Object.entries(d).map(([k, v]) => `${v.ok ? '✓' : '✗'} ${k}: ${v.msg}`).join('\n');
-};
+  // زر الإرسال حسب الوضع
+  function syncMode() {
+    const sch = document.querySelector('input[name=mode]:checked').value === 'schedule';
+    $('sp-submit').textContent = sch ? 'جدول المنشور' : 'انشر درك'; $('sp-when').required = sch;
+  }
+  document.querySelectorAll('input[name=mode]').forEach(el => el.addEventListener('change', syncMode)); syncMode();
+  $('sp-when').addEventListener('input', () => { document.querySelector('input[name=mode][value=schedule]').checked = true; syncMode(); });
+  $('sp-form').addEventListener('submit', () => { $('sp-submit').disabled = true; $('sp-submit').textContent = 'راهو يتبعث…'; });
 
-{% if has_active %}setTimeout(() => location.href = PREFIX + '/', 15000);{% endif %}
+  // فحص الاتصال
+  $('sp-check-btn').onclick = async () => {
+    $('sp-check-out').textContent = 'نفحص…';
+    const r = await fetch(`${PREFIX}/check`, {credentials: 'same-origin'}); const d = await r.json();
+    $('sp-check-out').textContent = Object.entries(d).map(([k, v]) => `${v.ok ? '✓' : '✗'} ${k}: ${v.msg}`).join('\n');
+  };
+
+  // تحديث تلقائي للحالات — فقط لو الفورم فارغ (باش ما نمسحوش للأدمن اللي راهو يكتب)
+  {% if has_active %}
+  setTimeout(() => {
+    if (!cap.value && !$('sp-files').files.length && !$('sp-product-id').value) location.reload();
+  }, 15000);
+  {% endif %}
+})();
 </script>
-</body>
-</html>
+{% endblock %}

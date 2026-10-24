@@ -58,6 +58,16 @@ def create_blueprint(admin_required, adapter):
     def sp_status(s):
         return STATUS_AR.get(s, s)
 
+    def _ensure_base_url():
+        """لو SP_PUBLIC_BASE_URL ما تحطش، نستعملو عنوان الموقع من الطلب (ProxyFix يعطي https)."""
+        if not cfg.public_base_url:
+            cfg.public_base_url = request.url_root.rstrip("/")
+
+    @bp.before_request
+    def _before():
+        if request.path.startswith(P):
+            _ensure_base_url()
+
     def _context(**extra):
         with db.cursor(commit=False) as cur:
             cur.execute("""
@@ -94,7 +104,8 @@ def create_blueprint(admin_required, adapter):
         if not p:
             abort(404)
         return jsonify({"id": p["id"], "name": p["name"], "price": p["price"], "url": p["url"],
-                        "images": [{"id": i["id"], "url": i["url"]} for i in p["images"]]})
+                        "images": [{"id": i["id"], "url": i["url"], "thumb": i.get("thumb") or i["url"]}
+                               for i in p["images"]]})
 
     # ---------- إنشاء منشور ----------
     @bp.post(P + "/posts")

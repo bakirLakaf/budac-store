@@ -15,18 +15,23 @@ __all__ = ["init_social_publisher", "BaseAdapter", "BudacAdapter"]
 log = logging.getLogger("social_publisher")
 
 
-def init_social_publisher(app, admin_required, adapter=None, start_scheduler=True):
+def init_social_publisher(app, admin_required, adapter=None, start_scheduler=True, limiter=None):
     """admin_required: الـ decorator تاع المتجر اللي يحمي لوحة التحكم (لازم)."""
     if admin_required is None:
         raise ValueError("admin_required لازم — ما نقبلوش لوحة نشر بلا حماية")
     cfg.load(app)
-    if not cfg.database_url:
-        raise RuntimeError("DATABASE_URL ناقص")
+    if not cfg.database_url.startswith("postgresql://"):
+        raise RuntimeError("أداة النشر تحتاج PostgreSQL (DATABASE_URL الحالي ماشي PostgreSQL) — موقوفة")
     if len(cfg.secret) < 16:
         raise RuntimeError("SP_SECRET ناقص أو قصير (16 حرف على الأقل) — ولا حط app.secret_key")
+    cfg.ensure_dirs()
     db.init_pool(cfg.database_url)
     db.init_schema()
-    app.register_blueprint(create_blueprint(admin_required, adapter or BudacAdapter()))
+    bp = create_blueprint(admin_required, adapter or BudacAdapter())
+    app.register_blueprint(bp)
+    app.config["SOCIAL_PUBLISHER_ENABLED"] = True  # القالب يستعملها باش يبيّن الرابط في لوحة التحكم
+    if limiter is not None:  # فيسبوك/انستغرام يجبدو الملفات بطلبات متتالية: ما نخلّوهمش يتحدّو بـ rate limit
+        limiter.exempt(bp)
     if start_scheduler:
         scheduler.start()
     log.info("social_publisher جاهز على %s", cfg.admin_prefix)

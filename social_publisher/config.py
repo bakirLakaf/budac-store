@@ -1,5 +1,6 @@
 """إعدادات أداة النشر — كلشي يتقرا من متغيرات البيئة (.env)، ما كاين حتى مفتاح داخل الكود."""
 import os
+import re
 from pathlib import Path
 
 
@@ -10,6 +11,11 @@ def _int(name, default):
         return default
 
 
+def normalize_dsn(url):
+    """SQLAlchemy تستعمل postgresql+psycopg:// بصح psycopg2 ما يفهمهاش — نشيلو الجزء +driver."""
+    return re.sub(r"^(postgres|postgresql)\+\w+://", "postgresql://", url or "")
+
+
 class Config:
     def __init__(self):
         self.loaded = False
@@ -17,13 +23,16 @@ class Config:
     def load(self, app=None):
         e = os.getenv
         # قاعدة البيانات: نفس قاعدة المتجر (جداولنا كلها تبدا بـ sp_)
-        self.database_url = e("SP_DATABASE_URL") or e("DATABASE_URL", "")
+        self.database_url = normalize_dsn(e("SP_DATABASE_URL") or e("DATABASE_URL", ""))
         # الرابط العام تاع المتجر (لازم https) — فيسبوك وانستغرام يجبدو منو الصور والفيديو
         self.public_base_url = e("SP_PUBLIC_BASE_URL", "").rstrip("/")
         # سر لتوقيع روابط الميديا المؤقتة
         self.secret = e("SP_SECRET") or (app.secret_key if app is not None and app.secret_key else "")
         self.admin_prefix = "/" + e("SP_ADMIN_PREFIX", "/admin/social").strip("/")
-        self.temp_dir = Path(e("SP_TEMP_DIR", "sp_tmp")).resolve()
+        # الملفات المؤقتة: لو كاين UPLOAD_ROOT (Volume تاع Railway) نخدمو فيه باش ما تتمسحش مع كل نشر
+        upload_root = (app.config.get("UPLOAD_ROOT") if app is not None else "") or e("UPLOAD_ROOT", "")
+        default_tmp = os.path.join(upload_root, "sp_tmp") if upload_root else "sp_tmp"
+        self.temp_dir = Path(e("SP_TEMP_DIR") or default_tmp).resolve()
         self.max_video_mb = _int("SP_MAX_VIDEO_MB", 100)
         self.max_image_mb = _int("SP_MAX_IMAGE_MB", 10)
         self.max_images = min(_int("SP_MAX_IMAGES", 10), 10)  # انستغرام carousel حد أقصى 10
@@ -46,8 +55,10 @@ class Config:
         self.tt_mode = e("TIKTOK_MODE", "inbox")  # inbox = مسودة في التطبيق | direct = نشر مباشر (يحتاج audit)
         self.tt_privacy = e("TIKTOK_PRIVACY", "SELF_ONLY")
 
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.loaded = True
+
+    def ensure_dirs(self):
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
 
     def secrets(self):
         """القيم الحساسة — نستعملها باش نخبّيوها من رسائل الأخطاء."""

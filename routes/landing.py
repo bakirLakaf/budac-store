@@ -9,7 +9,7 @@ from flask import (
     Blueprint, render_template, abort, request, redirect, url_for, session,
 )
 
-from models import db, LandingPage, LandingItem, Carrier
+from models import db, LandingPage, Carrier
 from services import ratelimit
 from services import stock as stock_service
 from services.order_access import remember_order, session_owns_order
@@ -48,75 +48,6 @@ def _build_line(page, quantity):
             else product.stock_quantity
         ),
     )
-
-
-def _split_price(total, weights):
-    """
-    يوزّع سعر الباقة (total) على السطور بنسبة أسعارها العادية.
-
-    ⚠️ المجموع يخرج **بالضبط** total (الباقي ياخذو آخر سطر) — بلا هذا،
-    الزبون يشوف 800 دج فالصفحة ويتحسبلو 799 ولا 801 فالطلبية.
-    مثال: داخلي 350 + خارجي 550 بسعر 800 → 311 + 489.
-    """
-    weights = [max(1, int(w or 0)) for w in weights]
-    total_weight = sum(weights)
-    shares = []
-    allocated = 0
-    for w in weights[:-1]:
-        part = round(total * w / total_weight)
-        shares.append(part)
-        allocated += part
-    shares.append(total - allocated)
-
-    # احتياط: لو سطر خرج سالب (سعر باقة صغير بزاف)، نقسمو بالتساوي
-    if any(x < 0 for x in shares):
-        even = total // len(weights)
-        shares = [even] * (len(weights) - 1)
-        shares.append(total - even * (len(weights) - 1))
-    return shares
-
-
-def _find_choice(page, choice_id):
-    """يرجع عنصر الاختيار من هاد الصفحة بالضبط — ماشي أي رقم يبعتو الزبون."""
-    try:
-        choice_id = int(choice_id)
-    except (TypeError, ValueError):
-        return None
-    for item in page.choices:
-        if item.id == choice_id:
-            return item
-    return None
-
-
-def _build_bundle_lines(page, quantity, choice):
-    """
-    يبني سطور الطلبية لباقة: الموديل المختار + العناصر الثابتة.
-
-    السعر دايمًا من page.unit_price (قاعدة البيانات)، ماشي من الفورم.
-    """
-    items = ([choice] if choice else []) + list(page.fixed_items)
-    shares = _split_price(page.unit_price, [i.list_price for i in items])
-
-    lines = []
-    for item, share in zip(items, shares):
-        product = item.product
-        variant = item.variant
-        lines.append(CartLine(
-            key=f"lp-{page.id}-{item.id}",
-            kind="product",
-            name=product.name,
-            unit_price=share,
-            quantity=quantity,
-            image_filename=item.image_filename,
-            variant_label=variant.label if variant else None,
-            slug=product.slug,
-            product_id=product.id,
-            variant_id=variant.id if variant else None,
-            available_stock=(
-                variant.stock_quantity if variant else product.stock_quantity
-            ),
-        ))
-    return lines
 
 
 @landing_bp.route("/lp/<slug>")
@@ -184,16 +115,11 @@ def submit(slug):
     wilaya = next((w for w in wilayas if w["code"] == form["wilaya_code"]), None)
     wilaya_name = wilaya["name"] if wilaya else form["wilaya_code"]
 
-    if page.is_bundle:
-        lines = _build_bundle_lines(
-            page, form["quantity"], _find_choice(page, form["choice_id"])
-        )
-    else:
-        lines = [_build_line(page, form["quantity"])]
+    line = _build_line(page, form["quantity"])
 
     try:
         order = create_order(
-            lines=lines,
+            lines=[line],
             customer_data={
                 "name": form["name"],
                 "phone": form["phone"],
@@ -306,7 +232,6 @@ def _read_form(data):
         "carrier_code": (data.get("carrier_code") or "").strip(),
         "delivery_type": (data.get("delivery_type") or "").strip(),
         "note": (data.get("note") or "").strip(),
-        "choice_id": (data.get("choice_id") or "").strip(),
     }
 
 
@@ -344,25 +269,11 @@ def _validate(form, page):
     #
     # درك نستعملو نفس الدالة اللي تستعملها السلة والطلبيات
     # (services/stock.py) — قاعدة وحدة، ما تتناقضش.
-    if page.is_bundle:
-        # ---------- باقة: لازم موديل مختار + نفحصو كل عنصر ----------
-        choice = _find_choice(page, form["choice_id"])
-        if page.choices and choice is None:
-            errors.append("اختر الموديل")
-        else:
-            for item in ([choice] if choice else []) + list(page.fixed_items):
-                stock_error = stock_service.check_availability(
-                    item.product, item.variant, form["quantity"],
-                    label=item.display_label,
-                )
-                if stock_error:
-                    errors.append(stock_error)
-    else:
-        stock_error = stock_service.check_availability(
-            page.product, page.variant, form["quantity"]
-        )
-        if stock_error:
-            errors.append(stock_error)
+    stock_error = stock_service.check_availability(
+        page.product, page.variant, form["quantity"]
+    )
+    if stock_error:
+        errors.append(stock_error)
 
     # ---------- التوصيل ----------
     if not form["wilaya_code"]:

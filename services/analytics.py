@@ -25,7 +25,7 @@ from flask import request, session, current_app
 from models import db, SiteVisit
 
 # مسارات ما تتعدّش: لوحة التحكم، الملفات الثابتة، وواجهات API
-SKIP_PREFIXES = ("/admin", "/static", "/api", "/favicon")
+SKIP_PREFIXES = ("/admin", "/static", "/api", "/favicon", "/sp/")
 
 # ⚠️ كلمات تدل على بوت. القائمة ماشي كاملة — البوتات الجدّية تتخفّى،
 # لكن هاذي تشيل معظم الضجيج (محركات البحث، أدوات المراقبة).
