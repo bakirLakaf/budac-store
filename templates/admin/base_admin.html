@@ -5,7 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}لوحة التحكم — {{ store_name }}{% endblock %}</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+    {# المظهر (فاتح/داكن) يتطبّق قبل رسم الصفحة باش ما يبانش وميض أبيض. الاختيار محفوظ فالمتصفح. #}
+    <script>
+    (function () {
+        try {
+            var t = localStorage.getItem('budac-admin-theme');
+            if (t !== 'dark' && t !== 'light') {
+                t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+    })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-dark.css') }}">
 
     {# ⚠️ نفس الأيقونات تاع المتجر — اللوحة كانت بلا favicon، فتبان
        بأيقونة فارغة فالتبويب وتضيع بين التبويبات المفتوحة.
@@ -103,6 +116,9 @@
     </nav>
 
     <div class="admin-sidebar-footer">
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="تبديل المظهر">
+            <span id="theme-toggle-icon">🌙</span> <span id="theme-toggle-label">المظهر الداكن</span>
+        </button>
         <a href="{{ url_for('shop.home') }}" target="_blank" class="admin-view-store">عرض المتجر ↗</a>
         <form method="post" action="{{ url_for('admin.logout') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -242,5 +258,23 @@ document.addEventListener('click', function (e) {
 </script>
 
 <script src="{{ url_for('static', filename='js/image-editor.js') }}" defer></script>
+<script>
+(function () {
+    var root = document.documentElement, btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    function paint() {
+        var dark = root.getAttribute('data-theme') === 'dark';
+        document.getElementById('theme-toggle-icon').textContent = dark ? '☀️' : '🌙';
+        document.getElementById('theme-toggle-label').textContent = dark ? 'المظهر الفاتح' : 'المظهر الداكن';
+    }
+    btn.addEventListener('click', function () {
+        var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        try { localStorage.setItem('budac-admin-theme', next); } catch (e) {}
+        paint();
+    });
+    paint();
+})();
+</script>
 </body>
 </html>

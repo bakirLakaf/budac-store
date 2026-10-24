@@ -90,3 +90,33 @@ def test_delete_file_never_touches_store_images(app, tmp_path):
     tmp = cfg.temp_dir / "abc.jpg"
     tmp.write_bytes(b"x")
     assert M.delete_file(str(tmp)) is True and not tmp.exists()
+
+
+# ───────────── الدارك مود (لوحة التحكم كاملة) ─────────────
+def _login(client):
+    with client.session_transaction() as s:
+        s["admin_id"], s["admin_username"] = 1, "admin"
+
+
+def test_admin_has_dark_mode_assets(client):
+    _login(client)
+    html = client.get("/admin/").get_data(as_text=True)
+    assert "css/admin-dark.css" in html            # ملف الدارك
+    assert "budac-admin-theme" in html             # سكريبت مبكر: المظهر يتطبّق قبل الرسم (بلا وميض)
+    assert 'id="theme-toggle"' in html             # زر التبديل
+    css = client.get("/static/css/admin-dark.css").get_data(as_text=True)
+    assert 'html[data-theme="dark"]' in css and "--a-bg" in css
+
+
+def test_dark_css_is_in_sync_with_admin_css(tmp_path, monkeypatch):
+    """لو تبدّل admin.css بألوان جداد وما عاودناش التوليد، هاد الاختبار يطيح."""
+    import importlib.util
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location("gen_admin_dark", os.path.join(root, "tools", "gen_admin_dark.py"))
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    out = tmp_path / "admin-dark.css"
+    monkeypatch.setattr(gen, "OUT", out)
+    gen.main()
+    committed = open(os.path.join(root, "static", "css", "admin-dark.css"), encoding="utf-8").read()
+    assert out.read_text(encoding="utf-8") == committed, "admin-dark.css قديم — شغّل: python tools/gen_admin_dark.py"

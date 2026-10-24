@@ -379,3 +379,27 @@ def test_store_public_media_not_rate_limited_nor_counted(store):
     assert codes == [200] * 5
     service.cancel_post(pid)
     assert store.test_client().get(url).status_code == 404
+
+
+def test_setup_tab_and_ig_lookup(env, monkeypatch):
+    html = env.client.get("/admin/social/").get_data(as_text=True)
+    assert "حالة الربط" in html and "FB_PAGE_TOKEN" in html and "ربط انستغرام" in html
+    assert "fbtoken-123456" not in html  # القيمة ما تبانش أبدًا، أسماء المتغيرات برك
+
+    from social_publisher.platforms import base
+
+    monkeypatch.setattr(base, "http", lambda *a, **k: FakeResp(
+        {"instagram_business_account": {"id": "17841400", "username": "budac_dz"}}))
+    d = env.client.get("/admin/social/ig-lookup").get_json()
+    assert d == {"ok": True, "id": "17841400", "username": "budac_dz"}
+
+    monkeypatch.setattr(base, "http", lambda *a, **k: FakeResp({"id": "123"}))  # صفحة بلا انستغرام
+    d = env.client.get("/admin/social/ig-lookup").get_json()
+    assert d["ok"] is False and "Business" in d["msg"]
+
+    monkeypatch.setattr(base, "http", lambda *a, **k: FakeResp({"error": {"message": "bad", "code": 190}}, 400))
+    d = env.client.get("/admin/social/ig-lookup").get_json()
+    assert d["ok"] is False and "fbtoken-123456" not in d["msg"]
+
+    c = env.client.application.test_client()  # بلا دخول
+    assert c.get("/admin/social/ig-lookup").status_code == 403
