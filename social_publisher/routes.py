@@ -12,7 +12,8 @@ from . import db
 from . import media as M
 from . import service
 from .config import cfg, redact
-from .platforms import tiktok
+from .platforms import facebook, instagram, tiktok
+from .platforms.base import graph
 from .service import ACTIVE, PLATFORMS
 
 log = logging.getLogger("social_publisher")
@@ -68,6 +69,20 @@ def create_blueprint(admin_required, adapter):
         if request.path.startswith(P):
             _ensure_base_url()
 
+    def _setup_status():
+        """حالة الربط لكل منصة (أسماء المتغيرات برك — ما نعرضوش القيم أبدًا)."""
+        def row(name, ok):
+            return {"name": name, "ok": bool(ok)}
+        return [
+            {"key": "facebook", "ok": facebook.configured(),
+             "vars": [row("FB_PAGE_ID", cfg.fb_page_id), row("FB_PAGE_TOKEN", cfg.fb_page_token)]},
+            {"key": "instagram", "ok": instagram.configured(),
+             "vars": [row("IG_USER_ID", cfg.ig_user_id), row("FB_PAGE_TOKEN (نفسو يخدم)", cfg.ig_token)]},
+            {"key": "tiktok", "ok": tiktok.configured(),
+             "vars": [row("TIKTOK_CLIENT_KEY", cfg.tt_client_key), row("TIKTOK_CLIENT_SECRET", cfg.tt_client_secret),
+                      row("TIKTOK_REDIRECT_URI", cfg.tt_redirect_uri)]},
+        ]
+
     def _context(**extra):
         with db.cursor(commit=False) as cur:
             cur.execute("""
@@ -79,7 +94,10 @@ def create_blueprint(admin_required, adapter):
         ctx = dict(
             prefix=P, labels=LABELS, posts=posts,
             configured={n: m.configured() for n, m in PLATFORMS.items()},
-            tiktok_connect=tiktok.oauth_ready(),
+            tiktok_connect=tiktok.oauth_ready(), setup=_setup_status(),
+            public_base_url=cfg.public_base_url, tiktok_mode=cfg.tt_mode,
+            tiktok_redirect_suggestion=f"{cfg.public_base_url}{P}/tiktok/callback",
+            all_connected=all(m.configured() for m in (facebook, instagram)),
             has_active=any(p["status"] in ("scheduled", "publishing") for p in posts),
             max_images=cfg.max_images, max_video_mb=cfg.max_video_mb,
             msg=request.args.get("msg"), err=request.args.get("err"), form={})
@@ -166,9 +184,9 @@ def create_blueprint(admin_required, adapter):
             return fail("صرا خطأ: " + redact(e), 500)
 
         if mode == "schedule":
-            return redirect(f"{P}/?msg=تجدولت المنشور")
+            return redirect(f"{P}/?msg=تجدولت المنشور#posts")
         service.kick()
-        return redirect(f"{P}/?msg=المنشور راهو ينتشر درك")
+        return redirect(f"{P}/?msg=المنشور راهو ينتشر درك — تابع حالتو هنا#posts")
 
     @bp.post(P + "/posts/<int:pid>/<action>")
     @admin_required
@@ -179,7 +197,7 @@ def create_blueprint(admin_required, adapter):
         ok = fn(pid)
         if ok and action == "retry":
             service.kick()
-        return redirect(f"{P}/?" + ("msg=تمت العملية" if ok else "err=ما نقدرش ندير هاد العملية على هاد المنشور"))
+        return redirect(f"{P}/?" + ("msg=تمت العملية" if ok else "err=ما نقدرش ندير هاد العملية على هاد المنشور") + "#posts")
 
     # ---------- فحص الاتصال ----------
     @bp.get(P + "/check")
@@ -199,24 +217,40 @@ def create_blueprint(admin_required, adapter):
                 out[name] = {"ok": False, "msg": redact(e)}
         return jsonify(out)
 
+    @bp.get(P + "/ig-lookup")
+    @admin_required
+    def ig_lookup():
+        """يجيب IG_USER_ID من صفحة فيسبوك (باش ما تقلّبش عليه في Graph Explorer)."""
+        if not facebook.configured():
+            return jsonify(ok=False, msg="حط FB_PAGE_ID و FB_PAGE_TOKEN فـ Railway قبل")
+        try:
+            js = graph("GET", cfg.fb_page_id, cfg.fb_page_token,
+                       params={"fields": "instagram_business_account{id,username}"})
+        except Exception as e:  # noqa: BLE001
+            return jsonify(ok=False, msg=redact(e))
+        acc = js.get("instagram_business_account")
+        if not acc:
+            return jsonify(ok=False, msg="هاد الصفحة ما عندهاش حساب انستغرام Business/Creator مربوط. اربطو من إعدادات الصفحة وعاود.")
+        return jsonify(ok=True, id=acc["id"], username=acc.get("username"))
+
     # ---------- ربط تيك توك ----------
     @bp.get(P + "/tiktok/connect")
     @admin_required
     def tiktok_connect():
         if not tiktok.oauth_ready():
-            return redirect(f"{P}/?err=TIKTOK_CLIENT_KEY / SECRET / REDIRECT_URI ناقصين في .env")
+            return redirect(f"{P}/?err=TIKTOK_CLIENT_KEY / SECRET / REDIRECT_URI ناقصين في Railway#setup")
         return redirect(tiktok.authorize_url(_state()))
 
     @bp.get(P + "/tiktok/callback")
     @admin_required
     def tiktok_callback():
         if request.args.get("error") or not _state_ok(request.args.get("state", "")):
-            return redirect(f"{P}/?err=ربط تيك توك ما كملش")
+            return redirect(f"{P}/?err=ربط تيك توك ما كملش#setup")
         try:
             tiktok.exchange_code(request.args.get("code", ""))
         except Exception as e:  # noqa: BLE001
-            return redirect(f"{P}/?err={redact(e)[:150]}")
-        return redirect(f"{P}/?msg=تيك توك تربط")
+            return redirect(f"{P}/?err={redact(e)[:150]}#setup")
+        return redirect(f"{P}/?msg=تيك توك تربط ✓#setup")
 
     # ---------- الميديا العامة (فيسبوك/انستغرام يجبدو منها) ----------
     @bp.get("/sp/pub/<token>/<int:mid>.<ext>")
