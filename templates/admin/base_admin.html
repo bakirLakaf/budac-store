@@ -78,6 +78,11 @@
         <a href="{{ url_for('admin.coupons_list') }}" class="{{ 'is-active' if 'coupon' in request.endpoint }}">
             كوبونات الخصم
         </a>
+        {% if config.get('SOCIAL_PUBLISHER_ENABLED') %}
+        <a href="{{ url_for('social_publisher.index') }}" class="{{ 'is-active' if request.endpoint and request.endpoint.startswith('social_publisher') }}">
+            📣 النشر على السوشيال
+        </a>
+        {% endif %}
         <a href="{{ url_for('admin.landing_list') }}" class="{{ 'is-active' if 'landing' in request.endpoint }}">
             صفحات الهبوط
         </a>

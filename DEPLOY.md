@@ -121,6 +121,11 @@ Railway يربطها تلقائيًا ويعطي `DATABASE_URL` للتطبيق.
 | `FACEBOOK_PIXEL_ID` | من مدير إعلانات فيسبوك |
 | `TIKTOK_PIXEL_ID` | من TikTok Ads |
 | `YOUCAN_ACCESS_TOKEN` | من YouCan |
+| `SP_PUBLIC_BASE_URL` | أداة النشر: رابط المتجر العام، مثلا `https://budacdz.com` (لو ما حطيتوش نستعمل عنوان الموقع من أول زيارة للأدمن) |
+| `FB_PAGE_ID` / `FB_PAGE_TOKEN` | أداة النشر: معرّف صفحة فيسبوك + **Page Access Token** طويل المدى (سرّي) |
+| `IG_USER_ID` | أداة النشر: معرّف حساب انستغرام Business (يستعمل نفس `FB_PAGE_TOKEN`) |
+| `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` / `TIKTOK_REDIRECT_URI` | أداة النشر: تيك توك (اختياري). الـRedirect = `https://budacdz.com/admin/social/tiktok/callback` |
+| `TIKTOK_MODE` | `inbox` (افتراضي: المنشور يوصل لمسودات تطبيق تيك توك وإنت تكمل) ولا `direct` (يحتاج موافقة تيك توك) |
 
 بعد ما تزيدهم كلهم، Railway يعاود ينشر لوحدو.
 
@@ -191,6 +196,11 @@ Railway ينشر التحديث لوحدو خلال دقيقتين. **قاعدة
 | `no such table` | قاعدة البيانات ما تربطتش — تأكد أن PostgreSQL مضافة |
 | `SECRET_KEY` | ناقص من Variables |
 | `ModuleNotFoundError` | ملف `requirements.txt` ما ارتفعش |
+
+### أداة النشر ما تظهرش في لوحة التحكم
+
+تظهر غير مع **PostgreSQL** (محليًا بـSQLite هي موقوفة، والمتجر يخدم عادي). شوف السجلات: سطر `أداة النشر موقوفة` يقول علاش.
+الملفات المؤقتة تتحط وحدها في `/data/sp_tmp` (نفس الـVolume تاع الصور) وتتحذف بعد النشر.
 
 ### الصور تختفي بعد التحديث
 

@@ -44,13 +44,12 @@ fbq('track', 'ViewContent', {
 
 <!-- ═══════════ الواجهة ═══════════ -->
 <section class="lp-hero">
-    <div class="lp-hero-media{{ ' lp-hero-banner' if page.is_bundle }}">
+    <div class="lp-hero-media">
         {% if page.image_filename %}
         <img src="{{ url_for('static', filename='img/products/' + page.image_filename) }}"
-             alt="{{ product.name }}" fetchpriority="high"
-             width="{{ 1200 if page.is_bundle else 800 }}" height="{{ 675 if page.is_bundle else 800 }}">
+             alt="{{ product.name }}" fetchpriority="high" width="800" height="800">
         {% endif %}
-        {% if page.has_discount and not page.is_bundle %}
+        {% if page.has_discount %}
         <span class="lp-badge">-{{ page.discount_percent }}%</span>
         {% endif %}
     </div>
@@ -116,43 +115,6 @@ fbq('track', 'ViewContent', {
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="utm_source" value="{{ request.args.get('utm_source', '') }}">
         <input type="hidden" name="utm_campaign" value="{{ request.args.get('utm_campaign', '') }}">
-
-        {% if page.is_bundle %}
-        <!-- ═════ اختيار الموديل (باقة) ═════ -->
-        {% if page.choices %}
-        <fieldset class="lp-choices">
-            <legend>اختار الموديل تاع الغلاف الداخلي</legend>
-            <div class="lp-choices-grid">
-                {% for ch in page.choices %}
-                <label class="lp-choice{{ ' is-off' if not ch.is_available }}">
-                    <input type="radio" name="choice_id" value="{{ ch.id }}"
-                           {{ 'checked' if form.get('choice_id') == ch.id | string }}
-                           {{ 'disabled' if not ch.is_available }}>
-                    <span class="lp-choice-card">
-                        {% if ch.image_filename %}
-                        <img src="{{ url_for('static', filename='img/products/' + ch.image_filename) }}"
-                             alt="{{ ch.display_label }}" loading="lazy" width="240" height="240">
-                        {% endif %}
-                        <span class="lp-choice-name">{{ ch.display_label }}</span>
-                        {% if not ch.is_available %}<span class="lp-choice-off">نفد</span>{% endif %}
-                    </span>
-                </label>
-                {% endfor %}
-            </div>
-        </fieldset>
-        {% endif %}
-
-        {% for fx in page.fixed_items %}
-        <div class="lp-fixed">
-            {% if fx.image_filename %}
-            <img src="{{ url_for('static', filename='img/products/' + fx.image_filename) }}"
-                 alt="{{ fx.display_label }}" loading="lazy" width="96" height="96">
-            {% endif %}
-            <p><strong>يجيك معاه فنفس الباقة</strong>
-               <span>{{ fx.product.name }}{% if fx.variant %} — {{ fx.variant.label }}{% endif %}</span></p>
-        </div>
-        {% endfor %}
-        {% endif %}
 
         <label class="lp-field">
             <span>الاسم واللقب</span>
@@ -227,7 +189,7 @@ fbq('track', 'ViewContent', {
 
         <!-- ملخّص الحساب -->
         <div class="lp-summary">
-            <div><span>{{ 'الباقة' if page.is_bundle else 'المنتج' }}</span><span id="sumProduct">{{ '{:,}'.format(page.unit_price) }} دج</span></div>
+            <div><span>المنتج</span><span id="sumProduct">{{ '{:,}'.format(page.unit_price) }} دج</span></div>
             <div><span>التوصيل</span><span id="sumShipping">اختر الولاية</span></div>
             <div class="lp-summary-total"><span>المجموع</span><span id="sumTotal">—</span></div>
         </div>

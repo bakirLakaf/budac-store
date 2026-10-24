@@ -67,6 +67,24 @@ def create_app():
     from services.ratelimit import apply_limits
     apply_limits(app)
 
+    # ═══════════ أداة النشر على السوشيال ميديا (v175) ═══════════
+    # لوحة فـ /admin/social: تكتب المنشور وتنشرو فـ فيسبوك + انستغرام + تيك توك (درك ولا مجدول).
+    # ⚠️ ما تكسرش المتجر أبدًا: لو فشلت (مثلاً SQLite محليًا — تحتاج PostgreSQL)
+    # نطبعو تحذيرًا ونكملو بلاها. الملفات المؤقتة تتحذف بعد النشر، وصور المتجر ما تتكوبيش.
+    try:
+        from social_publisher import init_social_publisher
+        from routes.admin import login_required as _admin_login_required
+
+        init_social_publisher(
+            app,
+            admin_required=_admin_login_required,
+            limiter=app.extensions.get("budac_limiter"),   # باش روابط الميديا ما تتحدّش
+        )
+    except RuntimeError as exc:
+        app.logger.warning("ℹ️ أداة النشر موقوفة: %s", exc)
+    except Exception:
+        app.logger.exception("⚠️ أداة النشر ما قلعتش — المتجر يخدم عادي بلاها")
+
     # ═══════════ ضغط الردود (gzip) ═══════════
     # قبل: style.css (116 KB) وsite.js يتبعثو كاملين — ثقل على 4G الضعيف.
     # دروك كل رد نصي (HTML/CSS/JS/JSON) يتضغط وحدو إذا المتصفح يقبل.
