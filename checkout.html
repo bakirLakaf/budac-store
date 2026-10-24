@@ -1,0 +1,624 @@
+{% extends "base.html" %}
+{% block title %}إتمام الطلب — {{ store_name }}{% endblock %}
+{% block content %}
+
+<section class="checkout-page">
+    <div class="container">
+        <h1 class="page-heading">إتمام الطلب</h1>
+
+        <form method="post" class="checkout-layout">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="checkout-form-col">
+                <h2 class="summary-title">معلوماتك</h2>
+
+                <label class="field">
+                    <span>الاسم واللقب *</span>
+                    <input type="text" name="name" required value="{{ form.get('name', '') }}">
+                </label>
+
+                <label class="field">
+                    <span>رقم الهاتف *</span>
+                    {# ⚠️ maxlength=14 = 10 أرقام + 4 مسافات.
+                       inputmode=numeric يفتح لوحة الأرقام فالموبايل. #}
+                    <input type="tel" name="phone" id="phoneInput" required
+                           inputmode="numeric" autocomplete="tel"
+                           maxlength="14" value="{{ form.get('phone', '') }}"
+                           placeholder="0X XX XX XX XX"
+                           aria-describedby="phoneHint">
+                    <small class="field-hint" id="phoneHint">مثال: 06 66 25 52 00</small>
+                </label>
+
+                <h2 class="summary-title">التوصيل</h2>
+
+                <label class="field">
+                    <span>شركة التوصيل *</span>
+                    <select name="carrier_code" id="carrierSelect" required>
+                        <option value="">اختر شركة التوصيل</option>
+                        {% for c in carriers %}
+                        <option value="{{ c.code }}" {{ 'selected' if form.get('carrier_code') == c.code }}>{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="field">
+                    <span>الولاية *</span>
+                    <select name="wilaya_code" id="wilayaSelect" required>
+                        <option value="">اختر الولاية</option>
+                        {% for w in wilayas %}
+                        <option value="{{ w.code }}" {{ 'selected' if form.get('wilaya_code') == w.code }}>{{ w.code }} ~ {{ w.name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="field">
+                    <span>نوع التوصيل *</span>
+                    <select name="delivery_type" id="deliveryTypeSelect" required>
+                        <option value="">اختر نوع التوصيل</option>
+                        <option value="home" {{ 'selected' if form.get('delivery_type') == 'home' }}>التوصيل للمنزل</option>
+                        <option value="office" {{ 'selected' if form.get('delivery_type') == 'office' }}>التوصيل لمكتب الشركة</option>
+                    </select>
+                </label>
+
+                <label class="field" id="communeField">
+                    <span>البلدية *</span>
+
+                    {# القائمة تتعمّر تلقائيًا حسب الولاية وشركة التوصيل.
+                       الاسم يتبعث فـ"commune" (للعرض)، والمعرّف فـ"commune_id"
+                       (هو اللي تحتاجو شركة التوصيل باش تقبل الطرد). #}
+                    <select name="commune" id="communeSelect" required>
+                        <option value="">اختر الولاية أولاً</option>
+                    </select>
+                    <input type="hidden" name="commune_id" id="communeIdInput"
+                           value="{{ form.get('commune_id', '') }}">
+
+                    <small class="field-note" id="communeNote" hidden></small>
+                </label>
+
+                {# ---------- مكتب الاستلام: يبان غير فالتوصيل للمكتب ---------- #}
+                <label class="field" id="pickupField" hidden>
+                    <span>مكتب الاستلام *</span>
+                    <select name="pickup_point_name" id="pickupSelect">
+                        <option value="">اختر الولاية أولاً</option>
+                    </select>
+                    <input type="hidden" name="pickup_point_id" id="pickupIdInput">
+                    <small class="field-note" id="pickupNote" hidden></small>
+                </label>
+
+                <label class="field">
+                    <span>عنوان دقيق / نقطة دالة (اختياري)</span>
+                    <input type="text" name="address_note" value="{{ form.get('address_note', '') }}"
+                           placeholder="مثلاً: قرب مسجد X، عمارة رقم Y">
+                </label>
+
+                <label class="field">
+                    <span>ملاحظة للطلبية (اختياري)</span>
+                    <textarea name="note" rows="3">{{ form.get('note', '') }}</textarea>
+                </label>
+            </div>
+
+            <aside class="checkout-summary">
+                <h2 class="summary-title">طلبيتك</h2>
+
+                <ul class="checkout-items">
+                    {% for line in lines %}
+                    <li>
+                        <span class="ci-name">
+                            {{ line.name }}
+                            {% if line.variant_label %}<small>({{ line.variant_label }})</small>{% endif %}
+                            <span class="ci-qty">×{{ line.quantity }}</span>
+                        </span>
+                        <span class="ci-price">{{ line.line_total_display }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <div class="summary-row">
+                    <span>المنتجات</span>
+                    <span>{{ "{:,}".format(subtotal) }} دج</span>
+                </div>
+
+                {% if coupon %}
+                {% set d = coupon.compute_discount(subtotal) %}
+                <div class="summary-row summary-discount">
+                    <span>خصم ({{ coupon.code }})</span>
+                    <span data-discount="{{ d[0] }}">-{{ "{:,}".format(d[0]) }} دج</span>
+                </div>
+                {% endif %}
+
+                <div class="summary-row">
+                    <span>التوصيل</span>
+                    <span id="shippingDisplay">اختر الولاية والشركة</span>
+                </div>
+
+                <div class="summary-row summary-total">
+                    <span>المجموع</span>
+                    <span id="totalDisplay">{{ "{:,}".format(subtotal - (coupon.compute_discount(subtotal)[0] if coupon else 0)) }} دج</span>
+                </div>
+
+                <p class="payment-note">💵 الدفع عند الاستلام</p>
+
+                <button type="submit" class="btn-primary btn-block" id="submitBtn">أكّد الطلبية</button>
+                <a href="{{ url_for('cart.view_cart') }}" class="continue-link">← رجوع للسلة</a>
+            </aside>
+        </form>
+    </div>
+</section>
+
+<script>
+(function () {
+    var carrier = document.getElementById('carrierSelect');
+    var wilaya = document.getElementById('wilayaSelect');
+    var deliveryType = document.getElementById('deliveryTypeSelect');
+    var shippingDisplay = document.getElementById('shippingDisplay');
+    var totalDisplay = document.getElementById('totalDisplay');
+    var communeField = document.getElementById('communeField');
+    var submitBtn = document.getElementById('submitBtn');
+
+    var subtotal = {{ subtotal }};
+    var discount = {{ coupon.compute_discount(subtotal)[0] if coupon else 0 }};
+
+    function formatDZD(n) {
+        return n.toLocaleString('en-US') + ' دج';
+    }
+
+    var communeSelect = document.getElementById('communeSelect');
+    var communeIdInput = document.getElementById('communeIdInput');
+    var communeNote = document.getElementById('communeNote');
+
+    // نحفظو الاختيار السابق (كي يرجع النموذج بخطأ) باش ما يضيعش
+    var previousCommune = {{ (form.get('commune') or '') | tojson }};
+
+    function setCommuneNote(text) {
+        if (!communeNote) return;
+        communeNote.textContent = text || '';
+        communeNote.hidden = !text;
+    }
+
+    /**
+     * يعمّر قائمة البلديات حسب الولاية ونوع التوصيل.
+     * ⚠️ نجيبوها من السيرفر ماشي من قائمة ثابتة، لأن شركة التوصيل هي اللي
+     * تقرّر واش توصل لهاد البلدية ولا لا — والقائمة تتبدّل عندهم.
+     */
+    function loadCommunes() {
+        if (!communeSelect) return;
+
+        if (!carrier.value || !wilaya.value) {
+            communeSelect.innerHTML = '<option value="">اختر الولاية أولاً</option>';
+            communeIdInput.value = '';
+            setCommuneNote('');
+            return;
+        }
+
+        communeSelect.innerHTML = '<option value="">جاري التحميل…</option>';
+        communeSelect.disabled = true;
+
+        var url = '{{ url_for("cart.api_communes") }}'
+            + '?carrier=' + encodeURIComponent(carrier.value)
+            + '&wilaya=' + encodeURIComponent(wilaya.value)
+            + '&type=' + encodeURIComponent(deliveryType.value);
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                communeSelect.disabled = false;
+                var list = data.communes || [];
+
+                if (!list.length) {
+                    communeSelect.innerHTML = '<option value="">ماكانش بلديات متاحة</option>';
+                    setCommuneNote('الشركة ما توصلش لهاد الولاية بهاد الطريقة. جرّب طريقة توصيل أخرى ولا شركة أخرى.');
+                    return;
+                }
+
+                var html = '<option value="">اختر بلديتك</option>';
+                var okCount = 0;
+
+                list.forEach(function (c) {
+                    var selected = (c.name === previousCommune) ? ' selected' : '';
+
+                    // ⚠️ البلديات اللي الشركة ما توصلش ليها نعرضوها معطّلة
+                    // بدل ما نخبّيوها — الزبون يلقى بلديتو ويفهم المشكل.
+                    if (c.available) {
+                        okCount++;
+                        html += '<option value="' + c.name + '" data-id="' + c.id + '"'
+                              + selected + '>' + c.name + '</option>';
+                    } else {
+                        html += '<option value="" disabled>' + c.name
+                              + ' (الشركة ما توصلش)</option>';
+                    }
+                });
+                communeSelect.innerHTML = html;
+
+                if (okCount === 0) {
+                    setCommuneNote('الشركة ما توصلش لحتى بلدية فهاد الولاية. جرّب شركة أخرى.');
+                } else if (okCount < list.length) {
+                    setCommuneNote(okCount + ' بلدية متاحة من ' + list.length);
+                } else {
+                    setCommuneNote(list.length + ' بلدية');
+                }
+                syncCommuneId();
+            })
+            .catch(function () {
+                communeSelect.disabled = false;
+                communeSelect.innerHTML = '<option value="">تعذّر التحميل</option>';
+                setCommuneNote('ماكانش اتصال. حاول من جديد.');
+            });
+    }
+
+    // نحدّثو المعرّف المخفي كي يبدّل الزبون البلدية
+    function syncCommuneId() {
+        if (!communeSelect || !communeIdInput) return;
+        var opt = communeSelect.options[communeSelect.selectedIndex];
+        communeIdInput.value = opt ? (opt.getAttribute('data-id') || '') : '';
+    }
+
+    if (communeSelect) {
+        communeSelect.addEventListener('change', syncCommuneId);
+    }
+
+    var pickupField = document.getElementById('pickupField');
+    var pickupSelect = document.getElementById('pickupSelect');
+    var pickupIdInput = document.getElementById('pickupIdInput');
+    var pickupNote = document.getElementById('pickupNote');
+
+    /**
+     * يجيب مكاتب الاستلام للولاية المختارة.
+     * ⚠️ الزبون اللي يختار "للمكتب" لازم يحدد **أي مكتب** — بلدية وحدها
+     * ما تكفيش، الشركة تحتاج المكتب بالضبط.
+     */
+    function loadPickupPoints() {
+        if (!pickupSelect) return;
+
+        if (!carrier.value || !wilaya.value) {
+            pickupSelect.innerHTML = '<option value="">اختر الولاية أولاً</option>';
+            pickupIdInput.value = '';
+            return;
+        }
+
+        pickupSelect.innerHTML = '<option value="">جاري التحميل…</option>';
+        pickupSelect.disabled = true;
+
+        var url = '{{ url_for("cart.api_pickup_points") }}'
+            + '?carrier=' + encodeURIComponent(carrier.value)
+            + '&wilaya=' + encodeURIComponent(wilaya.value);
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                pickupSelect.disabled = false;
+                var list = data.points || [];
+
+                if (!list.length) {
+                    pickupSelect.innerHTML = '<option value="">ماكانش مكاتب فهاد الولاية</option>';
+                    if (pickupNote) {
+                        pickupNote.textContent = data.message || 'جرّب التوصيل للمنزل.';
+                        pickupNote.hidden = false;
+                    }
+
+                    /* 🔴 مهم: نحيّدو `required` هنا.
+                       بلاه، الزبون يلقى حقلاً مطلوبًا وقائمة فارغة —
+                       الفورم ما يتبعثش وما يفهمش علاش. درك نحيّدو
+                       الإجبار ونوجّهوه للتوصيل للمنزل. */
+                    pickupSelect.required = false;
+                    return;
+                }
+
+                pickupSelect.required = (deliveryType.value === 'office');
+
+                var html = '<option value="">اختر المكتب</option>';
+                list.forEach(function (pt) {
+                    var label = pt.name + (pt.address ? ' — ' + pt.address : '');
+                    html += '<option value="' + label + '" data-id="' + pt.id + '"'
+                          + ' data-phone="' + (pt.phone || '') + '">'
+                          + label + '</option>';
+                });
+                pickupSelect.innerHTML = html;
+
+                if (pickupNote) {
+                    pickupNote.textContent = list.length + ' مكتب متاح';
+                    pickupNote.hidden = false;
+                }
+            })
+            .catch(function () {
+                pickupSelect.disabled = false;
+                pickupSelect.innerHTML = '<option value="">تعذّر التحميل</option>';
+            });
+    }
+
+    /**
+     * نخبّيو خيار «التوصيل للمكتب» إذا الشركة ما عندهاش قائمة مكاتب.
+     *
+     * 🔴 قبل، الخيار كان يبان لكل الشركات. الزبون يختارو مع شركة
+     * بلا مكاتب، يلقى قائمة فارغة وحقلاً مطلوبًا، والطلبية توقف
+     * بلا سبب مفهوم — يخرج ويخسر البيع.
+     *
+     * ⚠️ نستعملو `disabled` ماشي حذف العنصر: إذا بدّل الشركة لوحدة
+     * عندها مكاتب، الخيار يرجع بلا ما نعاودو نبنيو القائمة.
+     */
+    function syncOfficeOption() {
+        if (!deliveryType || !carrier.value) return;
+
+        var url = '{{ url_for("cart.api_pickup_points") }}'
+            + '?carrier=' + encodeURIComponent(carrier.value);
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var noList = !!data.no_list;
+                var opt = deliveryType.querySelector('option[value="office"]');
+                if (!opt) return;
+
+                opt.disabled = noList;
+                opt.hidden = noList;
+
+                // كان مختارًا وولّى ممنوعًا → نرجّعوه للاختيار الفارغ
+                if (noList && deliveryType.value === 'office') {
+                    deliveryType.value = '';
+                    syncCommuneField();
+                    updateShipping();
+                }
+            })
+            .catch(function () { /* الشبكة — نخليو الخيار كيما هو */ });
+    }
+
+    if (pickupSelect) {
+        pickupSelect.addEventListener('change', function () {
+            var opt = pickupSelect.options[pickupSelect.selectedIndex];
+            pickupIdInput.value = opt ? (opt.getAttribute('data-id') || '') : '';
+
+            // ⚠️ نوريو هاتف المكتب: الزبون يعيّط ويتأكد أن الطرد وصل
+            // قبل ما يتحرّك — يقلل «رحت ولقيتو ماكانش».
+            var phone = opt ? (opt.getAttribute('data-phone') || '') : '';
+            if (pickupNote) {
+                if (phone) {
+                    pickupNote.textContent = 'هاتف المكتب: ' + phone;
+                    pickupNote.hidden = false;
+                }
+            }
+        });
+    }
+
+    /**
+     * التبديل بين البلدية والمكتب.
+     * ⚠️ ما نعرضوش الزوج مرة وحدة: هذا يخلط الزبون ويخلّي حقلين مطلوبين
+     * وواحد منهم بلا معنى.
+     */
+    function syncCommuneField() {
+        var type = deliveryType.value;
+        var isOffice = type === 'office';
+        var isHome = type === 'home';
+
+        // ما اختارش بعد → نخبّيو الزوج، ما نعرضو حتى حقل
+        if (communeField) {
+            communeField.hidden = !isHome;
+            if (communeSelect) communeSelect.required = isHome;
+        }
+        if (pickupField) {
+            pickupField.hidden = !isOffice;
+            if (pickupSelect) pickupSelect.required = isOffice;
+        }
+
+        // ⚠️ تنظيف: نمسحو حقول النوع الآخر باش ما تتبعثش مع الطلبية.
+        // بلا هذا، الزبون اللي يبدّل من مكتب لمنزل يخلي اسم مكتب قديم
+        // فالحقل المخفي — وتوصل طلبية "منزل" فيها مكتب من ولاية أخرى.
+        if (!isOffice && pickupSelect) {
+            pickupSelect.value = '';   // هو نفسو حقل pickup_point_name
+            if (pickupIdInput) pickupIdInput.value = '';
+        }
+        if (!isHome && communeSelect) {
+            communeSelect.value = '';
+            if (communeIdInput) communeIdInput.value = '';
+        }
+
+        if (isOffice) {
+            loadPickupPoints();
+        } else if (isHome) {
+            loadCommunes();
+        }
+    }
+
+    function updateShipping() {
+        // ⚠️ لازم النوع كذلك — السعر يختلف بين المنزل والمكتب
+        if (!carrier.value || !wilaya.value || !deliveryType.value) {
+            shippingDisplay.textContent = 'اختر الولاية والشركة ونوع التوصيل';
+            totalDisplay.textContent = formatDZD(subtotal - discount);
+            submitBtn.disabled = false;
+            return;
+        }
+
+        shippingDisplay.textContent = '...';
+
+        var url = '{{ url_for("cart.api_shipping_price") }}'
+            + '?carrier=' + encodeURIComponent(carrier.value)
+            + '&wilaya=' + encodeURIComponent(wilaya.value)
+            + '&type=' + encodeURIComponent(deliveryType.value);
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                shippingDisplay.textContent = data.display;
+
+                if (data.ok) {
+                    shippingDisplay.classList.remove('shipping-error');
+                    totalDisplay.textContent = formatDZD(subtotal - discount + (data.price || 0));
+                    submitBtn.disabled = false;
+                } else {
+                    // التوصيل غير متوفر — نمنعو الإرسال باش الزبون ما يضيعش وقتو
+                    shippingDisplay.classList.add('shipping-error');
+                    totalDisplay.textContent = '—';
+                    submitBtn.disabled = true;
+                }
+            })
+            .catch(function () {
+                shippingDisplay.textContent = 'تعذّر حساب التوصيل';
+                submitBtn.disabled = false;  // ما نمنعوش الطلب بسبب مشكلة شبكة
+            });
+    }
+
+    /* ════════ حفظ تقدم الزبون (استرجاع السلات المتروكة) ════════
+       نبعثو الاسم والهاتف للسيرفر بمجرد ما يكملهم — قبل ما يضغط "أكّد".
+       بلا هذا، الزبون اللي يخرج قبل التأكيد يضيع كليًا وما نعرفوش مين كان. */
+    (function () {
+        var nameInput = document.querySelector('input[name="name"]');
+        var phoneInput = document.querySelector('input[name="phone"]');
+        var communeInput = document.querySelector('input[name="commune"]');
+        if (!nameInput || !phoneInput) return;
+
+        var saveTimer = null;
+        var lastSaved = "";
+
+        function saveProgress() {
+            var phone = phoneInput.value.trim();
+            var digits = phone.replace(/\D/g, "");
+            if (digits.length < 9) return;   // رقم ناقص — ما نسجّلوش بيانات بلا فايدة
+
+            var wilayaText = wilaya.options[wilaya.selectedIndex]
+                ? wilaya.options[wilaya.selectedIndex].text : "";
+
+            var payload = {
+                name: nameInput.value.trim(),
+                phone: phone,
+                wilaya_name: wilayaText,
+                commune: communeInput ? communeInput.value.trim() : ""
+            };
+
+            var signature = JSON.stringify(payload);
+            if (signature === lastSaved) return;   // ما تبدّل والو — ما نبعثوش من جديد
+            lastSaved = signature;
+
+            fetch("{{ url_for('cart.api_save_progress') }}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token() }}"
+                },
+                body: signature
+            }).catch(function () { /* فشل الشبكة — ما نزعجوش الزبون */ });
+        }
+
+        // نستنّاو 1.5 ثانية بعد آخر كتابة — باش ما نبعثوش طلب مع كل حرف
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(saveProgress, 1500);
+        }
+
+        [nameInput, phoneInput, communeInput].forEach(function (el) {
+            if (el) el.addEventListener("input", scheduleSave);
+        });
+        [carrier, wilaya, deliveryType].forEach(function (el) {
+            el.addEventListener("change", scheduleSave);
+        });
+
+        // محاولة أخيرة كي يحاول يخرج من الصفحة
+        window.addEventListener("pagehide", saveProgress);
+    })();
+
+    // ⚠️ أي تبديل فالشركة/الولاية/نوع التوصيل يغيّر البلديات المتاحة،
+    // ماشي غير السعر. لهذا نعيدو تحميل القائمة فالثلاثة.
+    [carrier, wilaya, deliveryType].forEach(function (el) {
+        el.addEventListener('change', function () {
+            updateShipping();
+            syncCommuneField();
+        });
+    });
+
+    // ⚠️ تبديل الشركة يقدر يبدّل **وجود** خيار المكتب أصلاً،
+    // ماشي غير محتوى القائمة.
+    carrier.addEventListener('change', syncOfficeOption);
+
+    /* ══════════════════════════════════════════════════════════
+       قناع رقم الهاتف: 0X XX XX XX XX
+       ⚠️ نقبلو **الأرقام برك**، ونحطو المسافات وحدنا. الزبون اللي
+       يلصق رقمًا بـ+213 ولا بشرطات، ننظّفوه بدل ما نرفضوه.
+       السيرفر يعاود يتحقق ويخزّن بلا مسافات — القناع للعين برك.
+       ══════════════════════════════════════════════════════════ */
+    var phoneInput = document.getElementById('phoneInput');
+    var PHONE_MAX_DIGITS = 10;   // ⚠️ الحد الأقصى — ممنوع أكثر
+
+    if (phoneInput) {
+        function digitsOf(raw) {
+            return (raw || '').replace(/\D/g, '');
+        }
+
+        function formatPhone(raw) {
+            var d = (raw || '').replace(/\D/g, '');
+
+            // رمز الدولة: +213 ولا 00213 → 0
+            if (d.indexOf('00213') === 0) d = '0' + d.slice(5);
+            else if (d.indexOf('213') === 0 && d.length > 9) d = '0' + d.slice(3);
+
+            // ⚠️ الرقم الجزائري يبدا بـ0 — نزيدوه إذا الزبون نساه
+            if (d && d[0] !== '0') d = '0' + d;
+
+            // 🔴 القص الصارم: 10 أرقام، لا أكثر — مهما لصق الزبون
+            d = d.slice(0, PHONE_MAX_DIGITS);
+
+            // 0X XX XX XX XX
+            var out = d.slice(0, 2);
+            for (var i = 2; i < d.length; i += 2) {
+                out += ' ' + d.slice(i, i + 2);
+            }
+            return out;
+        }
+
+        phoneInput.addEventListener('input', function () {
+            // ⚠️ نحفظو موقع المؤشر: بلاه، الزبون اللي يصلّح رقمًا
+            // فالوسط يلقى المؤشر قفز للآخر مع كل حرف.
+            var atEnd = this.selectionStart === this.value.length;
+            var before = this.value;
+
+            this.value = formatPhone(this.value);
+
+            if (!atEnd && before.length === this.value.length) {
+                // ما تبدّل والو فالطول — نخليو المؤشر مكانو
+            } else if (!atEnd) {
+                this.setSelectionRange(this.value.length, this.value.length);
+            }
+        });
+
+        phoneInput.addEventListener('blur', function () {
+            this.value = formatPhone(this.value);
+        });
+
+        /* ⚠️ `maxlength` وحدو ما يكفيش:
+           - الحرف اللي ماشي رقم ياكل خانة من الحد (نمنعوه من الأصل)
+           - اللصق يقدر يعدّي فبعض المتصفحات
+           - `maxlength` ما يخدمش على input[type=number] أصلاً
+           لهذا نمنعو المدخل قبل ما يدخل، ماشي نصلّحوه من بعد. */
+        phoneInput.addEventListener('beforeinput', function (e) {
+            if (!e.data) return;   // مسح ولا تنقّل — نخليوه
+
+            // ماكانش رقم = ممنوع (المسافات نحطوها حنا)
+            if (/\D/.test(e.data.replace(/\s/g, ''))) {
+                e.preventDefault();
+                return;
+            }
+
+            var current = digitsOf(this.value);
+            var selected = digitsOf(
+                this.value.slice(this.selectionStart, this.selectionEnd)
+            );
+            var incoming = digitsOf(e.data);
+
+            if (current.length - selected.length + incoming.length > PHONE_MAX_DIGITS) {
+                e.preventDefault();
+            }
+        });
+
+        // اللصق: ناخذو الأرقام برك ونقصّو على 10
+        phoneInput.addEventListener('paste', function (e) {
+            e.preventDefault();
+            var text = (e.clipboardData || window.clipboardData).getData('text');
+            this.value = formatPhone(text);
+        });
+
+        // القيمة اللي جات من السيرفر (بلا مسافات) تتنسّق كي تحلّ الصفحة
+        if (phoneInput.value) phoneInput.value = formatPhone(phoneInput.value);
+    }
+
+    syncCommuneField();
+    syncOfficeOption();
+    updateShipping();
+})();
+</script>
+
+{% endblock %}

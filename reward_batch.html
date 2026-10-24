@@ -1,0 +1,111 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">🎁 كوبونات المكافأة <span class="count-pill">{{ rows|length }}</span></h1>
+
+{% if rows %}
+<p class="hint">
+    واتساب ما يخلّيناش نبعثو رسائل وحدها: اضغط <strong>«ابعث»</strong> على كل زبون
+    (تفتحلك المحادثة برسالة جاهزة وأنت تضغط «إرسال»)، ولا استعمل
+    <strong>«افتح التالي»</strong> باش تدّي واحد واحد.
+</p>
+
+<div class="bulk-bar reward-bar">
+    <button type="button" id="openNext" class="btn-admin">▶ افتح التالي</button>
+    <span><strong id="sentCount">0</strong> / {{ rows|length }} تبعثو</span>
+    <a href="{{ url_for('admin.orders_list') }}" class="btn-admin btn-sm btn-outline">← الطلبيات</a>
+</div>
+
+<table class="admin-table reward-table">
+    <thead>
+        <tr>
+            <th>الزبون</th>
+            <th>الهاتف</th>
+            <th>الطلبية</th>
+            <th>الكود</th>
+            <th>الخصم</th>
+            <th>الحالة</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in rows %}
+        {% set o = r.order %}{% set c = r.coupon %}
+        <tr class="reward-row" data-code="{{ c.code }}">
+            <td>{{ o.customer_name }}</td>
+            <td dir="ltr">{{ o.customer_phone }}</td>
+            <td><a href="{{ url_for('admin.order_detail', order_id=o.id) }}">{{ o.order_number }}</a></td>
+            <td><code class="coupon-code">{{ c.code }}</code></td>
+            <td>{{ c.value_display }}{% if c.min_order_amount %}<br><small>من {{ '{:,}'.format(c.min_order_amount) }} دج</small>{% endif %}</td>
+            <td>{{ c.state_label }}</td>
+            <td>
+                {% if r.sendable %}
+                <a class="wa-btn reward-send" target="_blank" rel="noopener"
+                   href="https://wa.me/{{ o.whatsapp_phone }}?text={{ o.reward_coupon_message(c, store_name, request.url_root.rstrip('/')) | urlencode }}">
+                    <span>ابعث</span>
+                </a>
+                <span class="reward-done" hidden>✓ تبعث</span>
+                {% else %}
+                <span class="hint">ما يتبعثش</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+/**
+ * «تبعث» يتحفظ فـsessionStorage (تاع التبويب الحالي برك) — إذا رجعت للصفحة
+ * تلقى اللي بعثتهم باينين. الأدمن هو اللي يضغط «إرسال» فواتساب، ما نقدروش
+ * نتأكدو من الإرسال الفعلي: العلامة معناها «فتحت المحادثة».
+ */
+(function () {
+    var rows = Array.prototype.slice.call(document.querySelectorAll('.reward-row'));
+    var counter = document.getElementById('sentCount');
+    var KEY = 'rewardSent:';
+
+    function get(code) { try { return sessionStorage.getItem(KEY + code) === '1'; } catch (e) { return false; } }
+    function set(code) { try { sessionStorage.setItem(KEY + code, '1'); } catch (e) {} }
+
+    function mark(row) {
+        row.classList.add('is-sent');
+        var link = row.querySelector('.reward-send');
+        var done = row.querySelector('.reward-done');
+        if (link) { link.hidden = true; }
+        if (done) { done.hidden = false; }
+    }
+
+    function refresh() {
+        counter.textContent = rows.filter(function (r) { return r.classList.contains('is-sent'); }).length;
+    }
+
+    rows.forEach(function (row) {
+        if (get(row.dataset.code)) { mark(row); }
+        var link = row.querySelector('.reward-send');
+        if (link) {
+            link.addEventListener('click', function () {
+                set(row.dataset.code); mark(row); refresh();
+            });
+        }
+    });
+
+    document.getElementById('openNext').addEventListener('click', function () {
+        var next = rows.find(function (r) {
+            return !r.classList.contains('is-sent') && r.querySelector('.reward-send');
+        });
+        if (!next) { this.textContent = '✓ كلهم تبعثو'; this.disabled = true; return; }
+        var link = next.querySelector('.reward-send');
+        window.open(link.href, '_blank', 'noopener');
+        set(next.dataset.code); mark(next); refresh();
+    });
+
+    refresh();
+})();
+</script>
+{% else %}
+<div class="empty-box"><p>ماكاين حتى كوبون فهاد القائمة.</p></div>
+<p><a href="{{ url_for('admin.orders_list') }}" class="btn-admin btn-sm btn-outline">← الطلبيات</a></p>
+{% endif %}
+
+{% endblock %}

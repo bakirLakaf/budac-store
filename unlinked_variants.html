@@ -1,0 +1,63 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}موديلات بلا صورة — {{ store_name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1 class="page-title">موديلات بلا صورة <span class="count-pill">{{ total }}</span></h1>
+    <a href="{{ url_for('admin.products_list') }}" class="btn-admin btn-ghost">← كل المنتجات</a>
+</div>
+
+{% if total %}
+<p class="hint hint-block">
+    <strong>{{ total }}</strong> موديل ماكانش عندو صورة مربوطة.
+    الزبون اللي يختار موديل بلا صورة يبقى يشوف صورة الموديل السابق —
+    يظن أنه غالط ويخرج.
+</p>
+
+<div class="uv-list">
+    {% for row in grouped %}
+    <div class="uv-card{{ ' is-off' if not row.product.is_active }}">
+        <div class="uv-card-head">
+            {% if row.product.image_filename %}
+            <img class="uv-thumb"
+                 src="{{ url_for('static', filename='img/products/' + row.product.image_filename) }}"
+                 alt="{{ row.product.name }}" loading="lazy">
+            {% else %}
+            <span class="uv-thumb uv-thumb-empty">بلا صورة</span>
+            {% endif %}
+
+            <div class="uv-title">
+                <strong>{{ row.product.name }}</strong>
+                <span class="uv-meta">
+                    {{ row.variants | length }} موديل ناقص
+                    {% if not row.product.is_active %}
+                    · <span class="uv-off">معطّل</span>
+                    {% endif %}
+                </span>
+            </div>
+
+            <a href="{{ url_for('admin.product_form', product_id=row.product.id) }}"
+               class="btn-admin btn-sm">اربط الصور ←</a>
+        </div>
+
+        <ul class="uv-variants">
+            {% for v in row.variants %}
+            <li>
+                <span class="uv-label">{{ v.label }}</span>
+                <span class="uv-price">{{ v.price_display }}</span>
+                {% if not v.is_available %}
+                <span class="uv-tag">غير متوفر</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-box">
+    <p>كل الموديلات عندها صورها. ماكانش شي تصلّحو هنا.</p>
+    <a href="{{ url_for('admin.products_list') }}" class="btn-admin">رجوع للمنتجات</a>
+</div>
+{% endif %}
+{% endblock %}

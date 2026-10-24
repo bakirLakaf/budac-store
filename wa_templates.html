@@ -1,0 +1,109 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">رسائل واتساب <span class="count-pill">{{ kinds|length }}</span></h1>
+
+<p class="hint">
+    هاذي النماذج تاع الرسائل اللي تبعثها للزبائن من صفحة الطلبيات. عدّل النص كيما تحب،
+    والرسالة تبدا ديما بـ<strong>«معاك BUDAC»</strong>. المتغيّرات بين قوسين، مثلاً
+    <code>{name}</code>، تتعوّض ببيانات الطلبية وقت الإرسال — اضغط على أي متغيّر باش تزيدو للنص.
+</p>
+
+<div class="wa-warning">
+    ✱ <strong>بلا إيموجي ملوّن</strong> (😀 ❤️ ✅...): واتساب يتخرّب عليه الرابط ويبان «◆» عند الزبون.
+    استعمل الرموز النصّية بين قوسين:
+    {% for key, label in symbol_help.items() %}<code title="{{ label }}">{{ '{' ~ key ~ '}' }}</code> {% endfor %}
+</div>
+
+{% for k in kinds %}
+<section class="wa-card" id="kind-{{ k.key }}" data-kind="{{ k.key }}">
+    <header class="wa-card-head">
+        <h2>{{ k.label }}
+            {% if k.customized %}<span class="wa-tag">✎ معدّلة</span>{% endif %}
+        </h2>
+        <p class="hint">{{ k.when }}</p>
+    </header>
+
+    <div class="wa-grid">
+        <form method="post" action="{{ url_for('admin.wa_template_save', kind=k.key) }}" class="wa-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <textarea name="text" rows="12" dir="rtl" maxlength="{{ max_len }}"
+                      class="wa-text" spellcheck="false">{{ k.text }}</textarea>
+
+            <div class="wa-vars" aria-label="المتغيّرات">
+                {% for v in k.vars %}
+                <button type="button" class="wa-var" data-insert="{{ '{' ~ v ~ '}' }}"
+                        title="{{ variables[v][0] }}">{{ '{' ~ v ~ '}' }}</button>
+                {% endfor %}
+            </div>
+
+            <div class="wa-actions">
+                <button type="submit" class="btn-admin btn-sm">حفظ</button>
+                <small class="wa-count"><span class="js-count">0</span> / {{ max_len }}</small>
+            </div>
+        </form>
+
+        <div class="wa-preview-box">
+            <div class="wa-preview-title">معاينة (بيانات تجريبية)</div>
+            <div class="wa-bubble js-preview"></div>
+        </div>
+    </div>
+
+    {% if k.customized %}
+    <form method="post" action="{{ url_for('admin.wa_template_reset', kind=k.key) }}"
+          onsubmit="return confirm('ترجّع النص الأصلي؟ تعديلك يضيع.')" class="wa-reset">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin btn-sm btn-outline">↺ رجّع الأصلي</button>
+    </form>
+    {% endif %}
+</section>
+{% endfor %}
+
+<script>
+/**
+ * المعاينة الحيّة: نفس منطق السيرفر (services/wa_templates.render_text)
+ * — المتغيّر المجهول يبقى كيما هو، و*نص* يبان غليظ كيما فواتساب.
+ */
+(function () {
+    var CTX = {{ preview_ctx|tojson }};
+
+    function escapeHtml(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function render(text) {
+        var out = text.replace(/\{([a-z_]+)\}/g, function (m, key) {
+            return Object.prototype.hasOwnProperty.call(CTX, key) ? CTX[key] : m;
+        });
+        out = out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        return escapeHtml(out).replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>');
+    }
+
+    document.querySelectorAll('.wa-card').forEach(function (card) {
+        var area = card.querySelector('.wa-text');
+        var preview = card.querySelector('.js-preview');
+        var count = card.querySelector('.js-count');
+
+        function update() {
+            preview.innerHTML = render(area.value);
+            count.textContent = area.value.length;
+        }
+
+        card.querySelectorAll('.wa-var').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var token = btn.dataset.insert;
+                var start = area.selectionStart, end = area.selectionEnd;
+                area.value = area.value.slice(0, start) + token + area.value.slice(end);
+                area.focus();
+                area.selectionStart = area.selectionEnd = start + token.length;
+                update();
+            });
+        });
+
+        area.addEventListener('input', update);
+        update();
+    });
+})();
+</script>
+
+{% endblock %}

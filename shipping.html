@@ -1,0 +1,145 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">أسعار التوصيل</h1>
+
+{# ⚠️ سعر فارغ = الخدمة غير متوفرة لهاد الولاية، ماشي مجاني. #}
+<div class="zr-sync-bar">
+    <div>
+        <strong>ZR Express</strong> — حدّث الأسعار من جدولهم الرسمي
+        <br><small class="muted">
+            الأسعار الأخرى (World / Yalidine) ما تتلمسش. سعر فارغ = غير متوفر.
+        </small>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.shipping_sync_zr') }}"
+          onsubmit="return confirm('تحدّث أسعار ZR من موقعهم؟ الأسعار الحالية راح تتبدّل.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin">🔄 زامن أسعار ZR</button>
+    </form>
+
+    {# نسخة احتياطية: كي الـAPI ما يجاوبش ولا المفاتيح طايحة #}
+    <form method="post"
+          action="{{ url_for('admin.shipping_sync_file', carrier_code='zrexpress') }}"
+          onsubmit="return confirm('ترجّع أسعار ZR للنسخة المحفوظة فالملف؟')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin btn-ghost btn-sm">
+            من الملف الاحتياطي
+        </button>
+    </form>
+</div>
+
+{# World Express: ماكانش API معاهم، فالجدول مخزّن عندنا فملف. #}
+<div class="zr-sync-bar">
+    <div>
+        <strong>World Express</strong> — قارن الأسعار بجدولهم الرسمي
+        <br><small class="muted">
+            من ملف <code>data/world_rates.json</code> (57 ولاية).
+            ولاية ماكانتش فالجدول تولّي «غير متوفر».
+        </small>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.shipping_sync_file', carrier_code='worldexpress') }}"
+          onsubmit="return confirm('تقارن أسعار World بالجدول الرسمي؟ اللي مختلف راح يتبدّل.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin">🔄 زامن أسعار World</button>
+    </form>
+</div>
+
+{# Yalidine: الأسعار من جدول العقد (Tarif ECOMMERCE) مخزّن فملف. #}
+<div class="zr-sync-bar">
+    <div>
+        <strong>Yalidine</strong> — قارن الأسعار بجدول العقد
+        <br><small class="muted">
+            من ملف <code>data/yalidine_rates.json</code> (58 ولاية، الانطلاق من أم البواقي).
+            الأسعار بدون الزيادات: +100/200/300 دج للبلديات البعيدة، و+100 دج لكل كغ فوق 5 كغ.
+        </small>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.shipping_sync_file', carrier_code='yalidine') }}"
+          onsubmit="return confirm('تقارن أسعار Yalidine بجدول العقد؟ اللي مختلف راح يتبدّل.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin">🔄 زامن أسعار Yalidine</button>
+    </form>
+</div>
+
+<style>
+    .zr-sync-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 16px; flex-wrap: wrap;
+        margin-bottom: 22px; padding: 14px 18px;
+        background: #FBF6EE;
+        border: 1px solid var(--color-border);
+        border-radius: 12px;
+        font-size: 14.5px;
+    }
+</style>
+
+{% if carriers %}
+<div class="carrier-tabs">
+    {% for c in carriers %}
+    <a href="{{ url_for('admin.shipping_list', carrier=c.code) }}"
+       class="carrier-tab {{ 'is-active' if current and current.id == c.id }} {{ 'is-disabled' if not c.is_active }}">
+        {{ c.name }}
+        {% if not c.is_active %}<span class="carrier-off">معطّلة</span>{% endif %}
+    </a>
+    {% endfor %}
+</div>
+
+{% if current %}
+<div class="carrier-status-bar {{ 'is-off' if not current.is_active }}">
+    <div class="csb-info">
+        {% if current.is_active %}
+            <strong>✓ {{ current.name }} مفعّلة</strong>
+            <span>تبان للزبائن فصفحة الطلب</span>
+        {% else %}
+            <strong>⏸ {{ current.name }} معطّلة</strong>
+            <span>ما تبانش للزبائن — لكن أسعارها محفوظة</span>
+        {% endif %}
+    </div>
+
+    <form method="post" action="{{ url_for('admin.carrier_toggle', carrier_id=current.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin btn-sm {{ 'btn-danger' if current.is_active else '' }}">
+            {{ 'تعطيل' if current.is_active else 'تفعيل' }}
+        </button>
+    </form>
+</div>
+{% endif %}
+
+<p class="hint hint-block">
+    <strong>مهم:</strong> خانة فارغة = الشركة ما توصلش لهاد الولاية (يبان للزبون "غير متوفر").
+    صفر = توصيل مجاني. الفرق بيناتهم مهم.
+</p>
+
+<form method="post" action="{{ url_for('admin.shipping_update') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="carrier_id" value="{{ current.id }}">
+
+    <table class="admin-table shipping-table">
+        <thead><tr><th>الولاية</th><th>للمنزل (دج)</th><th>للمكتب (دج)</th></tr></thead>
+        <tbody>
+            {% for r in rates %}
+            <tr class="{{ 'row-unavailable' if r.home_price is none and r.office_price is none }}">
+                <td>{{ r.wilaya_display }}</td>
+                <td><input type="number" name="home_{{ r.id }}" min="0"
+                           value="{{ r.home_price if r.home_price is not none else '' }}" placeholder="غير متوفر"></td>
+                <td><input type="number" name="office_{{ r.id }}" min="0"
+                           value="{{ r.office_price if r.office_price is not none else '' }}" placeholder="غير متوفر"></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="sticky-save">
+        <button type="submit" class="btn-admin">حفظ أسعار {{ current.name }}</button>
+    </div>
+</form>
+{% else %}
+<div class="empty-box">
+    <p>ماكاين حتى شركة توصيل.</p>
+    <p class="hint">شغّل <code>python seed_shipping.py</code> باش تعمّر الأسعار من الملف.</p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,1449 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }} — {{ store_name }}{% endblock %}
+
+{# ⚠️ الوصف اللي يبان تحت العنوان فجوجل. بلاه، جوجل ياخذ أول نص
+   يلقاه فالصفحة — وغالبًا يكون قائمة تصنيفات بلا معنى. #}
+{% block meta_description %}{{ product.short_description }}{% endblock %}
+
+{% block og_type %}product{% endblock %}
+{% block og_title %}{{ product.name }} — {{ product.price_display }}{% endblock %}
+{% block og_description %}{{ product.short_description }}{% endblock %}
+{# ⚠️ الشرط لازم يكون **داخل** الكتلة. Jinja يسجّل الكتل وقت
+   التحليل، فـ{% if %} حواليها ما يمنعهاش — تتنفّذ دايمًا. #}
+{% block og_image %}
+{%- if product.image_filename -%}
+{{ url_for('static', filename='img/products/' + product.image_filename, _external=True) }}
+{%- else -%}
+{{ url_for('static', filename='img/brand/logo.png', _external=True) }}
+{%- endif -%}
+{% endblock %}
+
+
+{% block page_schema %}
+{# بيانات المنتج — تخلّي السعر والتوفّر يبانو فنتيجة البحث #}
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": {{ product.name | tojson }},
+    "description": {{ product.short_description | tojson }},
+    {% if product.image_filename %}
+    "image": "{{ url_for('static', filename='img/products/' + product.image_filename, _external=True) }}",
+    {% endif %}
+    "brand": { "@type": "Brand", "name": "{{ store_name }}" },
+    {% if product.category %}
+    "category": {{ product.category.name | tojson }},
+    {% endif %}
+    "offers": {
+        "@type": "Offer",
+        "url": "{{ request.base_url }}",
+        "priceCurrency": "DZD",
+        "price": "{{ product.display_price }}",
+        "availability": "https://schema.org/{{ 'InStock' if product.is_in_stock else 'OutOfStock' }}",
+        "seller": { "@type": "Organization", "name": "{{ store_name }}" }
+    }
+    {% set approved = product.reviews | selectattr('is_approved') | list %}
+    {% if approved %},
+    "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "{{ product.average_rating }}",
+        "reviewCount": "{{ approved | length }}",
+        "bestRating": "5", "worstRating": "1"
+    },
+    {# ⚠️ جوجل يطلب «review» زيادة على «aggregateRating». بلاه، النتيجة
+       تبقى صالحة لكن بلا نجوم فصفحة البحث — وهي أقوى شي يزيد النقرات.
+       نبعثو آخر 5 تقييمات معتمدة. #}
+    "review": [
+        {% for r in approved[:5] %}
+        {
+            "@type": "Review",
+            "author": { "@type": "Person", "name": {{ r.author_name | tojson }} },
+            "datePublished": "{{ r.created_at.strftime('%Y-%m-%d') }}",
+            "reviewRating": {
+                "@type": "Rating",
+                "ratingValue": "{{ r.rating }}",
+                "bestRating": "5", "worstRating": "1"
+            }
+            {% if r.comment %}, "reviewBody": {{ r.comment | tojson }}{% endif %}
+        }{{ "," if not loop.last }}
+        {% endfor %}
+    ]
+    {% endif %}
+}
+</script>
+{% endblock %}
+
+{% block content %}
+
+<section class="product-detail">
+    <div class="container product-detail-inner">
+
+        <div class="product-gallery">
+            <div class="product-gallery-main" id="galleryMain" data-index="0">
+                {% if product.gallery_images %}
+                    <img id="galleryMainImage"
+                         src="{{ url_for('static', filename='img/products/' + product.gallery_images[0]) }}"
+                         alt="{{ product.name }}">
+                    <button type="button" class="zoom-hint" id="zoomHint" aria-label="تكبير الصورة">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                        </svg>
+                    </button>
+                {% else %}
+                    <span class="ph-monogram">{{ product.name[0] }}</span>
+                {% endif %}
+
+                {% if product.has_discount %}
+                    <span class="badge-offer badge-offer-detail">-{{ product.discount_percent }}%</span>
+                {% endif %}
+            </div>
+
+            {% if product.gallery_images|length > 1 %}
+            <div class="product-gallery-thumbs">
+                {% for img in product.gallery_images %}
+                <button type="button"
+                        class="gallery-thumb {{ 'is-active' if loop.first else '' }}"
+                        data-full="{{ url_for('static', filename='img/products/' + img) }}">
+                    <img src="{{ url_for('static', filename='img/products/' + (img | thumb)) }}" alt="{{ product.name }} {{ loop.index }}" loading="lazy">
+                </button>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="product-detail-info">
+            {% if product.category %}
+                <a href="{{ url_for('shop.home', category=product.category.slug) }}" class="product-detail-category">
+                    {{ product.category.name }}
+                </a>
+            {% endif %}
+
+            <h1 class="product-detail-name">{{ product.name }}</h1>
+
+            <p class="product-detail-price" id="productPrice">
+                <span id="priceValue">{{ product.price_display }}</span>
+                {# ⚠️ الوحدة حذا السعر: «30 دج» وحدها غامضة — للمتر؟
+                   للرولو؟ الزبون يشك ويخرج. #}
+                <span class="price-unit">/ {{ product.unit_short }}</span>
+                {% if product.has_discount %}
+                    <span class="price-compare" id="priceCompareValue">{{ product.compare_at_price_display }}</span>
+                {% endif %}
+            </p>
+
+            {% if product.variants %}
+            <div class="variant-picker">
+                <p class="variant-picker-label">اختر الموديل:</p>
+                <div class="variant-options">
+                    {% for v in product.ordered_variants %}
+                    <button type="button"
+                            class="variant-chip {{ 'is-active' if v == product.default_variant else '' }} {{ 'is-out' if not v.is_in_stock else '' }}"
+                            data-variant-id="{{ v.id }}"
+                            data-price="{{ v.effective_price }}"
+                            data-price-display="{{ v.price_display }}"
+                            data-compare="{{ v.compare_at_price_display or '' }}"
+                            data-stock="{{ v.stock_quantity }}"
+                            data-tiers="{{ v.tiers_payload() | tojson | forceescape }}"
+                            data-packs="{{ v.packs_payload() | tojson | forceescape }}"
+                            {% if v.image_filename %}data-image="{{ url_for('static', filename='img/products/' + v.image_filename) }}"{% endif %}>
+                        {{ v.label }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {# ⚠️ العروض وأسعار الكمية اتنقلو تحت — قريب من محدّد
+               الكمية وزر الشراء. كانو بعيدين فوق الوصف والحاسبة،
+               فالزبون يختار الكمية بلا ما يشوف أن الحبة ترخص. #}
+            {% elif product.color_variant %}
+                <p class="product-detail-variant">اللون: {{ product.color_variant }}</p>
+            {% endif %}
+
+            {% if product.description %}
+                <div class="product-detail-description">{{ product.description }}</div>
+            {% endif %}
+
+            {% if product.calculator_type %}
+            <div class="calc-box" id="calcBox"
+                 data-type="{{ product.calculator_type }}"
+                 data-url="{{ url_for('shop.api_calculate', slug=product.slug) }}">
+
+                {% if product.calculator_type == 'perimeter' %}
+                <h3 class="calc-title">📐 قداش تحتاج؟</h3>
+                <p class="calc-hint">عطينا مقاس المرآة ونحسبولك الكمية</p>
+
+                <div class="calc-shapes">
+                    <button type="button" class="shape-btn is-active" data-shape="circle">⬤ دائرية</button>
+                    <button type="button" class="shape-btn" data-shape="square">⬛ مربعة</button>
+                    <button type="button" class="shape-btn" data-shape="rectangle">▬ مستطيلة</button>
+                </div>
+
+                <div class="calc-fields" data-for="circle">
+                    <label class="calc-field"><span>القطر (سم)</span>
+                        <input type="number" name="diameter" min="1" step="0.5" placeholder="60"></label>
+                </div>
+                <div class="calc-fields" data-for="square" hidden>
+                    <label class="calc-field"><span>طول الضلع (سم)</span>
+                        <input type="number" name="side" min="1" step="0.5" placeholder="50"></label>
+                </div>
+                <div class="calc-fields" data-for="rectangle" hidden>
+                    <label class="calc-field"><span>العرض (سم)</span>
+                        <input type="number" name="width" min="1" step="0.5" placeholder="80"></label>
+                    <label class="calc-field"><span>الطول (سم)</span>
+                        <input type="number" name="height" min="1" step="0.5" placeholder="40"></label>
+                </div>
+
+                <label class="calc-field"><span>عدد القطع</span>
+                    <input type="number" name="quantity" min="1" value="1"></label>
+
+                {% else %}
+                <h3 class="calc-title">📐 قداش تحتاج؟</h3>
+                <p class="calc-hint">
+                    عطينا مقاس السطح اللي حبيت تغطي
+                    {% if product.roll_width_m %}(عرض اللفة: {{ product.roll_width_m }} م){% endif %}
+                </p>
+
+                <div id="surfacesList">
+                    <div class="surface-row">
+                        <label class="calc-field"><span>العرض (سم)</span>
+                            <input type="number" class="s-width" min="1" step="0.5" placeholder="90"></label>
+                        <label class="calc-field"><span>الارتفاع (سم)</span>
+                            <input type="number" class="s-height" min="1" step="0.5" placeholder="200"></label>
+                        <label class="calc-field calc-field-sm"><span>العدد</span>
+                            <input type="number" class="s-qty" min="1" value="1"></label>
+                    </div>
+                </div>
+
+                <button type="button" class="btn-add-surface" id="addSurface">+ زيد سطح آخر</button>
+                {% endif %}
+
+                <button type="button" class="btn-calc" id="calcBtn">احسب</button>
+
+                <div class="calc-result" id="calcResult" hidden></div>
+            </div>
+            {% endif %}
+
+            {# ⚠️ الروابط هنا قيم أولية برك — الجافاسكريبت يعاود يبنيها
+               مع كل تبديل موديل باش يزيد `?v=<id>`. بلا هذا، الزبون
+               اللي يشارك «بلاستيك دوري» يوصل صاحبو لصفحة فيها الموديل
+               الافتراضي — موديل آخر وسعر آخر. #}
+            <div class="share-row" id="shareRow"
+                 data-base="{{ url_for('shop.product_detail', slug=product.slug, _external=True) }}"
+                 data-name="{{ product.name }}">
+                <span class="share-label">شارك:</span>
+                <a class="share-btn share-wa" id="shareWa" target="_blank" rel="noopener"
+                   href="https://wa.me/?text={{ (product.name + ' — ' + request.url) | urlencode }}"
+                   aria-label="شارك على واتساب">واتساب</a>
+                <a class="share-btn share-fb" id="shareFb" target="_blank" rel="noopener"
+                   href="https://www.facebook.com/sharer/sharer.php?u={{ request.url | urlencode }}"
+                   aria-label="شارك على فيسبوك">فيسبوك</a>
+                <button type="button" class="share-btn share-copy" id="copyLinkBtn"
+                        data-link="{{ request.url }}">نسخ الرابط</button>
+            </div>
+
+            <details class="product-faq">
+                <summary>أسئلة شائعة</summary>
+                <dl>
+                    <dt>وقتاش يوصل الطلب؟</dt>
+                    <dd>من 2 لـ7 أيام حسب الولاية. نتصلو بيك قبل الإرسال باش نأكدو معاك.</dd>
+
+                    <dt>واش نخلّص قبل ما توصلني؟</dt>
+                    <dd>لا. <strong>الدفع عند الاستلام</strong> — تشوف السلعة أولاً وبعدها تخلّص.</dd>
+
+                    <dt>واش نقدر نبدّل إذا ما عجبنيش؟</dt>
+                    <dd>نعم، خلال 48 ساعة من الاستلام إذا كان فيه عيب أو وصلك غير اللي طلبت.
+                        <a href="{{ url_for('shop.page', slug='returns') }}">شوف التفاصيل</a>.</dd>
+
+                    <dt>قداش سعر التوصيل؟</dt>
+                    <dd>يختلف حسب الولاية والشركة. تشوفو <strong>بالضبط</strong> فصفحة الطلب
+                        قبل ما تأكد — بلا مفاجآت.</dd>
+                </dl>
+            </details>
+
+            {% if product.is_in_stock %}
+                <form method="post" action="{{ url_for('cart.add') }}" class="add-to-cart-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="kind" value="product">
+                    <input type="hidden" name="item_id" value="{{ product.id }}">
+                    {# العرض الجاهز المختار — فارغ = شراء بالحبة #}
+                    <input type="hidden" name="pack_id" id="selectedPackId" value="">
+                    <input type="hidden" name="variant_id" id="selectedVariantId"
+                           value="{{ product.default_variant.id if product.default_variant else '' }}">
+
+                    {% if product.variants %}
+                    {# ═══════ العروض الجاهزة ═══════
+                       وحدات بيع لها اسم وسعر ثابت (رولو، ساشي...). الزبون
+                       يختار وحدة منها بدل ما يحسب بالحبة. #}
+                    <div class="packs-box" id="packsBox" hidden>
+                        <p class="packs-title">🎁 عروض جاهزة</p>
+                        <div class="packs-list" id="packsList"></div>
+                    </div>
+
+                    {# ═══════ أسعار حسب الكمية ═══════ #}
+                    <div class="tiers-box" id="tiersBox" hidden>
+                        <p class="tiers-title">📦 كل ما تشري أكثر، يرخص {{ product.unit_label }}</p>
+                        <div class="tiers-list" id="tiersList"></div>
+                        <p class="tiers-hint" id="tiersHint"></p>
+                    </div>
+                    {% endif %}
+
+                    <div class="qty-picker">
+                        <label for="qtyInput">الكمية</label>
+                        <div class="qty-stepper">
+                            <button type="button" class="qty-btn" data-step="-1" aria-label="نقّص">−</button>
+                            <input type="number" name="quantity" id="qtyInput" value="1" min="1" max="5000"
+                                   inputmode="numeric" aria-label="الكمية">
+                            <button type="button" class="qty-btn" data-step="1" aria-label="زيد">+</button>
+                        </div>
+                    </div>
+
+                    {# ═══ الإجمالي الحيّ ═══
+                       ⚠️ الزبون يبدّل الكمية ويشوف سعر الحبة، لكن ما يعرفش
+                       المجموع. هاد الصندوق يحسبو مباشرة — يقلّل التردد
+                       ويمنع مفاجأة السعر فالسلة. #}
+                    <div class="live-total" id="liveTotal">
+                        <div class="live-row">
+                            {# ⚠️ العنوان يتبدّل مع العرض الجاهز: كي يختار
+                               الزبون «رولو فيه 50 متر» بـ600 دج، الصندوق
+                               كان يقول «سعر المتر: 600 دج» — والزبون يحسب
+                               50 × 600 ويظن الطلبية 30 ألف. #}
+                            <span id="liveUnitLabel"
+                                  data-unit="{{ product.unit_short }}">سعر {{ product.unit_label }}</span>
+                            <strong id="liveUnit">{{ product.price_display }}</strong>
+                        </div>
+                        <div class="live-row live-row-sum">
+                            <span>المجموع</span>
+                            <strong id="liveSum">{{ product.price_display }}</strong>
+                        </div>
+                        <p class="live-note" id="liveNote" hidden></p>
+                    </div>
+
+                    <button type="submit" class="btn-primary btn-block">أضف للسلة</button>
+                    <button type="submit" name="go_to_cart" value="1" class="btn-ghost-link">أضف واذهب للسلة ←</button>
+                </form>
+                <p class="stock-note" id="stockNote">✓ متوفر — اطلبه درك</p>
+
+                {# ⚠️ شريط الثقة هنا بالضبط، ماشي فالتذييل. الزبون يقرر
+                   وقت ما يشوف الزر — والتذييل ما يوصلوش أصلاً. #}
+                <ul class="buy-trust">
+                    <li><span aria-hidden="true">💵</span> تخلّص كي توصلك</li>
+                    <li><span aria-hidden="true">🚚</span> توصيل 58 ولاية</li>
+                    <li><span aria-hidden="true">⏱️</span> 24/48 ساعة</li>
+                </ul>
+            {% else %}
+                <button class="btn-primary" disabled>نفذت الكمية</button>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+{# ═══════════ صور توضيحية ═══════════
+   ⚠️ ماشي صور السلعة — هاذو يوريو كيفاش تستعملها ووين تتحط.
+   حطّيناهم **تحت** المعرض والشراء: الزبون اللي قرّر ما نعطلوهش،
+   واللي مازال متردد يلقى معلومة زايدة تقنعو. #}
+{% if product.extra_images %}
+<section class="extra-shots">
+    <h2 class="section-heading">شوف كيفاش تبان</h2>
+
+    <div class="extra-shots-grid">
+        {% for img in product.extra_images %}
+        <figure class="extra-shot">
+            <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
+                 alt="{{ img.caption or product.name }}"
+                 loading="lazy"
+                 data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}">
+            {% if img.caption %}
+            <figcaption>{{ img.caption }}</figcaption>
+            {% endif %}
+        </figure>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% if product.gallery_images %}
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="معرض صور المنتج" hidden>
+    <button type="button" class="lightbox-close" id="lightboxClose" aria-label="إغلاق">×</button>
+
+    <button type="button" class="lightbox-arrow lightbox-prev" data-dir="-1" aria-label="السابقة">‹</button>
+
+    <div class="lightbox-stage" id="lightboxStage">
+        <img id="lightboxImage" src="" alt="{{ product.name }}">
+    </div>
+
+    <button type="button" class="lightbox-arrow lightbox-next" data-dir="1" aria-label="التالية">›</button>
+
+    <div class="lightbox-counter"><span id="lightboxCounter">1</span> / {{ product.gallery_images|length }}</div>
+
+    <div class="lightbox-thumbs" id="lightboxThumbs">
+        {% for img in product.gallery_images %}
+        <button type="button" class="lightbox-thumb {{ 'is-active' if loop.first }}" data-index="{{ loop.index0 }}">
+            <img src="{{ url_for('static', filename='img/products/' + (img | thumb)) }}" alt="" loading="lazy">
+        </button>
+        {% endfor %}
+    </div>
+</div>
+
+<script id="galleryData" type="application/json">
+{{ product.gallery_images | map('string') | list | tojson }}
+</script>
+{% endif %}
+
+<script>
+(function () {
+    // ---------- معرض الصور: تبديل الصورة الرئيسية عند الضغط على صورة مصغرة ----------
+    var thumbs = document.querySelectorAll(".gallery-thumb");
+    var mainImg = document.getElementById("galleryMainImage");
+
+    // الصورة "المثبّتة" — اللي ترجع كي يبعّد الزبون الماوس.
+    // تتبدّل غير بالضغط ولا باختيار موديل، ماشي بالمرور.
+    var pinnedSrc = mainImg ? mainImg.src : "";
+
+    // أسماء صور المعرض بنفس ترتيب المصغّرات — باش نعرفو فهرس الصورة الحالية
+    var galleryNames = [];
+    try {
+        galleryNames = JSON.parse(document.getElementById("galleryData").textContent).map(String);
+    } catch (e) {}
+
+    function setPinned(src) {
+        pinnedSrc = src;
+        if (mainImg) mainImg.src = src;
+        // نعلّمو المصغّرة الموافقة (المقارنة بآخر جزء من الرابط)
+        var tail = src.split("/").pop();
+        var gm = document.getElementById("galleryMain");
+        for (var gi = 0; gi < galleryNames.length; gi++) {
+            if (galleryNames[gi].split("/").pop() === tail) {
+                if (gm) gm.dataset.index = gi;
+                break;
+            }
+        }
+        thumbs.forEach(function (t) {
+            var full = t.getAttribute("data-full") || "";
+            t.classList.toggle("is-active", full.split("/").pop() === tail);
+        });
+    }
+
+    thumbs.forEach(function (thumb) {
+        var fullSrc = thumb.getAttribute("data-full");
+
+        // ---------- معاينة بالمرور: مؤقتة، ما تثبتش ----------
+        thumb.addEventListener("mouseenter", function () {
+            if (mainImg && fullSrc) mainImg.src = fullSrc;
+        });
+        thumb.addEventListener("mouseleave", function () {
+            if (mainImg && pinnedSrc) mainImg.src = pinnedSrc;
+        });
+
+        // ---------- الضغط: يثبّت ----------
+        thumb.addEventListener("click", function () {
+            if (!fullSrc) return;
+            setPinned(fullSrc);
+            // الصورة ← الموديل: إذا الصورة تاع موديل، نختارو
+            if (window.__syncVariantFromImage) window.__syncVariantFromImage(fullSrc);
+        });
+
+        // ⚠️ فالهاتف ماكانش "مرور" — اللمسة تولّي ضغطة مباشرة،
+        // وهذا هو السلوك الصحيح تما.
+        thumb.addEventListener("touchstart", function () {
+            if (fullSrc) setPinned(fullSrc);
+        }, { passive: true });
+    });
+
+    // نخليوها متاحة لمنطق التنويعات تحت
+    window.__setPinnedImage = setPinned;
+
+    // ---------- تأثير التكبير (Zoom) عند تقريب الماوس من الصورة ----------
+    var galleryMain = document.getElementById("galleryMain");
+    if (galleryMain && mainImg) {
+        galleryMain.addEventListener("mousemove", function (e) {
+            var rect = galleryMain.getBoundingClientRect();
+            var x = ((e.clientX - rect.left) / rect.width) * 100;
+            var y = ((e.clientY - rect.top) / rect.height) * 100;
+            mainImg.style.transformOrigin = x + "% " + y + "%";
+            mainImg.style.transform = "scale(1.6)";
+        });
+        galleryMain.addEventListener("mouseleave", function () {
+            mainImg.style.transform = "scale(1)";
+        });
+    }
+
+    /* ════════ حاسبة الكمية ════════ */
+    var calcBox = document.getElementById("calcBox");
+    if (calcBox) {
+        var calcType = calcBox.dataset.type;
+        var calcUrl = calcBox.dataset.url;
+        var resultBox = document.getElementById("calcResult");
+
+        // ---- تبديل شكل المرآة ----
+        var shapeBtns = calcBox.querySelectorAll(".shape-btn");
+        var currentShape = "circle";
+
+        shapeBtns.forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                shapeBtns.forEach(function (b) { b.classList.remove("is-active"); });
+                btn.classList.add("is-active");
+                currentShape = btn.dataset.shape;
+
+                calcBox.querySelectorAll(".calc-fields").forEach(function (group) {
+                    group.hidden = group.dataset.for !== currentShape;
+                });
+                resultBox.hidden = true;
+            });
+        });
+
+        // ---- زيادة أسطح (للورق اللاصق) ----
+        var addSurfaceBtn = document.getElementById("addSurface");
+        if (addSurfaceBtn) {
+            addSurfaceBtn.addEventListener("click", function () {
+                var list = document.getElementById("surfacesList");
+                var first = list.querySelector(".surface-row");
+                var clone = first.cloneNode(true);
+
+                clone.querySelectorAll("input").forEach(function (input) {
+                    input.value = input.classList.contains("s-qty") ? "1" : "";
+                });
+
+                // زر حذف — نزيدو غير للأسطح الإضافية
+                var removeBtn = document.createElement("button");
+                removeBtn.type = "button";
+                removeBtn.className = "btn-remove-surface";
+                removeBtn.textContent = "×";
+                removeBtn.addEventListener("click", function () { clone.remove(); });
+                clone.appendChild(removeBtn);
+
+                list.appendChild(clone);
+            });
+        }
+
+        // ---- الحساب ----
+        document.getElementById("calcBtn").addEventListener("click", function () {
+            var payload;
+
+            if (calcType === "perimeter") {
+                var activeGroup = calcBox.querySelector('.calc-fields[data-for="' + currentShape + '"]');
+                payload = { shape: currentShape };
+
+                activeGroup.querySelectorAll("input").forEach(function (input) {
+                    payload[input.name] = input.value;
+                });
+
+                var qtyInput = calcBox.querySelector('input[name="quantity"]');
+                payload.quantity = qtyInput ? qtyInput.value : 1;
+
+            } else {
+                var surfaces = [];
+                calcBox.querySelectorAll(".surface-row").forEach(function (row) {
+                    surfaces.push({
+                        width: row.querySelector(".s-width").value,
+                        height: row.querySelector(".s-height").value,
+                        quantity: row.querySelector(".s-qty").value
+                    });
+                });
+                payload = { surfaces: surfaces };
+            }
+
+            resultBox.hidden = false;
+            resultBox.className = "calc-result";
+            resultBox.textContent = "...";
+
+            fetch(calcUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token() }}"
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) {
+                    resultBox.className = "calc-result is-error";
+                    resultBox.textContent = data.error;
+                    return;
+                }
+
+                var res = data.result;
+                var html = "";
+
+                if (data.type === "perimeter") {
+                    /* 🔴 كان هنا سطر «اطلب X لفة» — اتحيّد.
+                       المنتج يتباع بالمتر، والزبون ما يعرفش قداش فاللفة.
+                       درك رقم واحد واضح: كم متر يطلب. */
+                    html += '<p class="cr-main">تحتاج <strong>' + res.meters_to_order + ' متر</strong></p>';
+                    html += '<p class="cr-detail">' + res.shape_label;
+                    if (res.quantity > 1) html += " × " + res.quantity + " قطعة";
+                    html += "</p>";
+                    html += '<p class="cr-detail">المحيط: ' + res.total_m + ' م + هامش ' + res.margin_percent + '% للقص</p>';
+                } else {
+                    html += '<p class="cr-main">تحتاج <strong>' + res.meters_to_order + ' متر</strong></p>';
+                    html += '<p class="cr-detail">المساحة: ' + res.total_area_m2 + ' م² | عرض اللفة: ' + res.roll_width_m + ' م</p>';
+
+                    if (res.surfaces.length > 1) {
+                        html += '<ul class="cr-list">';
+                        res.surfaces.forEach(function (sf) {
+                            html += "<li>" + sf.label + ": " + sf.length_m + " م</li>";
+                        });
+                        html += "</ul>";
+                    }
+                    html += '<p class="cr-detail">+ هامش ' + res.margin_percent + '% للقص والأخطاء</p>';
+                }
+
+                resultBox.className = "calc-result is-success";
+                resultBox.innerHTML = html;
+            })
+            .catch(function () {
+                resultBox.className = "calc-result is-error";
+                resultBox.textContent = "تعذّر الحساب — عاود جرّب";
+            });
+        });
+    }
+
+    /* ════════ تسجيل الزيارة (شفتها مؤخرًا) ════════ */
+    try {
+        var KEY = "budac_recent";
+        var slug = "{{ product.slug }}";
+        var list = JSON.parse(localStorage.getItem(KEY) || "[]");
+
+        list = list.filter(function (s) { return s !== slug; });  // نحيّدو التكرار
+        list.unshift(slug);                                       // الأحدث أولاً
+        localStorage.setItem(KEY, JSON.stringify(list.slice(0, 8)));
+    } catch (e) {
+        // localStorage معطّل (تصفح خاص فبعض المتصفحات) — ما يضرش، نتجاهلو
+    }
+
+    /* ════════ أزرار الكمية ════════ */
+    var qtyInput = document.getElementById("qtyInput");
+    if (qtyInput) {
+        document.querySelectorAll(".qty-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var step = parseInt(btn.dataset.step, 10);
+                var value = (parseInt(qtyInput.value, 10) || 1) + step;
+                var min = parseInt(qtyInput.min, 10) || 1;
+                var max = parseInt(qtyInput.max, 10) || 5000;
+                qtyInput.value = Math.max(min, Math.min(max, value));
+            });
+        });
+    }
+
+    /* ════════ نسخ رابط المنتج ════════ */
+    var copyBtn = document.getElementById("copyLinkBtn");
+    if (copyBtn) {
+        copyBtn.addEventListener("click", function () {
+            var link = copyBtn.dataset.link;
+            var original = copyBtn.textContent;
+
+            function showDone() {
+                copyBtn.textContent = "✓ تم النسخ";
+                copyBtn.classList.add("is-copied");
+                setTimeout(function () {
+                    copyBtn.textContent = original;
+                    copyBtn.classList.remove("is-copied");
+                }, 1800);
+            }
+
+            // clipboard API يخدم برك على https (أو localhost) — نحضّرو بديل
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(link).then(showDone);
+            } else {
+                var tmp = document.createElement("textarea");
+                tmp.value = link;
+                tmp.style.position = "fixed";
+                tmp.style.opacity = "0";
+                document.body.appendChild(tmp);
+                tmp.select();
+                try { document.execCommand("copy"); showDone(); } catch (e) {}
+                document.body.removeChild(tmp);
+            }
+        });
+    }
+
+    /* ════════ معرض ملء الشاشة (Lightbox) ════════ */
+    var dataEl = document.getElementById("galleryData");
+    var lightbox = document.getElementById("lightbox");
+
+    if (dataEl && lightbox) {
+        var images = JSON.parse(dataEl.textContent).map(function (name) {
+            return "{{ url_for('static', filename='img/products/') }}" + name;
+        });
+
+        var lbImage = document.getElementById("lightboxImage");
+        var lbCounter = document.getElementById("lightboxCounter");
+        var lbThumbs = lightbox.querySelectorAll(".lightbox-thumb");
+        var lbIndex = 0;
+
+        function showImage(index) {
+            lbIndex = (index + images.length) % images.length;  // تمرير دائري
+            lbImage.src = images[lbIndex];
+            lbCounter.textContent = lbIndex + 1;
+
+            // نزامنو الصورة الرئيسية والموديل مع اللي راه يشوفو الزبون
+            if (window.__setPinnedImage) window.__setPinnedImage(images[lbIndex]);
+            if (window.__syncVariantFromImage) window.__syncVariantFromImage(images[lbIndex]);
+
+            lbThumbs.forEach(function (t, i) {
+                t.classList.toggle("is-active", i === lbIndex);
+            });
+
+            // نخلي المصغّرة النشطة تبان دائمًا فالشريط
+            var active = lbThumbs[lbIndex];
+            if (active) active.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+        }
+
+        function openLightbox(index) {
+            showImage(index);
+            lightbox.hidden = false;
+            document.body.style.overflow = "hidden";  // نمنعو تمرير الصفحة تحت
+        }
+
+        function closeLightbox() {
+            lightbox.hidden = true;
+            document.body.style.overflow = "";
+        }
+
+        // فتح: من الصورة الرئيسية أو زر التكبير
+        var galleryMainEl = document.getElementById("galleryMain");
+        if (galleryMainEl) {
+            galleryMainEl.addEventListener("click", function () {
+                openLightbox(parseInt(galleryMainEl.dataset.index || "0", 10));
+            });
+        }
+
+        document.getElementById("lightboxClose").addEventListener("click", function (e) {
+            e.stopPropagation();
+            closeLightbox();
+        });
+
+        lightbox.querySelectorAll(".lightbox-arrow").forEach(function (arrow) {
+            arrow.addEventListener("click", function (e) {
+                e.stopPropagation();
+                showImage(lbIndex + parseInt(arrow.dataset.dir, 10));
+            });
+        });
+
+        lbThumbs.forEach(function (t) {
+            t.addEventListener("click", function (e) {
+                e.stopPropagation();
+                showImage(parseInt(t.dataset.index, 10));
+            });
+        });
+
+        // النقر على الخلفية السوداء يغلق
+        lightbox.addEventListener("click", function (e) {
+            if (e.target === lightbox || e.target.id === "lightboxStage") closeLightbox();
+        });
+
+        // لوحة المفاتيح: أسهم للتنقل، Esc للإغلاق
+        document.addEventListener("keydown", function (e) {
+            if (lightbox.hidden) return;
+            if (e.key === "Escape") closeLightbox();
+            // فـRTL: السهم الأيسر = التالية
+            else if (e.key === "ArrowLeft") showImage(lbIndex + 1);
+            else if (e.key === "ArrowRight") showImage(lbIndex - 1);
+        });
+
+        // السحب بالإصبع فالهاتف
+        var touchStartX = null;
+        var stage = document.getElementById("lightboxStage");
+        stage.addEventListener("touchstart", function (e) {
+            touchStartX = e.touches[0].clientX;
+        }, { passive: true });
+
+        stage.addEventListener("touchend", function (e) {
+            if (touchStartX === null) return;
+            var diff = e.changedTouches[0].clientX - touchStartX;
+            if (Math.abs(diff) > 50) showImage(lbIndex + (diff < 0 ? 1 : -1));
+            touchStartX = null;
+        }, { passive: true });
+
+        // كي يبدّل المصغّرة تحت الصورة الرئيسية، نحدّثو الفهرس
+        thumbs.forEach(function (thumb, i) {
+            thumb.addEventListener("click", function () {
+                if (galleryMainEl) galleryMainEl.dataset.index = i;
+            });
+        });
+    }
+
+    // ---------- اختيار التنويعة (variant): يبدل السعر والصورة ----------
+    var variantChips = document.querySelectorAll(".variant-chip");
+    var priceValueEl = document.getElementById("priceValue");
+    var priceCompareEl = document.getElementById("priceCompareValue");
+    var stockNoteEl = document.getElementById("stockNote");
+    var selectedVariantInput = document.getElementById("selectedVariantId");
+
+    /**
+     * 🔴 إصلاح: تحديث السعر الكبير فوق كان **داخل** معالج الضغط فقط.
+     * النتيجة: كي تفتح الصفحة، فوق يبان سعر **المنتج** وتحت الإجمالي
+     * الحيّ يحسب بسعر **الموديل الافتراضي** — رقمين مختلوين لنفس السلعة.
+     * درك الدالة مستقلة وتتنادى كذلك عند تحميل الصفحة.
+     */
+    function applyVariantPrice(chip) {
+        if (!chip) return;
+
+        var priceDisplay = chip.getAttribute("data-price-display");
+        if (priceValueEl && priceDisplay) {
+            priceValueEl.textContent = priceDisplay;
+        }
+
+        var compare = chip.getAttribute("data-compare");
+        if (priceCompareEl) {
+            if (compare) {
+                priceCompareEl.textContent = compare;
+                priceCompareEl.style.display = "";
+            } else {
+                priceCompareEl.style.display = "none";
+            }
+        }
+
+        // نحدّثو التنويعة المختارة فالفورم باش تنضاف الصحيحة للسلة
+        if (selectedVariantInput) {
+            selectedVariantInput.value = chip.getAttribute("data-variant-id") || "";
+        }
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       رابط المشاركة يحمل الموديل المختار
+       ⚠️ نستعملو `?v=<id>` ماشي `#`، لأن الواتساب وفيسبوك يقراو
+       الرابط فالسيرفر باش يوريو المعاينة — والجزء اللي بعد `#`
+       ما يوصلش للسيرفر أصلاً.
+       ══════════════════════════════════════════════════════════ */
+    var shareRow = document.getElementById("shareRow");
+
+    function updateShareLinks(chip) {
+        if (!shareRow) return;
+
+        var base = shareRow.getAttribute("data-base") || window.location.href;
+        var name = shareRow.getAttribute("data-name") || "";
+        var vid = chip ? (chip.getAttribute("data-variant-id") || "") : "";
+        var label = chip ? chip.textContent.trim() : "";
+
+        var link = vid ? base + "?v=" + encodeURIComponent(vid) : base;
+        // اسم الموديل فنص الواتساب — الصاحب يعرف على واش تهدر
+        var text = name + (label ? " — " + label : "") + " — " + link;
+
+        var wa = document.getElementById("shareWa");
+        var fb = document.getElementById("shareFb");
+        var copy = document.getElementById("copyLinkBtn");
+
+        if (wa) wa.href = "https://wa.me/?text=" + encodeURIComponent(text);
+        if (fb) fb.href = "https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(link);
+        if (copy) copy.setAttribute("data-link", link);
+
+        // نبدّلو رابط الصفحة كذلك (بلا إعادة تحميل) — الزبون اللي
+        // ينسخ من شريط العنوان ياخذ الموديل الصحيح تاني
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, "", link);
+        }
+    }
+
+    /* ── الصورة ← الموديل ─────────────────────────────────────
+       الضغط على مصغّرة (ولا التنقّل فالمعرض الكبير) يختار الموديل
+       اللي صورتو هي هاد الصورة. الصور اللي ماشي تاع موديل (التوضيحية)
+       ما تبدّل والو. نستعملو chip.click() باش يتحدّث كلش (السعر،
+       الأسعار حسب الكمية، الإجمالي، روابط المشاركة) بنفس طريق الضغط. */
+    var syncingFromImage = false;
+
+    window.__syncVariantFromImage = function (src) {
+        if (!src || !variantChips.length) return;
+        var tail = src.split("/").pop();
+
+        function sameImage(c) {
+            var img = c.getAttribute("data-image") || "";
+            return img !== "" && img.split("/").pop() === tail;
+        }
+
+        // الموديل الحالي صورتو هي هاد الصورة؟ ما نبدّلوش (موديلين يتشاركو صورة)
+        var current = document.querySelector(".variant-chip.is-active");
+        if (current && sameImage(current)) return;
+
+        var target = null;
+        variantChips.forEach(function (c) {
+            if (!target && sameImage(c) && !c.classList.contains("is-out")) target = c;
+        });
+        if (!target) return;
+
+        syncingFromImage = true;
+        try { target.click(); } finally { syncingFromImage = false; }
+    };
+
+    variantChips.forEach(function (chip) {
+        chip.addEventListener("click", function () {
+            if (chip.classList.contains("is-out")) return;
+
+            variantChips.forEach(function (c) { c.classList.remove("is-active"); });
+            chip.classList.add("is-active");
+
+            applyVariantPrice(chip);
+
+            // صورة الموديل تتثبّت (ماشي معاينة مؤقتة) — الزبون لازم يشوف
+            // بالضبط واش راه يطلب.
+            var image = chip.getAttribute("data-image");
+            if (image) {
+                if (window.__setPinnedImage) {
+                    window.__setPinnedImage(image);
+                } else if (mainImg) {
+                    mainImg.src = image;
+                }
+
+                // نمرّرو للصورة فالهاتف باش الزبون يشوف التبديل
+                // (ماشي كي يجي التبديل من الضغط على صورة — راهو قدّام الصورة أصلًا)
+                if (!syncingFromImage && window.innerWidth <= 768 && mainImg) {
+                    var top = mainImg.getBoundingClientRect().top + window.scrollY - 70;
+                    if (window.scrollY > top) window.scrollTo({ top: top, behavior: "smooth" });
+                }
+            }
+
+            // نحدّثو جدول أسعار الجملة والسعر حسب الكمية الحالية
+            applyTiers(chip);
+            updateShareLinks(chip);
+        });
+    });
+
+    /* ── اختيار الموديل من الرابط عند فتح الصفحة ──────────────
+       الزبون اللي يوصلو رابط `?v=12` لازم يلقى الموديل 12 مختارًا
+       بصورتو وسعرو — وإلا المشاركة بلا فايدة. */
+    (function selectVariantFromUrl() {
+        // ⚠️ الحماية ضرورية: بعض المتصفحات القديمة ما عندهاش
+        // URLSearchParams، والصفحة ما لازمش تطيح كاملة على ميزة مشاركة.
+        var search = (window.location && window.location.search) || "";
+        var wanted = null;
+        try {
+            wanted = new URLSearchParams(search).get("v");
+        } catch (e) {
+            var m = search.match(/[?&]v=([^&]+)/);
+            wanted = m ? decodeURIComponent(m[1]) : null;
+        }
+        var target = null;
+
+        if (wanted) {
+            variantChips.forEach(function (c) {
+                if (c.getAttribute("data-variant-id") === wanted) target = c;
+            });
+        }
+
+        // ⚠️ موديل مطلوب لكنو نافد: نختاروه برك باش الزبون يشوف
+        // بالضبط واش تشارك معاه، ويشوف أنه غير متوفر بدل ما نحوّلوه
+        // بصمت لموديل آخر ونخلّيوه يظن أنه راه يطلب اللي شاف.
+        if (target) {
+            variantChips.forEach(function (c) { c.classList.remove("is-active"); });
+            target.classList.add("is-active");
+            applyVariantPrice(target);
+            applyTiers(target);
+
+            var img = target.getAttribute("data-image");
+            if (img && window.__setPinnedImage) window.__setPinnedImage(img);
+        }
+
+        // نبنيو روابط المشاركة على أساس المختار حاليًا (المطلوب ولا الافتراضي)
+        var active = target || document.querySelector(".variant-chip.is-active");
+        updateShareLinks(active);
+    })();
+
+    /* ══════════════════════════════════════════════════════════
+       أسعار الجملة: السعر يتبدّل حسب الكمية
+       ⚠️ هذا **عرض فقط**. السعر الحقيقي يتحسب فالسيرفر عند الإضافة
+       للسلة — باش حتى واحد ما يقدر يبدّلو من أدوات المطوّر.
+       ══════════════════════════════════════════════════════════ */
+    var tiersBox = document.getElementById("tiersBox");
+    var tiersList = document.getElementById("tiersList");
+    var tiersHint = document.getElementById("tiersHint");
+    var qtyForPrice = document.getElementById("qtyInput");
+    var currentTiers = [];
+    var basePriceDisplay = priceValueEl ? priceValueEl.textContent : "";
+
+    // وحدة البيع — «حبة» ولا «متر» ولا نص مخصّص من لوحة التحكم
+    var UNIT_SHORT = {{ product.unit_short | tojson }};
+
+    function readTiers(chip) {
+        if (!chip) return [];
+        try {
+            return JSON.parse(chip.getAttribute("data-tiers") || "[]");
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function formatDZD(n) {
+        return n.toLocaleString("en-US") + " دج";
+    }
+
+    function tierForQuantity(qty) {
+        for (var i = currentTiers.length - 1; i >= 0; i--) {
+            var t = currentTiers[i];
+            if (qty >= t.min && (t.max === null || qty <= t.max)) return t;
+        }
+        return null;
+    }
+
+    function renderTiers() {
+        if (!tiersBox) return;
+
+        if (!currentTiers.length) {
+            tiersBox.hidden = true;
+            return;
+        }
+
+        tiersBox.hidden = false;
+        var qty = parseInt(qtyForPrice ? qtyForPrice.value : 1, 10) || 1;
+        var active = tierForQuantity(qty);
+
+        var html = "";
+        currentTiers.forEach(function (t) {
+            var isOn = active && t.min === active.min;
+            html += '<div class="tier-row' + (isOn ? " is-active" : "") + '">'
+                  + '<span class="tier-range">' + t.range + "</span>"
+                  + '<span class="tier-price">' + formatDZD(t.price)
+                  + " / " + UNIT_SHORT + "</span>"
+                  + "</div>";
+        });
+        tiersList.innerHTML = html;
+
+        // السعر الرئيسي يعكس سعر الحبة الحالي
+        if (priceValueEl) {
+            priceValueEl.textContent = active ? formatDZD(active.price) : basePriceDisplay;
+        }
+
+        // نقترح على الزبون كم يزيد باش يوصل للسعر الأرخص الجاي
+        var next = null;
+        for (var i = 0; i < currentTiers.length; i++) {
+            if (currentTiers[i].min > qty) { next = currentTiers[i]; break; }
+        }
+        if (next && tiersHint) {
+            var need = next.min - qty;
+            tiersHint.textContent = "زيد " + need + " " + UNIT_SHORT + " وتشري بـ"
+                                  + formatDZD(next.price) + " لـ" + UNIT_SHORT;
+            tiersHint.hidden = false;
+        } else if (tiersHint) {
+            tiersHint.hidden = true;
+        }
+    }
+
+    function applyTiers(chip) {
+        currentTiers = readTiers(chip);
+        if (chip) {
+            basePriceDisplay = chip.getAttribute("data-price-display") || basePriceDisplay;
+        }
+        renderTiers();
+    }
+
+    // أي تبديل فالكمية يعيد حساب العرض
+    if (qtyForPrice) {
+        qtyForPrice.addEventListener("input", renderTiers);
+        qtyForPrice.addEventListener("change", renderTiers);
+        // أزرار +/- تبدّل القيمة برمجيًا، فما تطلقش "input"
+        document.querySelectorAll(".qty-btn").forEach(function (b) {
+            b.addEventListener("click", function () { setTimeout(renderTiers, 0); });
+        });
+    }
+
+    // الحالة الأولى: الموديل الافتراضي — نطبّقو سعرو وعروضو
+    var initialChip = document.querySelector(".variant-chip.is-active");
+    applyVariantPrice(initialChip);
+    applyTiers(initialChip);
+})();
+</script>
+
+<section class="reviews-section" id="reviews">
+    <div class="container container-narrow">
+        <div class="reviews-head">
+            <h2 class="section-heading">آراء الزبائن</h2>
+            {% if avg_rating %}
+            <div class="rating-summary">
+                <span class="rating-stars">{{ "★" * (avg_rating | round | int) }}{{ "☆" * (5 - (avg_rating | round | int)) }}</span>
+                <span class="rating-value">{{ avg_rating }}/5</span>
+                <span class="rating-count">({{ reviews|length }} تقييم)</span>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if reviews %}
+        <ul class="reviews-list">
+            {% for r in reviews %}
+            <li class="review-item">
+                <div class="review-head">
+                    <strong class="review-author">{{ r.author_name }}</strong>
+                    <span class="review-stars">{{ r.stars }}</span>
+                </div>
+                {% if r.comment %}<p class="review-comment">{{ r.comment }}</p>{% endif %}
+                <span class="review-date">{{ r.created_at.strftime('%Y-%m-%d') }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="hint-muted">مازال ماكانش تقييم لهذا المنتج — كن أول واحد!</p>
+        {% endif %}
+
+        <details class="review-form-box">
+            <summary>اكتب تقييمك</summary>
+            <form method="post" action="{{ url_for('shop.add_review', slug=product.slug) }}" class="review-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <label class="field">
+                    <span>اسمك *</span>
+                    <input type="text" name="author_name" required maxlength="120">
+                </label>
+
+                <div class="field">
+                    <span>تقييمك *</span>
+                    {# ⚠️ ما عادش 5 نجوم افتراضية: الزبون لازم يختار بنفسو،
+                       وإلا نجمعو تقييمات 5 نجوم غلط كي ينسى. #}
+                    <div class="star-picker" id="starPicker" data-rating-picker>
+                        {% for i in range(5, 0, -1) %}
+                        <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}" {{ 'required' if loop.first }}>
+                        <label for="star{{ i }}" title="{{ i }} نجوم">★</label>
+                        {% endfor %}
+                    </div>
+                    <p class="rv-pick-hint" data-rating-hint aria-live="polite">
+                        اختار عدد النجوم — <strong>5 نجوم</strong> هي الأحسن
+                    </p>
+                </div>
+
+                <label class="field">
+                    <span>رأيك (اختياري)</span>
+                    <textarea name="comment" rows="3" maxlength="1000" placeholder="واش عجبك فهاد المنتج؟"></textarea>
+                </label>
+
+                <button type="submit" class="btn-primary">أرسل التقييم</button>
+                <p class="hint">يبان بعد المراجعة.</p>
+            </form>
+        </details>
+    </div>
+</section>
+
+{% if related %}
+<section class="related-section">
+    <div class="container">
+        <h2 class="section-heading">منتجات قد تعجبك</h2>
+        <div class="product-grid">
+            {% for p in related %}
+            <a href="{{ url_for('shop.product_detail', slug=p.slug) }}" class="product-card">
+                <div class="product-card-image ph-{{ loop.index0 % 4 }}">
+                    {% if p.image_filename %}
+                        <img src="{{ url_for('static', filename='img/products/' + p.image_filename) }}" alt="{{ p.name }}" loading="lazy">
+                    {% else %}
+                        <span class="ph-monogram">{{ p.name[0] }}</span>
+                    {% endif %}
+                    {% if p.has_discount %}<span class="badge-offer">-{{ p.discount_percent }}%</span>{% endif %}
+                </div>
+                <div class="product-card-body">
+                    <h3 class="product-card-name">{{ p.name }}</h3>
+                    <p class="product-card-price">{{ p.price_display }}</p>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+
+<script>
+/**
+ * العروض الجاهزة — اختيار وحدة بيع بدل الشراء بالحبة.
+ *
+ * ⚠️ العرض هنا **للواجهة فقط**. السعر النهائي يتحسب فالسيرفر عند
+ * الإضافة للسلة — بلا هذا، أي واحد يبدّل السعر من أدوات المطوّر.
+ */
+(function () {
+    'use strict';
+
+    var box = document.getElementById('packsBox');
+    var list = document.getElementById('packsList');
+    var packInput = document.getElementById('selectedPackId');
+    var qtyInput = document.getElementById('qtyInput');
+
+    if (!box || !list || !packInput) return;
+
+    function money(n) {
+        return Number(n).toLocaleString('en-US') + ' دج';
+    }
+
+    /** يرسم عروض الموديل المختار */
+    function render(chip) {
+        var packs = [];
+        try {
+            packs = JSON.parse((chip && chip.getAttribute('data-packs')) || '[]');
+        } catch (e) { packs = []; }
+
+        // ⚠️ نصفّرو الاختيار كي يتبدّل الموديل — عرض موديل آخر
+        // ما ينفعش لهاد الموديل
+        packInput.value = '';
+
+        if (!packs.length) {
+            box.hidden = true;
+            list.innerHTML = '';
+            return;
+        }
+
+        list.innerHTML = packs.map(function (p) {
+            var perUnit = p.quantity > 1
+                ? '<span class="pack-unit">' + money(p.unit_price) + ' للوحدة</span>'
+                : '';
+            return '<button type="button" class="pack-opt" data-pack="' + p.id + '"' +
+                   ' data-qty="' + p.quantity + '">' +
+                       '<span class="pack-opt-name">' + escapeHtml(p.full_label) + '</span>' +
+                       '<span class="pack-opt-price">' + money(p.price) + '</span>' +
+                       perUnit +
+                   '</button>';
+        }).join('');
+
+        box.hidden = false;
+    }
+
+    function escapeHtml(text) {
+        var d = document.createElement('div');
+        d.textContent = text == null ? '' : text;
+        return d.innerHTML;
+    }
+
+    list.addEventListener('click', function (e) {
+        var btn = e.target.closest('.pack-opt');
+        if (!btn) return;
+
+        var alreadyOn = btn.classList.contains('is-on');
+
+        list.querySelectorAll('.pack-opt').forEach(function (b) {
+            b.classList.remove('is-on');
+        });
+
+        if (alreadyOn) {
+            // ضغطة ثانية = إلغاء الاختيار، يرجع للشراء بالحبة
+            packInput.value = '';
+            return;
+        }
+
+        btn.classList.add('is-on');
+        packInput.value = btn.dataset.pack;
+
+        // العرض وحدة بيع كاملة — الكمية ترجع 1
+        if (qtyInput) qtyInput.value = 1;
+    });
+
+    // نعاودو الرسم كي يتبدّل الموديل
+    document.addEventListener('click', function (e) {
+        var chip = e.target.closest('[data-packs]');
+        if (chip) setTimeout(function () { render(chip); }, 0);
+    });
+
+    // 🔴 الصنف الحقيقي فالقالب هو `is-active` ماشي `is-selected` —
+    // بلا هاد التصحيح، العروض تتعرض دايمًا لأول موديل فالقائمة.
+    render(document.querySelector('[data-packs].is-active')
+           || document.querySelector('[data-packs]'));
+})();
+</script>
+
+
+<script>
+/**
+ * شريط الطلب الثابت.
+ *
+ * ⚠️ قرارات:
+ *   • يختفي كي يبان زر الشراء الحقيقي — ما نعرضوش نفس الزر مرتين
+ *   • السعر يتحدّث مع الموديل والكمية والعرض المختار
+ *   • الضغط يرجّع الزبون لمنطقة الشراء بدل ما يضيف مباشرة —
+ *     باش يختار الموديل والكمية بوعي، ماشي بالغلط
+ */
+(function () {
+    'use strict';
+
+    var bar = document.getElementById('buyBar');
+    var form = document.querySelector('.add-to-cart-form');
+    if (!bar || !form) return;
+
+    var btn = document.getElementById('buyBarBtn');
+    var priceEl = document.getElementById('buyBarPrice');
+    var submitBtn = form.querySelector('button[type="submit"]');
+
+    // ---------- الظهور ----------
+    if ('IntersectionObserver' in window) {
+        new IntersectionObserver(function (entries) {
+            bar.hidden = entries[0].isIntersecting;
+        }, { threshold: 0.4 }).observe(form);
+    } else {
+        bar.hidden = false;   // متصفح قديم — نخليوه بان دايمًا
+    }
+
+    // ---------- الضغط ----------
+    btn.addEventListener('click', function () {
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // ⚠️ لمسة بصرية تدلّ الزبون وين يكمّل — بلاها يوصل ويحتار
+        submitBtn.classList.add('is-pulsing');
+        setTimeout(function () {
+            submitBtn.classList.remove('is-pulsing');
+        }, 1400);
+    });
+
+    // ---------- تحديث السعر ----------
+    /**
+     * 🔴 إصلاح: كان يدوّر على `livePrice` و`.price-current` — **الاثنين
+     * ماكانوش موجودين فالصفحة**. النتيجة: الشريط يبقى بسعر المنتج
+     * الأصلي حتى إذا الزبون بدّل الموديل ولا الكمية ولا اختار عرضًا.
+     * العنصر الصحيح هو `liveSum` (المجموع الحيّ).
+     */
+    var liveSumEl = document.getElementById('liveSum');
+
+    function refresh() {
+        if (!priceEl || !liveSumEl) return;
+        var text = liveSumEl.textContent.trim();
+        if (text) priceEl.textContent = text;
+    }
+
+    refresh();   // الحالة الأولى: سعر الموديل الافتراضي
+
+    form.addEventListener('change', function () { setTimeout(refresh, 60); });
+    form.addEventListener('input', function () { setTimeout(refresh, 60); });
+
+    // تبديل الموديل يعيد حساب الإجمالي — نتبعوه كذلك
+    document.querySelectorAll('.variant-chip').forEach(function (c) {
+        c.addEventListener('click', function () { setTimeout(refresh, 80); });
+    });
+
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('[data-packs], .pack-opt, .qty-btn')) {
+            setTimeout(refresh, 80);
+        }
+    });
+
+    refresh();
+})();
+</script>
+
+{% if product.is_in_stock %}
+{# ═══════ شريط الطلب الثابت (موبايل) ═══════
+   ⚠️ الزبون ينزل يقرا الوصف والتقييمات، وباش يطلب لازم يرجع لفوق.
+   هاد الشريط يخليه يطلب من أي مكان. يختفي كي يكون زر الشراء بان
+   فالشاشة — ما نكرّروش نفس الزر مرتين. #}
+<div class="buy-bar" id="buyBar" hidden>
+    <div class="buy-bar-info">
+        <span class="buy-bar-price" id="buyBarPrice">{{ product.price_display }}</span>
+        <span class="buy-bar-name">{{ product.name }}</span>
+    </div>
+    <button type="button" class="buy-bar-btn" id="buyBarBtn">اطلب درك</button>
+</div>
+{% endif %}
+
+
+<script>
+/**
+ * الإجمالي الحيّ — سعر الحبة × الكمية، مع احتساب التدرّج والعرض الجاهز.
+ *
+ * ⚠️ الحساب هنا **للعرض فقط**. السيرفر يعاود يحسبو عند الإضافة للسلة،
+ * فما يقدرش حد يبدّل السعر من المتصفح.
+ */
+(function () {
+    'use strict';
+
+    var box = document.getElementById('liveTotal');
+    var qty = document.getElementById('qtyInput');
+    if (!box || !qty) return;
+
+    var unitEl = document.getElementById('liveUnit');
+    var sumEl = document.getElementById('liveSum');
+    var noteEl = document.getElementById('liveNote');
+    var packInput = document.getElementById('selectedPackId');
+    var basePrice = {{ product.display_price }};
+
+    // ⚠️ لازم يكونو فنفس نطاق refresh() — كانو فـIIFE أخرى
+    // والصفحة تطيح بـ"unitLabelEl is not defined".
+    //
+    // ⚠️ نقراو النصوص من الـDOM ماشي نحقنو تعابير Jinja داخل
+    // تنصيص JS: تعبير وسط نص يكسر مُحلّل اختبار الجافاسكريبت،
+    // والقيمة موجودة أصلاً فالصفحة.
+    var unitLabelEl = document.getElementById('liveUnitLabel');
+    var UNIT_LABEL_DEFAULT = unitLabelEl ? unitLabelEl.textContent : '';
+    var UNIT_AFTER_NUMBER = 'لكل ' +
+        ((unitLabelEl && unitLabelEl.getAttribute('data-unit')) || '');
+
+    function money(n) {
+        return Number(n).toLocaleString('en-US') + ' دج';
+    }
+
+    /** الموديل المختار حاليًا */
+    function currentChip() {
+        // 🔴 نفس الخلل: `is-selected` ما كانش موجودًا، فالإجمالي الحيّ
+        // كان يحسب دايمًا بأول موديل بدل المختار.
+        return document.querySelector('[data-tiers].is-active')
+            || document.querySelector('[data-tiers]');
+    }
+
+    function parseAttr(chip, name) {
+        try { return JSON.parse(chip.getAttribute(name) || '[]'); }
+        catch (e) { return []; }
+    }
+
+    function refresh() {
+        var n = Math.max(1, parseInt(qty.value, 10) || 1);
+        var chip = currentChip();
+
+        // ---------- عرض جاهز مختار ----------
+        var packId = packInput ? packInput.value : '';
+        if (packId && chip) {
+            var pack = parseAttr(chip, 'data-packs').filter(function (p) {
+                return String(p.id) === String(packId);
+            })[0];
+
+            if (pack) {
+                // ⚠️ العنوان **لازم** يتبدّل هنا: pack.price هو سعر
+                // العرض كامل (رولو 50 متر = 600 دج)، ماشي سعر المتر.
+                // بلا هاد السطر، الصندوق يقول «سعر المتر: 600 دج».
+                if (unitLabelEl) unitLabelEl.textContent = 'سعر العرض';
+
+                unitEl.textContent = money(pack.price);
+                sumEl.textContent = money(pack.price * n);
+
+                // ونوريو سعر الوحدة الحقيقي — هو اللي يبيّن الربح
+                var per = pack.unit_price
+                    || (pack.quantity ? pack.price / pack.quantity : null);
+                noteEl.textContent = (per && pack.quantity > 1)
+                    ? '🎁 ' + pack.full_label + ' — ' + money(Math.round(per))
+                      + ' ' + UNIT_AFTER_NUMBER
+                    : '🎁 ' + pack.full_label;
+                noteEl.hidden = false;
+                return;
+            }
+        }
+
+        // ---------- سعر الحبة (مع التدرّج) ----------
+        // ⚠️ نرجّعو العنوان: الزبون يقدر يلغي العرض ويرجع للسعر
+        // بالوحدة، والعنوان لازم يتبع.
+        if (unitLabelEl) unitLabelEl.textContent = UNIT_LABEL_DEFAULT;
+
+        var unit = basePrice;
+        if (chip && chip.dataset.price) unit = Number(chip.dataset.price) || unit;
+
+        var applied = null;
+        if (chip) {
+            parseAttr(chip, 'data-tiers').forEach(function (t) {
+                var okMin = n >= t.min;
+                var okMax = (t.max === null || t.max === undefined) || n <= t.max;
+                if (okMin && okMax) { unit = t.price; applied = t; }
+            });
+        }
+
+        unitEl.textContent = money(unit);
+        sumEl.textContent = money(unit * n);
+
+        if (applied) {
+            var saved = (basePrice - unit) * n;
+            noteEl.textContent = saved > 0
+                ? '📦 سعر الجملة (' + applied.range + ') — ربحت ' + money(saved)
+                : '📦 سعر الجملة (' + applied.range + ')';
+            noteEl.hidden = false;
+        } else {
+            noteEl.hidden = true;
+        }
+    }
+
+    qty.addEventListener('input', refresh);
+    qty.addEventListener('change', refresh);
+
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('.qty-btn, [data-tiers], .pack-opt')) {
+            setTimeout(refresh, 40);
+        }
+    });
+
+    refresh();
+})();
+</script>
+{% endblock %}

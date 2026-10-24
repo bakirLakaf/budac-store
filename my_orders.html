@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}طلبياتي — {{ store_name }}{% endblock %}
+{% block meta_description %}تابع طلبياتك من {{ store_name }} — وين وصلت، وعدّلها قبل ما تخرج للتوصيل.{% endblock %}
+
+{% block content %}
+
+<section class="my-orders">
+    <h1 class="page-heading">طلبياتي</h1>
+    <p class="page-sub">تابع طلبياتك وشوف وين وصلت.</p>
+
+    {# ═══════ إضافة طلبية ═══════
+       ⚠️ ماكانش حسابات فالمتجر. رقم الطلبية + الهاتف معًا هما
+       المفتاح — الاثنين لازمين باش حد ما يتصفحش طلبيات الناس. #}
+    <form class="mo-lookup" id="lookupForm">
+        <p class="mo-lookup-title">زيد طلبية</p>
+
+        <div class="mo-lookup-row">
+            <label class="mo-field">
+                <span>رقم الطلبية</span>
+                <input type="text" id="orderNumber" required
+                       placeholder="BD-123456" dir="ltr" autocomplete="off">
+            </label>
+
+            <label class="mo-field">
+                <span>رقم الهاتف</span>
+                <input type="tel" id="orderPhone" required
+                       placeholder="0555 55 55 55" dir="ltr"
+                       autocomplete="tel" inputmode="numeric">
+            </label>
+        </div>
+
+        <button type="submit" class="btn-primary" id="lookupBtn">شوف الطلبية</button>
+        <p class="mo-msg" id="lookupMsg" role="status"></p>
+    </form>
+
+    {# ═══════ قائمة الطلبيات ═══════ #}
+    <div id="ordersHost"></div>
+
+    <div class="mo-empty" id="emptyBox">
+        <p>ماكانش طلبيات محفوظة على هاد الجهاز.</p>
+        <p class="hint">زيد رقم طلبيتك فوق باش تتابعها.</p>
+    </div>
+</section>
+
+<script>
+(function () {
+    'use strict';
+
+    /* ══════════════════════════════════════════════════════════
+       ⚠️ التخزين المحلي يحفظ **المفاتيح برك** (رقم الطلبية والهاتف)،
+       ماشي المعلومات. كل مرة نجيبو التفاصيل من السيرفر — هكذا الحالة
+       تبقى صحيحة، والمتصفح ما يعطيش صلاحية لحد.
+       ══════════════════════════════════════════════════════════ */
+
+    var KEY = 'budac_orders';
+
+    var host = document.getElementById('ordersHost');
+    var empty = document.getElementById('emptyBox');
+    var form = document.getElementById('lookupForm');
+    var msg = document.getElementById('lookupMsg');
+    var btn = document.getElementById('lookupBtn');
+
+    if (!host || !form) return;
+
+    function saved() {
+        try {
+            var raw = localStorage.getItem(KEY);
+            var list = raw ? JSON.parse(raw) : [];
+            return Array.isArray(list) ? list : [];
+        } catch (e) {
+            // التخزين معطّل (تصفح خاص) — نكملو بلا حفظ
+            return [];
+        }
+    }
+
+    function save(list) {
+        try {
+            localStorage.setItem(KEY, JSON.stringify(list.slice(0, 30)));
+        } catch (e) {
+            /* ماكانش تخزين — الصفحة تبقى تخدم للجلسة الحالية */
+        }
+    }
+
+    function remember(number, phone) {
+        var list = saved().filter(function (o) { return o.n !== number; });
+        list.unshift({ n: number, p: phone });
+        save(list);
+    }
+
+    function forget(number) {
+        save(saved().filter(function (o) { return o.n !== number; }));
+    }
+
+    function esc(text) {
+        var d = document.createElement('div');
+        d.textContent = text == null ? '' : text;
+        return d.innerHTML;
+    }
+
+    function csrf() {
+        // ⚠️ صفحات المتجر ما فيهاش `input[name=csrf_token]` — الرمز
+        // فـ<meta> فالرأس. قراءتو من input يرجّع فراغًا وكل الطلبات
+        // ترجع 400.
+        var el = document.querySelector('meta[name="csrf-token"]');
+        return el ? el.getAttribute('content') : '';
+    }
+
+    function post(url, data) {
+        var body = new FormData();
+        Object.keys(data).forEach(function (k) { body.append(k, data[k]); });
+        body.append('csrf_token', csrf());
+        return fetch(url, { method: 'POST', body: body })
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    return { ok: r.ok, data: d };
+                });
+            });
+    }
+
+    /* ---------- بناء بطاقة طلبية ---------- */
+    function card(o, phone) {
+        var steps = (o.steps || []).map(function (s) {
+            var cls = s.done ? 'is-done' : (s.active ? 'is-active' : '');
+            return '<li class="mo-step ' + cls + '">'
+                 + '<span class="mo-dot"></span>'
+                 + '<span class="mo-step-label">' + esc(s.label) + '</span>'
+                 + '</li>';
+        }).join('');
+
+        var items = (o.items || []).map(function (it) {
+            var v = it.variant ? ' <small>(' + esc(it.variant) + ')</small>' : '';
+            return '<li><span>' + esc(it.name) + v + ' × ' + it.quantity
+                 + '</span><strong>' + esc(it.total) + '</strong></li>';
+        }).join('');
+
+        var track = o.tracking
+            ? '<div class="mo-row"><span>رقم التتبّع</span>'
+              + '<strong dir="ltr">' + esc(o.tracking) + '</strong></div>'
+            : '';
+
+        var progress = steps
+            ? '<ul class="mo-steps">' + steps + '</ul>'
+            : '<p class="mo-cancelled">'
+              + (o.status === 'returned'
+                 ? 'هاد الطلبية رجعت لينا. تواصل معانا باش نعاودو نبعثوها.'
+                 : 'هاد الطلبية اتلغت.')
+              + '</p>';
+
+        var actions = o.can_edit
+            ? '<div class="mo-actions">'
+              + '<button type="button" class="btn-ghost" data-note="' + esc(o.number) + '">'
+              + '✏️ نحب نبدّل شي حاجة</button>'
+              + '<button type="button" class="btn-ghost mo-danger" data-cancel="' + esc(o.number) + '">'
+              + 'ألغي الطلبية</button>'
+              + '</div>'
+            : '<p class="hint mo-locked">🔒 الطلبية خرجت للتوصيل — '
+              + 'إذا حبيت تبدّل شي حاجة، تواصل معانا فالواتساب.</p>';
+
+        return ''
+          + '<article class="mo-card" data-order="' + esc(o.number) + '" '
+          + 'data-phone="' + esc(phone) + '">'
+          + '  <div class="mo-card-top">'
+          + '    <strong class="mo-num" dir="ltr">' + esc(o.number) + '</strong>'
+          + '    <span class="status-pill status-' + esc(o.status) + '">'
+          +        esc(o.status_label) + '</span>'
+          + '    <button type="button" class="mo-remove" data-forget="' + esc(o.number) + '" '
+          + '            title="حيّدها من هاد الجهاز">×</button>'
+          + '  </div>'
+          + progress
+          + '  <ul class="mo-items">' + items + '</ul>'
+          + '  <div class="mo-row"><span>' + esc(o.delivery) + '</span>'
+          + '       <strong>' + esc(o.wilaya) + '</strong></div>'
+          + track
+          + '  <div class="mo-row mo-total"><span>المجموع</span>'
+          + '       <strong>' + esc(o.total) + '</strong></div>'
+          + actions
+          + '  <p class="mo-card-msg" role="status"></p>'
+          + '</article>';
+    }
+
+    /* ---------- تحميل كل الطلبيات المحفوظة ---------- */
+    function refresh() {
+        var list = saved();
+        host.innerHTML = '';
+
+        if (!list.length) {
+            empty.hidden = false;
+            return;
+        }
+        empty.hidden = true;
+
+        list.forEach(function (entry) {
+            post('{{ url_for("cart.my_orders_lookup") }}',
+                 { order_number: entry.n, phone: entry.p })
+                .then(function (res) {
+                    if (!res.ok || !res.data.ok) {
+                        // الطلبية ما بقاتش — نحيّدوها بدل ما نخلّو بطاقة ميتة
+                        forget(entry.n);
+                        return;
+                    }
+                    host.insertAdjacentHTML('beforeend',
+                                            card(res.data.order, entry.p));
+                })
+                .catch(function () { /* الشبكة — نتجاهلو بهدوء */ });
+        });
+    }
+
+    /* ---------- إضافة طلبية ---------- */
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        var number = document.getElementById('orderNumber').value.trim().toUpperCase();
+        var phone = document.getElementById('orderPhone').value.trim();
+
+        if (!number || !phone) {
+            msg.textContent = 'عمّر الخانتين';
+            msg.className = 'mo-msg is-bad';
+            return;
+        }
+
+        btn.disabled = true;
+        msg.textContent = 'نقلّبو...';
+        msg.className = 'mo-msg';
+
+        post('{{ url_for("cart.my_orders_lookup") }}',
+             { order_number: number, phone: phone })
+            .then(function (res) {
+                btn.disabled = false;
+                if (!res.ok || !res.data.ok) {
+                    msg.textContent = res.data.message || 'ما لقيناش الطلبية';
+                    msg.className = 'mo-msg is-bad';
+                    return;
+                }
+                remember(number, phone);
+                msg.textContent = '✅ اتزادت';
+                msg.className = 'mo-msg is-ok';
+                form.reset();
+                refresh();
+            })
+            .catch(function () {
+                btn.disabled = false;
+                msg.textContent = 'ماكانش اتصال — عاود';
+                msg.className = 'mo-msg is-bad';
+            });
+    });
+
+    /* ---------- أزرار البطاقة ---------- */
+    document.addEventListener('click', function (e) {
+        var card_ = e.target.closest('.mo-card');
+
+        var forgetBtn = e.target.closest('[data-forget]');
+        if (forgetBtn) {
+            forget(forgetBtn.dataset.forget);
+            refresh();
+            return;
+        }
+
+        if (!card_) return;
+        var out = card_.querySelector('.mo-card-msg');
+        var number = card_.dataset.order;
+        var phone = card_.dataset.phone;
+
+        var cancelBtn = e.target.closest('[data-cancel]');
+        if (cancelBtn) {
+            if (!confirm('متأكد حبيت تلغي الطلبية ' + number + '؟')) return;
+            out.textContent = '...';
+            post('/my-orders/' + encodeURIComponent(number) + '/cancel',
+                 { phone: phone })
+                .then(function (res) {
+                    out.textContent = res.data.message || '';
+                    out.className = 'mo-card-msg ' + (res.data.ok ? 'is-ok' : 'is-bad');
+                    if (res.data.ok) setTimeout(refresh, 900);
+                });
+            return;
+        }
+
+        var noteBtn = e.target.closest('[data-note]');
+        if (noteBtn) {
+            var note = prompt('واش تحب تبدّل؟ (زيادة، نقصان، تبديل موديل...)');
+            if (!note) return;
+            out.textContent = '...';
+            post('/my-orders/' + encodeURIComponent(number) + '/note',
+                 { phone: phone, note: note })
+                .then(function (res) {
+                    out.textContent = res.data.message || '';
+                    out.className = 'mo-card-msg ' + (res.data.ok ? 'is-ok' : 'is-bad');
+                });
+        }
+    });
+
+    refresh();
+})();
+</script>
+
+{% endblock %}

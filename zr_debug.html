@@ -1,0 +1,476 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">تشخيص ZR — {{ order.order_number }}</h1>
+
+{% if diag_error %}
+{# ⚠️ نداء تشخيصي طاح — نوريو السبب بدل ما نخبّيوه ولا ننهارو #}
+<div class="lp-errors" style="background:#FDEBDA;border:1px solid #E8C9A8;
+     padding:12px 16px;border-radius:12px;margin-bottom:14px;">
+    <strong>⚠️ نداء تشخيصي ما كملش:</strong>
+    <code dir="ltr" style="font-size:12px;">{{ diag_error }}</code>
+</div>
+{% endif %}
+
+<p style="margin: -8px 0 16px;">
+    <a href="{{ url_for('admin.order_detail', order_id=order.id) }}">← رجوع للطلبية</a>
+</p>
+
+{# ═════ زر واحد يشغّل كل الفحوصات ═════
+   كانو 5 أزرار منفصلة، والأدمن يضغطهم وحدة بوحدة وينسى وحدة فيهم.
+   هاد الزر يشعّلهم كامل مرة وحدة. كلهم **قراءة برك** — ما يبدّلو
+   والو لا عندنا لا عند ZR. #}
+<div class="zr-run">
+    {% if diagnose_all %}
+        <span class="zr-run-done">✓ الفحص الكامل اتشغّل — النتائج تحت</span>
+        <a href="{{ url_for('admin.order_zr_debug', order_id=order.id) }}"
+           class="btn-admin btn-sm btn-ghost">أخفِ النتائج</a>
+    {% else %}
+        <a href="{{ url_for('admin.order_zr_debug', order_id=order.id, all=1) }}"
+           class="btn-admin">🔍 شخّص كل شي</a>
+        <span class="hint">
+            يفحص المنطقة · المكاتب · مخطط الـAPI · المسارات · أنواع المناطق —
+            كلو قراءة، ما يبدّل والو.
+        </span>
+    {% endif %}
+
+    {# ⚠️ التقرير مبني فالسيرفر ماشي منسوخ من الصفحة: نسخ من الصفحة
+       يجيب المعروض برك — الجداول تتشوّه والأقسام المطوية ما تتنسخش. #}
+    <button type="button" class="btn-admin btn-sm" id="zrCopyBtn">📋 انسخ التقرير</button>
+</div>
+
+<textarea id="zrReport" hidden aria-hidden="true">{{ report }}</textarea>
+
+<!-- ═════ 1. الإعدادات ═════ -->
+<h2 class="form-section-title">1. الإعدادات</h2>
+<table class="admin-table">
+    <tbody>
+        <tr>
+            <td>نسخة الكود الشغّالة</td>
+            <td>
+                <strong style="font-size:17px;color:#2E1A47;">{{ app_version }}</strong>
+                <br><small class="muted">{{ build_note }}</small>
+            </td>
+        </tr>
+        <tr>
+            <td>المفاتيح</td>
+            <td>
+                {% if config_ok %}
+                    <strong style="color:#4E7C59">✓ معمّرة</strong>
+                {% else %}
+                    <strong style="color:#B4453E">✗ ناقصة</strong>
+                    — حط <code>ZR_TENANT_ID</code> و <code>ZR_API_KEY</code> فمتغيرات Railway
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td>رابط الـAPI</td>
+            <td><code dir="ltr">{{ base_url }}</code></td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ═════ 2. الفحص المحلي ═════ -->
+<h2 class="form-section-title">2. الفحص المحلي</h2>
+{% if problems %}
+<div class="lp-errors" style="background:#FDECEA;border:1px solid #F3C9C4;padding:14px 18px;border-radius:12px;">
+    <strong>مشاكل لازم تتصلّح قبل الإرسال:</strong>
+    <ul style="margin:8px 0 0;padding-inline-start:20px;">
+        {% for p in problems %}<li>{{ p }}</li>{% endfor %}
+    </ul>
+</div>
+{% else %}
+<p style="color:#4E7C59;font-weight:600;">✓ بيانات الطلبية سليمة من جهتنا</p>
+{% endif %}
+
+<!-- ═════ 3. الـpayload ═════ -->
+<h2 class="form-section-title">3. واش نبعثو لـZR</h2>
+{% if build_error %}
+<p style="color:#B4453E;">ما قدرناش نبنيو الطلب: {{ build_error }}</p>
+{% else %}
+<pre class="zr-code" dir="ltr">{{ preview }}</pre>
+
+{% if 'territoryId' in preview %}
+<p style="color:#4E7C59;font-weight:600;">✓ معرّف الوجهة (territoryId) موجود</p>
+{% else %}
+<div class="lp-errors" style="background:#FFF6E5;border:1px solid #E8D9A8;padding:14px 18px;border-radius:12px;">
+    <strong>⚠️ ماكانش <code>territoryId</code></strong>
+    <p style="margin:6px 0 0;font-size:14px;">
+        ZR يحدّد الوجهة بهاد المعرّف، ماشي بأسماء الولاية والبلدية.
+        بلاه يرد بـ400 <b>بلا أي رسالة</b> — بالضبط اللي شفتو.
+        <br>زر التجربة تحت يدوّر عليه تلقائيًا من مناطق ZR ويحفظو.
+    </p>
+</div>
+{% endif %}
+{% endif %}
+
+<!-- ═════ 3ب. تشخيص معرّف الوجهة ═════ -->
+{% if territory_diag %}
+<h2 class="form-section-title">3ب. علاش ما لقيناش المعرّف</h2>
+
+{% if territory_diag.error %}
+<p style="color:#B4453E;font-weight:600;">🔴 {{ territory_diag.error }}</p>
+{% endif %}
+
+<table class="admin-table">
+    <tbody>
+        <tr>
+            <td>مناطق وصلتنا من ZR</td>
+            <td>
+                <strong>{{ territory_diag.total_territories }}</strong>
+                — منها <strong>{{ territory_diag.unique_ids }}</strong> فريدة
+                {% if territory_diag.unique_ids < territory_diag.total_territories %}
+                <br><small style="color:#B4453E">⚠️ فيه تكرار — ZR يتجاهل الترقيم</small>
+                {% endif %}
+            </td>
+        </tr>
+        <tr><td>منها من نوع commune</td><td><strong>{{ territory_diag.commune_level }}</strong></td></tr>
+        <tr><td>حجم الفهرس</td><td>{{ territory_diag.index_size }}</td></tr>
+        <tr>
+            <td>ولاية {{ territory_diag.wilaya_code }} موجودة؟</td>
+            <td>
+                {% if territory_diag.wilaya_found %}
+                <strong style="color:#4E7C59">✓ نعم — {{ territory_diag.wilaya_communes|length }} بلدية</strong>
+                {% else %}
+                <strong style="color:#B4453E">✗ لا — ZR ما عندوش مناطق بهاد الرمز</strong>
+                {% endif %}
+            </td>
+        </tr>
+        <tr><td>نبحثو على</td><td><code>{{ territory_diag.normalized }}</code></td></tr>
+        <tr>
+            <td>النتيجة</td>
+            <td>
+                {% if territory_diag.match %}
+                <strong style="color:#4E7C59">✓ {{ territory_diag.match }}</strong>
+                {% else %}
+                <strong style="color:#B4453E">✗ ما لقيناهش</strong>
+                {% endif %}
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+{% if territory_diag.search_attempts %}
+<p style="margin-top:14px;"><strong>محاولات البحث المباشر:</strong></p>
+<table class="admin-table">
+    <tbody>
+    {% for a in territory_diag.search_attempts %}
+        <tr>
+            <td><code>{{ a.key or '—' }}</code></td>
+            <td>
+                {% if a.error %}<span style="color:#B4453E">{{ a.error }}</span>
+                {% elif a.matched %}<strong style="color:#4E7C59">✓ لقيناها ({{ a.count }} نتيجة)</strong>
+                {% else %}{{ a.count }} نتيجة — ماكانش تطابق{% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if territory_diag.suggestions %}
+<p style="margin-top:12px;"><strong>أسماء قريبة عند ZR:</strong></p>
+<pre class="zr-code">{{ territory_diag.suggestions | join('\n') }}</pre>
+{% endif %}
+
+{% if territory_diag.wilaya_communes %}
+<details style="margin-top:12px;">
+    <summary style="cursor:pointer;font-weight:700;">
+        شوف أسماء بلديات هاد الولاية كيما هي عند ZR
+        ({{ territory_diag.wilaya_communes|length }})
+    </summary>
+    <pre class="zr-code">{{ territory_diag.wilaya_communes | join('\n') }}</pre>
+</details>
+{% endif %}
+
+{% else %}
+{# زر «شخّص كل شي» فوق يشغّل هاد الفحص — ما نكرّروش الزر هنا. #}
+<p style="margin-top:14px;">
+    <small class="muted">دوس <b>«🔍 شخّص كل شي»</b> فوق الصفحة باش تعرف السبب.</small>
+</p>
+{% endif %}
+
+<!-- ═════ 3و. تجهيز ZR ═════ -->
+<h2 class="form-section-title">3و. تجهيز ZR (الزبون والمنتج)</h2>
+
+<p class="hint hint-block">
+    ZR ماشي صندوق بريد ياخذ أي بيانات: الطرد لازم يشير لـ<b>زبون
+    موجود</b> فحسابهم و<b>منتج موجود</b> فكتالوجهم
+    (<code dir="ltr">CustomerId is required</code> ·
+    <code dir="ltr">ProductId must be a valid GUID</code>).
+    <br>هاد الزر يجهّزهم مرة وحدة — المنتج العام «أكسسوارات» للمتجر
+    كامل، والزبون حسب الطلبية.
+</p>
+
+<form method="post" action="{{ url_for('admin.order_zr_prepare', order_id=order.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn-admin">⚙️ جهّز الزبون والمنتج</button>
+</form>
+
+<!-- ═════ 3ج. أدوات خطيرة — مطوية قصدًا ═════ -->
+{# ⚠️ هاد الأزرار **تنشئ طرود حقيقية** عند ZR. ما دخلوش فزر
+   «شخّص كل شي»، ومطويين باش ما تنضغطش وحدة منهم بالغلط.
+   ضغطة وحدة على «جرّب كل الأشكال» تقدر تولّد عدة طرود. #}
+<details class="zr-danger">
+    <summary>⚠️ أدوات متقدمة — تنشئ طرود حقيقية عند ZR</summary>
+    <div class="zr-danger-body">
+
+<h2 class="form-section-title">3ج. مختبر الإرسال</h2>
+
+<p class="hint hint-block">
+    ZR يرد <b>400 بحجم 0</b> — بلا أي رسالة تقول واش الغالط. بدل ما
+    نبدّلو حقلاً ونستنّاو، هاد المختبر يجرّب الأشكال المحتملة وحدة
+    بوحدة ويوقف <b>عند أول نجاح</b>.
+    <br>⚠️ إذا نجح شكل، الطرد يتنشأ <b>فعلاً</b> عند ZR ونحفظو رقم التتبّع.
+</p>
+
+{% if lab %}
+<table class="admin-table">
+    <thead>
+        <tr><th>الشكل</th><th>الحالة</th><th>الرد</th></tr>
+    </thead>
+    <tbody>
+        {% for a in lab %}
+        <tr>
+            <td>{{ a.label }}</td>
+            <td>
+                <strong style="color:{{ '#4E7C59' if a.ok else '#B4453E' }}">
+                    {{ a.status }}
+                </strong>
+            </td>
+            <td><code dir="ltr" style="font-size:12px;">{{ a.body or '(فارغ)' }}</code></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<form method="post" action="{{ url_for('admin.order_zr_lab', order_id=order.id) }}"
+      style="margin-top:12px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn-admin"
+            onclick="return confirm('نجرّبو عدة أشكال للإرسال؟ إذا نجح واحد، الطرد يتنشأ فعلاً عند ZR.')">
+        🧪 جرّب كل الأشكال
+    </button>
+</form>
+
+<form method="post" action="{{ url_for('admin.order_zr_lab_dims', order_id=order.id) }}"
+      style="margin-top:10px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn-admin"
+            onclick="return confirm('نجرّبو 5 طرود تجريبية بمبلغ 100 دج؟ إذا نجح واحد، امسحو من لوحة ZR.')">
+        🔬 مختبر الأبعاد (طرود تجريبية)
+    </button>
+    <br><small class="muted">
+        يجرّب: توصيل للدار · الحد الأدنى تاع الحقول · بلا territoryId ·
+        مبلغ أكبر · بلا حروف عربية.
+        <b>مبلغ 100 دج ومرجع TEST</b> — إذا نجح واحد، امسحو من عند ZR.
+    </small>
+</form>
+
+
+    </div>
+</details>
+
+<!-- ═════ 3د. استكشاف API ═════ -->
+<h2 class="form-section-title">3د. استكشاف ZR</h2>
+
+<p class="hint hint-block">
+    شكوك مفتوحة: <code>pickupPointId</code> اللي نبعثوه هو <b>اسم</b>
+    المكتب، وZR يستعمل UUID فكل شي آخر. هاذو زران للقراءة برك،
+    ما ينشئو والو.
+</p>
+
+
+
+{% if endpoint_probe %}
+<table class="admin-table">
+    <thead><tr><th>المسار</th><th>الحالة</th><th>الحجم</th><th>الرد</th></tr></thead>
+    <tbody>
+        {% for r in endpoint_probe %}
+        <tr>
+            <td><code dir="ltr">{{ r.path }}</code></td>
+            <td>
+                <strong style="color:{{ '#4E7C59' if r.status == 200 else '#8B8296' }}">
+                    {{ r.status }}
+                </strong>
+            </td>
+            <td>{{ r.size }}</td>
+            <td><code dir="ltr" style="font-size:11px;">{{ r.preview[:120] }}</code></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if levels %}
+<p style="margin-top:12px;"><strong>{{ levels.total }}</strong> منطقة، موزّعين على:</p>
+<ul>
+    {% for name, count in levels.levels.items() %}
+    <li><code dir="ltr">{{ name }}</code> — {{ count }}</li>
+    {% endfor %}
+</ul>
+
+{% for name, items in levels.samples.items() %}
+<p style="margin-top:10px;font-weight:700;">عيّنة من «{{ name }}»:</p>
+<pre class="zr-code" dir="ltr">{{ items | tojson(indent=2) }}</pre>
+{% endfor %}
+{% endif %}
+
+<!-- ═════ 3ه. المكاتب (hubs) ═════ -->
+<h2 class="form-section-title">3ه. مكاتب ZR (hubs)</h2>
+
+<p class="hint hint-block">
+    التوثيق الرسمي ورّى المسار <code dir="ltr">POST /hubs/search</code> —
+    ZR يسمّي المكاتب <b>hubs</b>. جرّبنا 11 اسمًا وما جرّبناش هذا.
+    <br>الأرجح أن <code>pickupPointId</code> يستنّى <b>UUID تاع الـhub</b>
+    ماشي اسمو — وهذا يفسّر الـ400 الفارغ.
+</p>
+
+
+
+{% if hub_match %}
+<p style="margin-top:10px;">
+    {% if hub_match[0] %}
+    <strong style="color:#4E7C59">✓ لقينا معرّف المكتب:</strong>
+    <code dir="ltr">{{ hub_match[0] }}</code>
+    {% else %}
+    <strong style="color:#B4453E">✗ ما لقيناش:</strong> {{ hub_match[1] }}
+    {% endif %}
+</p>
+{% endif %}
+
+{% if hubs %}
+<p style="margin-top:10px;">{{ hubs | length }} مكتب. عيّنة:</p>
+<pre class="zr-code" dir="ltr">{{ hubs[:6] | tojson(indent=2) }}</pre>
+{% endif %}
+
+{% if spec %}
+<p style="margin-top:10px;">
+    {% if spec.found %}
+    <strong style="color:#4E7C59">✓ لقينا المخطط:</strong>
+    <code dir="ltr">{{ spec.found }}</code>
+    {% else %}
+    <strong style="color:#B4453E">✗ ماكانش مخطط منشور</strong>
+    {% endif %}
+</p>
+{% if spec.schema %}
+<pre class="zr-code" dir="ltr">{{ spec.schema | tojson(indent=2) }}</pre>
+{% endif %}
+<pre class="zr-code" dir="ltr">{{ spec.probe | tojson(indent=2) }}</pre>
+{% endif %}
+
+<!-- ═════ 4. آخر رد ═════ -->
+<h2 class="form-section-title">4. آخر رد من ZR</h2>
+{% if last and last.get('status') %}
+<table class="admin-table">
+    <tbody>
+        <tr><td>المسار</td><td><code dir="ltr">{{ last.method }} {{ last.path }}</code></td></tr>
+        <tr>
+            <td>كود الحالة</td>
+            <td>
+                <strong style="color:{{ '#4E7C59' if last.status < 400 else '#B4453E' }}">
+                    {{ last.status }}
+                </strong>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+{% if last.headers %}
+<p style="margin-top:14px;font-weight:700;">رؤوس الرد:</p>
+<pre class="zr-code" dir="ltr">{% for k, v in last.headers.items() %}{{ k }}: {{ v }}
+{% endfor %}حجم المحتوى: {{ last.content_length }} بايت</pre>
+{% endif %}
+
+<p style="margin-top:14px;font-weight:700;">الرد الخام:</p>
+<pre class="zr-code" dir="ltr">{{ last.response or '(فارغ)' }}</pre>
+
+{% if last_payload %}
+<p style="margin-top:14px;font-weight:700;">اللي بعثناه وقتها:</p>
+<pre class="zr-code" dir="ltr">{{ last_payload }}</pre>
+{% endif %}
+
+{% else %}
+<p class="muted">مازال ما بعثنا والو من آخر إعادة تشغيل. اضغط الزر تحت.</p>
+{% endif %}
+
+<details class="zr-danger">
+    <summary>⚠️ إرسال تجريبي — ينشئ طرد حقيقي</summary>
+    <div class="zr-danger-body">
+<!-- ═════ 5. تجربة ═════ -->
+<h2 class="form-section-title">5. جرّب الإرسال</h2>
+<p class="muted" style="font-size:14px;">
+    يبعث فعليًا لـZR ويرجّعك هنا بالرد الكامل.
+    {% if order.tracking_number %}
+    <br>⚠️ هاد الطلبية عندها رقم تتبّع — التجربة ممكن تنشئ طرد مكرر.
+    {% endif %}
+</p>
+
+<form method="post" action="{{ url_for('admin.order_zr_send_test', order_id=order.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn-admin"
+            onclick="return confirm('نبعثو الطلبية لـZR درك؟')">
+        جرّب الإرسال وشوف الرد
+    </button>
+</form>
+    </div>
+</details>
+
+<style>
+    .zr-code {
+        background: #1E1828;
+        color: #E8E2F0;
+        padding: 14px 16px;
+        border-radius: 12px;
+        font-size: 13px;
+        line-height: 1.6;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .form-section-title { margin-top: 28px; }
+</style>
+
+<script>
+(function () {
+    'use strict';
+
+    var btn = document.getElementById('zrCopyBtn');
+    var box = document.getElementById('zrReport');
+    if (!btn || !box) { return; }
+
+    function flash(text) {
+        var old = btn.textContent;
+        btn.textContent = text;
+        setTimeout(function () { btn.textContent = old; }, 2000);
+    }
+
+    /* ⚠️ طريقتين قصدًا: navigator.clipboard يخدم برك فـHTTPS ولا
+       localhost. لو اعتمدنا عليه وحدو، الزر يطيح بصمت فأي حالة
+       أخرى — والأدمن يظن أنو نسخ. */
+    function fallback() {
+        box.hidden = false;
+        box.select();
+        box.setSelectionRange(0, box.value.length);   /* للموبايل */
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        box.hidden = true;
+        return ok;
+    }
+
+    btn.addEventListener('click', function () {
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(box.value).then(
+                function () { flash('✓ اتنسخ'); },
+                function () { flash(fallback() ? '✓ اتنسخ' : '✗ ما نجحش'); }
+            );
+        } else {
+            flash(fallback() ? '✓ اتنسخ' : '✗ ما نجحش');
+        }
+    });
+})();
+</script>
+
+{% endblock %}

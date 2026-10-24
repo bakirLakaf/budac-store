@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+{% from "shop/_spotlight.html" import spotlight_section %}
+
+{% block content %}
+
+{% if spotlight and spotlight.spotlight_position == "top" %}
+{{ spotlight_section(spotlight) }}
+{% endif %}
+
+{% if offers %}
+<section class="hero-slider" id="heroSlider" aria-roledescription="carousel" aria-label="العروض الخاصة">
+    <div class="hero-track" id="heroTrack">
+        {% for offer in offers[:4] %}
+        <article class="hero-slide" data-index="{{ loop.index0 }}">
+            <div class="container hero-slide-inner">
+                <div class="hero-slide-media">
+                    {% if offer.banner_filename %}
+                        <img src="{{ url_for('static', filename='img/offers/' + offer.banner_filename) }}"
+                             alt="{{ offer.title }}" {% if not loop.first %}loading="lazy"{% endif %}>
+                    {% else %}
+                        <div class="hero-media-collage">
+                            {% for item in offer.items[:3] %}
+                                {% if item.product.image_filename %}
+                                <img src="{{ url_for('static', filename='img/products/' + (item.product.image_filename | thumb)) }}"
+                                     alt="" loading="lazy">
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    {% if offer.savings_percent > 0 %}
+                        <span class="hero-save">وفّر {{ offer.savings_percent }}%</span>
+                    {% endif %}
+                </div>
+
+                <div class="hero-slide-text">
+                    <p class="hero-eyebrow">عرض خاص</p>
+                    <h2 class="hero-title">{{ offer.title }}</h2>
+                    {% if offer.subtitle %}<p class="hero-subtitle">{{ offer.subtitle }}</p>{% endif %}
+
+                    <ul class="hero-includes">
+                        {% for item in offer.items[:4] %}
+                        <li>{{ item.product.name }}{% if item.quantity > 1 %} ×{{ item.quantity }}{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+
+                    <p class="hero-price">
+                        <span class="hero-price-now">{{ offer.bundle_price_display }}</span>
+                        {% if offer.savings > 0 %}
+                        <span class="hero-price-was">{{ offer.original_total_display }}</span>
+                        {% endif %}
+                    </p>
+
+                    <a href="{{ url_for('shop.offer_detail', slug=offer.slug) }}" class="btn-primary btn-hero">
+                        اطلب العرض
+                    </a>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+
+    {% if offers|length > 1 %}
+    <div class="hero-controls">
+        <button type="button" class="hero-arrow" data-dir="-1" aria-label="السابق">‹</button>
+        <div class="hero-dots" id="heroDots">
+            {% for offer in offers[:4] %}
+            <button type="button" class="hero-dot {{ 'is-active' if loop.first }}"
+                    data-index="{{ loop.index0 }}" aria-label="عرض {{ loop.index }}"></button>
+            {% endfor %}
+        </div>
+        <button type="button" class="hero-arrow" data-dir="1" aria-label="التالي">›</button>
+    </div>
+    {% endif %}
+</section>
+{% else %}
+<section class="hero">
+    <div class="container hero-inner">
+        <h1 class="hero-title">كل ما تحتاجه من ديكور<br>في مكان واحد</h1>
+        <p class="hero-subtitle">
+            أشرطة المرايا، الإكسسوارات، وكلش اللي تحتاجو للتزيين — بجودة مضمونة
+            وتوصيل لكل ولايات الجزائر
+        </p>
+        <a href="#products" class="btn-primary btn-hero">تصفّح المنتجات</a>
+    </div>
+</section>
+{% endif %}
+
+<div class="trust-bar">
+    <div class="container">
+        <ul class="trust-row">
+            <li>🚚 توصيل 58 ولاية</li>
+            <li>💵 الدفع عند الاستلام</li>
+            <li>⏱️ توصيل خلال 24/48 ساعة</li>
+            <li>✓ جودة مضمونة</li>
+        </ul>
+    </div>
+</div>
+
+{% if delivery_carriers %}
+<section class="carriers-strip" aria-label="شركات التوصيل">
+    <div class="container">
+        <p class="carriers-strip-title">نوصّلو لـ58 ولاية مع</p>
+        <ul class="carriers-strip-cards">
+            {% for c in delivery_carriers %}
+            <li>
+                <a class="carrier-card" href="{{ url_for('shop.shipping_prices') }}"
+                   title="{{ c.name }} — شوف الأسعار">
+                    <span class="carrier-card-logo">
+                        {% if c.logo %}
+                        <img class="carrier-logo carrier-logo-{{ c.code }}"
+                             src="{{ url_for('static', filename=c.logo) }}"
+                             alt="{{ c.name }}" loading="lazy">
+                        {% else %}<span class="carrier-name">{{ c.name }}</span>{% endif %}
+                    </span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</section>
+{% endif %}
+
+{% if offers %}
+<section class="offers-section">
+    <div class="container">
+        <div class="section-head">
+            <h2 class="section-heading" id="offers">عروض خاصة</h2>
+            <p class="section-sub">باقات مختارة بسعر أقل من شرائهم وحدة بوحدة</p>
+        </div>
+
+        <div class="offers-grid">
+            {% for offer in offers %}
+            <a href="{{ url_for('shop.offer_detail', slug=offer.slug) }}" class="offer-card">
+                <div class="offer-card-banner">
+                    {% if offer.banner_filename %}
+                        <img src="{{ url_for('static', filename='img/offers/' + offer.banner_filename) }}" alt="{{ offer.title }}" loading="lazy">
+                    {% else %}
+                        <div class="offer-banner-fallback">
+                            {% for item in offer.items[:3] %}
+                                {% if item.product.image_filename %}
+                                <img src="{{ url_for('static', filename='img/products/' + (item.product.image_filename | thumb)) }}" alt="" loading="lazy">
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    {% if offer.savings_percent > 0 %}
+                        <span class="offer-save-badge">وفّر {{ offer.savings_percent }}%</span>
+                    {% endif %}
+                </div>
+
+                <div class="offer-card-body">
+                    <h3 class="offer-card-title">{{ offer.title }}</h3>
+                    {% if offer.subtitle %}
+                        <p class="offer-card-sub">{{ offer.subtitle }}</p>
+                    {% endif %}
+
+                    <ul class="offer-card-items">
+                        {% for item in offer.items %}
+                        <li>{{ item.product.name }}{% if item.quantity > 1 %} <span class="qty-badge">×{{ item.quantity }}</span>{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+
+                    <p class="offer-card-price">
+                        <span class="offer-price-now">{{ offer.bundle_price_display }}</span>
+                        {% if offer.savings > 0 %}
+                            <span class="offer-price-was">{{ offer.original_total_display }}</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if best_sellers %}
+<section class="strip-section reveal">
+    <div class="container">
+        <div class="section-head section-head-row">
+            <div>
+                <h2 class="section-heading">الأكثر طلبًا</h2>
+                <p class="section-sub">اللي الزبائن يحبّوه</p>
+            </div>
+        </div>
+        <div class="product-grid">
+            {% for p in best_sellers %}
+            {% include "shop/_product_card.html" %}
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if newest %}
+<section class="strip-section strip-newest reveal">
+    <div class="container">
+        <div class="section-head section-head-row">
+            <div>
+                <h2 class="section-heading">وصل حديثًا</h2>
+                <p class="section-sub">آخر ما أضفناه للمتجر</p>
+            </div>
+        </div>
+        <div class="product-grid">
+            {% for p in newest %}
+            {% include "shop/_product_card.html" %}
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if categories %}
+<section class="categories-section categories-mobile reveal" id="categories">
+    <div class="container">
+        <div class="section-head">
+            <h2 class="section-heading">تسوّق حسب التصنيف</h2>
+            <p class="section-sub">صيب اللي تحتاجو بسرعة</p>
+        </div>
+
+        <div class="categories-grid">
+            {# بطاقة "الكل" — تلغي الفلتر. البطاقات كلها تفلتر فورًا بلا
+               إعادة تحميل (شوف site.js). #}
+            <a href="{{ url_for('shop.home') }}" class="category-card category-card-all"
+               data-cat="all">
+                <div class="category-card-image">
+                    <span class="category-mono">✦</span>
+                </div>
+                <span class="category-card-name">كل المنتجات</span>
+                <span class="category-card-arrow" aria-hidden="true">‹</span>
+            </a>
+
+            {% for cat in categories %}
+            <a href="{{ url_for('shop.home', category=cat.slug) }}" class="category-card"
+               data-cat="{{ cat.slug }}">
+                <div class="category-card-image">
+                    {% if cat.image_filename %}
+                        <img src="{{ url_for('static', filename='img/categories/' + (cat.image_filename | thumb)) }}"
+                             alt="{{ cat.name }}" loading="lazy">
+                    {% else %}
+                        <span class="category-mono">{{ cat.name[0] }}</span>
+                    {% endif %}
+                </div>
+                <span class="category-card-name">{{ cat.name }}</span>
+                <span class="category-card-arrow" aria-hidden="true">‹</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="strip-section recently-viewed" id="recentlyViewed" hidden>
+    <div class="container">
+        <div class="section-head section-head-row">
+            <div>
+                <h2 class="section-heading">شفتها مؤخرًا</h2>
+                <p class="section-sub">ارجع للمنتجات اللي عجبتك</p>
+            </div>
+            <button type="button" class="btn-clear-recent" id="clearRecent">مسح</button>
+        </div>
+        <div class="product-grid" id="recentlyViewedGrid"></div>
+    </div>
+</section>
+
+<section class="product-grid-section reveal" id="products">
+    <div class="container shop-layout">
+
+        {# ---------- الشريط الجانبي: يبان فالحاسوب فقط، ويبقى ملتصق عند التمرير ---------- #}
+        {% if categories %}
+        <aside class="shop-sidebar" aria-label="التصنيفات">
+            <div class="shop-sidebar-inner">
+                <h2 class="shop-sidebar-title">التصنيفات</h2>
+                <ul class="shop-sidebar-list">
+                    <li>
+                        <a href="{{ url_for('shop.home') }}"
+                           class="side-cat {{ 'is-active' if not active_category }}"
+                           data-cat="all">
+                            <span class="side-cat-name">كل المنتجات</span>
+                            <span class="side-cat-count">{{ products_total }}</span>
+                        </a>
+                    </li>
+                    {% for cat in categories %}
+                    {# ⚠️ العدد يجي من استعلام GROUP BY واحد، ماشي من عدّ الكتالوج كامل فالقالب #}
+                    {% set cat_count = category_counts.get(cat.slug, 0) %}
+                    <li>
+                        <a href="{{ url_for('shop.home', category=cat.slug) }}"
+                           class="side-cat {{ 'is-active' if active_category == cat.slug }}"
+                           data-cat="{{ cat.slug }}">
+                            <span class="side-cat-name">{{ cat.name }}</span>
+                            <span class="side-cat-count">{{ cat_count }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </aside>
+        {% endif %}
+
+        <div class="shop-main">
+
+            {# ⚠️ العدد يتطبع من السيرفر درك. JavaScript كان يحسبو من
+               البطاقات البانة — وهذا ما يخدمش مع الترقيم: الصفحة فيها
+               9 بطاقات بينما التصنيف فيه 45 منتج. #}
+            {% set shown_total = pagination.total if pagination else products|length %}
+            {% if shown_total %}
+            {# ⚠️ JavaScript يحدّث هاد الرقم عند الفلترة الفورية.
+               السيرفر يطبع القيمة الأولى باش تبان قبل ما يشتغل السكريبت. #}
+            <p class="shop-result-count" id="shopResultCount">
+                {{ shown_total }} منتج
+            </p>
+            {% endif %}
+
+            {% if products %}
+            <div class="product-grid" id="shopGrid"
+                 data-per-page="{{ per_page }}"
+                 data-client-paginated="{{ '1' if client_paginated else '0' }}">
+                {# ⚠️ الترقيم من السيرفر: هاد الشبكة فيها 9 منتجات برك،
+                   ماشي الكتالوج كامل. الفلترة بالتصنيف ولّات كذلك من
+                   السيرفر (روابط عادية) — الفلترة الفورية بـJavaScript
+                   ما تقدرش تخدم كي المنتجات ماشي كلها فالصفحة. #}
+                {% for product in products %}
+                <a href="{{ url_for('shop.product_detail', slug=product.slug) }}"
+                   class="product-card"
+                   data-cat="{{ product.category.slug if product.category else '' }}">
+                    <div class="product-card-image ph-{{ loop.index0 % 4 }}">
+                        {% if product.image_filename %}
+                            <img src="{{ url_for('static', filename='img/products/' + product.image_filename) }}" alt="{{ product.name }}" loading="lazy">
+                        {% else %}
+                            <span class="ph-monogram">{{ (product.name or "؟")[0] }}</span>
+                        {% endif %}
+                        {% if not product.is_in_stock %}
+                            <span class="badge-out">نفذت الكمية</span>
+                        {% elif product.has_discount %}
+                            <span class="badge-offer">-{{ product.discount_percent }}%</span>
+                        {% endif %}
+                    </div>
+                    <div class="product-card-body">
+                        {% if product.category %}
+                            <span class="product-card-cat">{{ product.category.name }}</span>
+                        {% endif %}
+                        <h3 class="product-card-name">{{ product.name }}</h3>
+                        <p class="product-card-price">
+                            {{ product.price_display }}
+                            {% if product.has_discount %}
+                                <span class="price-compare">{{ product.compare_at_price_display }}</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+
+            {# ---------- أرقام الصفحات ---------- #}
+            {#
+              ⚠️ حالتان:
+              1) الكتالوج صغير (الوضع العادي): السيرفر بعث كل المنتجات،
+                 وJavaScript يبني الترقيم ويبدّل الصفحات **فورًا** —
+                 بلا إعادة تحميل وبلا قفزة تمرير.
+              2) الكتالوج ضخم (فوق MAX_CLIENT_PAGINATION): السيرفر
+                 يرجع للترقيم تاعو، والروابط عادية.
+            #}
+            {% if client_paginated %}
+
+            {# يعمّرها JavaScript. تبقى فارغة إذا السكريبت ما حمّلش —
+               وساعتها كل المنتجات بانة، وهذا سلوك سليم ماشي صفحة مكسورة. #}
+            <nav class="pager" id="shopPager" aria-label="صفحات المنتجات" hidden></nav>
+            <p class="pager-info" id="shopPagerInfo" hidden></p>
+
+            {% elif pagination and pagination.pages > 1 %}
+            <nav class="pager" aria-label="صفحات المنتجات">
+                {% if pagination.has_prev %}
+                    <a class="pager-btn" rel="prev" aria-label="الصفحة السابقة"
+                       href="{{ url_for('shop.home', category=active_category, page=pagination.prev_num) }}#products">›</a>
+                {% else %}
+                    <span class="pager-btn is-disabled" aria-hidden="true">›</span>
+                {% endif %}
+
+                {% for num in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
+                    {% if num %}
+                        {% if num == pagination.page %}
+                            <span class="pager-num is-current" aria-current="page">{{ num }}</span>
+                        {% else %}
+                            <a class="pager-num"
+                               href="{{ url_for('shop.home', category=active_category, page=num) }}#products">{{ num }}</a>
+                        {% endif %}
+                    {% else %}
+                        <span class="pager-gap" aria-hidden="true">…</span>
+                    {% endif %}
+                {% endfor %}
+
+                {% if pagination.has_next %}
+                    <a class="pager-btn" rel="next" aria-label="الصفحة التالية"
+                       href="{{ url_for('shop.home', category=active_category, page=pagination.next_num) }}#products">‹</a>
+                {% else %}
+                    <span class="pager-btn is-disabled" aria-hidden="true">‹</span>
+                {% endif %}
+            </nav>
+
+            <p class="pager-info">
+                صفحة {{ pagination.page }} من {{ pagination.pages }} · {{ pagination.total }} منتج
+            </p>
+            {% endif %}
+
+            {# رسالة الفلتر الفارغ — JavaScript يبيّنها عند الحاجة #}
+            <p class="shop-empty-filter" id="shopEmptyFilter" hidden>
+                ماكاين حتى منتج فهاد التصنيف درك.
+            </p>
+
+            {% elif active_category %}
+            {# تصنيف فارغ ولا صفحة خارج المدى — ماشي متجر فارغ #}
+            <div class="empty-state">
+                <p>ماكاين حتى منتج فهاد التصنيف درك.</p>
+                <a href="{{ url_for('shop.home') }}" class="btn-primary">شوف كل المنتجات</a>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>ماكاين حتى منتج درك. زيد منتجات من لوحة التحكم.</p>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</section>
+
+{% if spotlight and spotlight.spotlight_position == "bottom" %}
+{{ spotlight_section(spotlight) }}
+{% endif %}
+
+
+{% if testimonials %}
+{# ═══════════ تقييمات الزبائن ═══════════
+   سلايدر يمشي وحدو. الهدف: آخر شي يشوفو الزائر قبل ما ينزل
+   للتذييل هو كلام زبائن راضيين — أقوى دافع للشراء من أي نص نكتبوه احنا.
+#}
+<section class="testi" aria-label="تقييمات الزبائن">
+    <div class="container">
+        <h2 class="section-heading testi-heading">تقييمات الزبائن</h2>
+
+        <div class="testi-viewport" id="testiViewport">
+            <div class="testi-track" id="testiTrack">
+                {% for t in testimonials %}
+                <article class="testi-card">
+                    <div class="testi-stars" aria-label="{{ t.rating }} من 5">
+                        {% for i in range(5) %}<span
+                            class="{{ 'on' if i < t.rating else 'off' }}">★</span>{% endfor %}
+                    </div>
+
+                    <p class="testi-text">{{ t.comment }}</p>
+
+                    <footer class="testi-foot">
+                        <span class="testi-avatar" aria-hidden="true">{{ t.author_name[0] }}</span>
+                        <span class="testi-who">
+                            <strong>{{ t.author_name }}</strong>
+                            {% if t.product %}
+                            <a href="{{ url_for('shop.product_detail', slug=t.product.slug) }}">{{ t.product.name }}</a>
+                            {% endif %}
+                        </span>
+                    </footer>
+                </article>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# النقاط — تبان فقط إذا فيه أكثر من بطاقة وحدة تبان فالشاشة #}
+        <div class="testi-dots" id="testiDots" aria-hidden="true"></div>
+    </div>
+</section>
+{% endif %}
+
+{% endblock %}

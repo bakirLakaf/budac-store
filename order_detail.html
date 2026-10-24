@@ -1,0 +1,573 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<div class="page-head">
+    <h1 class="page-title">
+        {{ order.order_number }}
+        <span class="status-pill status-{{ order.status }}">{{ order.status_label }}</span>
+    </h1>
+    <a href="{{ url_for('admin.orders_list',
+               status=request.args.get('status'),
+               q=request.args.get('q')) }}"
+       class="btn-admin btn-ghost">← كل الطلبيات</a>
+</div>
+
+{# شريط التنقل السابق/التالي — يتبع نفس فلترة القائمة #}
+{% if order_total %}
+<div class="neighbours-bar">
+    {% if prev_order %}
+    <a href="{{ url_for('admin.order_detail', order_id=prev_order.id,
+                        status=request.args.get('status'),
+                        q=request.args.get('q')) }}"
+       class="neighbours-btn" title="{{ prev_order.order_number }}">
+        ‹ السابق
+        <span class="neighbours-label">{{ prev_order.order_number }}</span>
+    </a>
+    {% else %}
+    <span class="neighbours-btn neighbours-btn--disabled">‹ السابق</span>
+    {% endif %}
+
+    <span class="neighbours-pos">{{ order_pos }} / {{ order_total }}</span>
+
+    {% if next_order %}
+    <a href="{{ url_for('admin.order_detail', order_id=next_order.id,
+                        status=request.args.get('status'),
+                        q=request.args.get('q')) }}"
+       class="neighbours-btn" title="{{ next_order.order_number }}">
+        التالي ›
+        <span class="neighbours-label">{{ next_order.order_number }}</span>
+    </a>
+    {% else %}
+    <span class="neighbours-btn neighbours-btn--disabled">التالي ›</span>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="form-grid">
+    <div class="form-col">
+        {# ⚠️ عدد القطع مهم عند التحضير: «5 أسطر» ماشي «14 قطعة».
+           الأدمن يحتاج الرقم الثاني باش يعرف واش يحضّر ويوزن. #}
+        <h2 class="section-title">
+            المنتجات
+            <span class="count-badge">
+                {{ order.items | length }} سطر · {{ order.item_count }} قطعة
+            </span>
+        </h2>
+        <table class="admin-table">
+            <thead><tr><th></th><th>المنتج</th><th>سعر الوحدة</th><th>الكمية</th><th>المجموع</th><th></th></tr></thead>
+            <tbody>
+                {% for item in order.items %}
+                <tr>
+                    <td>
+                        {% if item.image_filename %}
+                        {% set folder = 'offers' if item.offer_id else 'products' %}
+                        <img class="thumb-sm"
+                             src="{{ url_for('static', filename='img/' + folder + '/' + (item.image_filename | thumb)) }}"
+                             data-full="{{ url_for('static', filename='img/' + folder + '/' + item.image_filename) }}"
+                             alt="{{ item.item_name }}" title="اضغط باش تكبّرها">
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ item.item_name }}
+                        {% if item.variant_label %}<br><small class="muted-cell">{{ item.variant_label }}</small>{% endif %}
+                        {% if item.offer_id %}<span class="tag tag-gold">باقة</span>{% endif %}
+                    </td>
+                    {# ⚠️ السعر والكمية قابلين للتعديل فمكانهم — الزبون
+                       يتصل ويقول «زيدلي 2» ولا «نقّصلي وحدة»، ولازم
+                       تديرها بلا ما تلغي الطلبية كاملة. #}
+                    {% if order.is_editable %}
+                    <td colspan="3">
+                        <form method="post" class="item-edit"
+                              action="{{ url_for('admin.order_item_update', order_id=order.id, item_id=item.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="number" name="unit_price" min="0"
+                                   value="{{ item.unit_price }}"
+                                   aria-label="سعر الوحدة" title="سعر الوحدة">
+                            <span class="item-x">×</span>
+                            <input type="number" name="quantity" min="1" max="5000"
+                                   value="{{ item.quantity }}"
+                                   aria-label="الكمية" title="الكمية">
+                            <button type="submit" class="btn-admin btn-sm"
+                                    title="احفظ">✓</button>
+                            <strong class="item-total">{{ item.line_total_display }}</strong>
+                        </form>
+                    </td>
+                    <td>
+                        <form method="post"
+                              onsubmit="return confirm('تحيّد «{{ item.item_name }}» من الطلبية؟')"
+                              action="{{ url_for('admin.order_item_delete', order_id=order.id, item_id=item.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn-admin btn-sm btn-danger"
+                                    title="حيّدو">×</button>
+                        </form>
+                    </td>
+                    {% else %}
+                    <td>{{ "{:,}".format(item.unit_price) }} دج</td>
+                    <td>{{ item.quantity }}</td>
+                    <td><strong>{{ item.line_total_display }}</strong></td>
+                    <td></td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {# ═══════ زيادة منتج ═══════ #}
+        {% if order.is_editable %}
+        <details class="add-item">
+            <summary>➕ زيد منتج للطلبية</summary>
+
+            <form method="post" class="add-item-form"
+                  action="{{ url_for('admin.order_item_add', order_id=order.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <label class="field">
+                    <span>المنتج / الموديل</span>
+                    <select name="variant_id" id="addVariant" required>
+                        <option value="">— اختار —</option>
+                        {% for p in products %}
+                            {% if p.ordered_variants %}
+                            <optgroup label="{{ p.name }}">
+                                {% for v in p.ordered_variants %}
+                                <option value="{{ v.id }}">
+                                    {{ v.label }} — {{ v.price_display }}
+                                </option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="field field-narrow">
+                    <span>الكمية</span>
+                    <input type="number" name="quantity" min="1" max="5000" value="1">
+                </label>
+
+                <label class="field field-narrow">
+                    <span>سعر خاص (اختياري)</span>
+                    <input type="number" name="unit_price" min="0"
+                           placeholder="حسب الكمية">
+                </label>
+
+                <button type="submit" class="btn-admin">زيدو</button>
+            </form>
+
+            <p class="hint">
+                إذا خلّيت السعر فارغ، يتحسب أوتوماتيكيًا حسب أسعار الجملة.
+            </p>
+        </details>
+
+        {# منتجات بلا موديلات — قائمة منفصلة #}
+        {% set bare = products | rejectattr('ordered_variants') | list %}
+        {% if bare %}
+        <details class="add-item">
+            <summary>➕ زيد منتج بلا موديلات</summary>
+            <form method="post" class="add-item-form"
+                  action="{{ url_for('admin.order_item_add', order_id=order.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="field">
+                    <span>المنتج</span>
+                    <select name="product_id" required>
+                        <option value="">— اختار —</option>
+                        {% for p in bare %}
+                        <option value="{{ p.id }}">{{ p.name }} — {{ p.price_display }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="field field-narrow">
+                    <span>الكمية</span>
+                    <input type="number" name="quantity" min="1" max="5000" value="1">
+                </label>
+                <label class="field field-narrow">
+                    <span>سعر خاص</span>
+                    <input type="number" name="unit_price" min="0" placeholder="اختياري">
+                </label>
+                <button type="submit" class="btn-admin">زيدو</button>
+            </form>
+        </details>
+        {% endif %}
+        {% else %}
+        <p class="hint">
+            🔒 الطلبية ما تتعدّلش —
+            {% if order.tracking_number %}
+                اتبعثت لـ{{ order.carrier_name or 'شركة التوصيل' }}،
+                والتعديل عندنا ما يوصلهمش.
+            {% else %}
+                حالتها «{{ order.status_label }}».
+            {% endif %}
+        </p>
+        {% endif %}
+
+        <div class="order-totals">
+            <div class="summary-row"><span>المنتجات</span><span>{{ "{:,}".format(order.subtotal) }} دج</span></div>
+            {% if order.discount_amount %}
+            <div class="summary-row summary-discount"><span>خصم ({{ order.coupon_code }})</span><span>-{{ "{:,}".format(order.discount_amount) }} دج</span></div>
+            {% endif %}
+            <div class="summary-row">
+                <span>التوصيل ({{ order.carrier_name or '—' }})</span>
+                <span>
+                    {% if order.is_editable %}
+                    {# تسوية يدوية — أحيانًا تتفق مع الزبون على سعر آخر #}
+                    <form method="post" class="ship-edit"
+                          action="{{ url_for('admin.order_update_shipping', order_id=order.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="number" name="shipping_price" min="0"
+                               value="{{ order.shipping_price }}" aria-label="سعر التوصيل">
+                        <button type="submit" class="btn-admin btn-sm" title="احفظ">✓</button>
+                    </form>
+                    {% elif order.shipping_discount %}
+                        <s>{{ "{:,}".format(order.shipping_price) }}</s> مجاني
+                    {% else %}
+                        {{ "{:,}".format(order.shipping_price) }} دج
+                    {% endif %}
+                </span>
+            </div>
+            <div class="summary-row summary-total"><span>المجموع</span><span>{{ order.total_display }}</span></div>
+        </div>
+    </div>
+
+    <div class="form-col">
+        <h2 class="section-title">الزبون والتوصيل</h2>
+        <div class="info-card">
+            {# ⚠️ كل خانة قابلة للنسخ بضغطة — الأدمن ينسخ الاسم والهاتف
+               والبلدية باش يلصقهم فموقع شركة التوصيل. الكتابة باليد
+               تجيب أخطاء، خاصة فالأرقام. #}
+            <div class="info-row">
+                <span>الاسم</span>
+                <strong class="copyable" data-copy="{{ order.customer_name }}"
+                        title="اضغط باش تنسخو">{{ order.customer_name }}</strong>
+            </div>
+            <div class="info-row">
+                <span>الهاتف</span>
+                <strong dir="ltr" class="copyable" data-copy="{{ order.customer_phone }}"
+                        title="اضغط باش تنسخو">{{ order.customer_phone }}</strong>
+            </div>
+            <div class="info-row">
+                <span>الولاية</span>
+                <strong class="copyable" data-copy="{{ order.wilaya_name }}"
+                        title="اضغط باش تنسخو">{{ order.wilaya_code }} ~ {{ order.wilaya_name }}</strong>
+            </div>
+            {% if order.commune %}
+            <div class="info-row">
+                <span>البلدية</span>
+                <strong class="copyable" data-copy="{{ order.commune }}"
+                        title="اضغط باش تنسخو">{{ order.commune }}</strong>
+            </div>
+            {% endif %}
+
+            {# مكتب الاستلام — ضروري تشوفو قبل ما تبعث الطلبية للشركة #}
+            {% if order.pickup_point_name %}
+            <div class="info-row info-row-highlight">
+                <span>مكتب الاستلام</span>
+                <strong class="copyable" data-copy="{{ order.pickup_point_name }}"
+                        title="اضغط باش تنسخو">{{ order.pickup_point_name }}</strong>
+            </div>
+            {% endif %}
+
+            {% if order.commune_external_id or order.pickup_point_id %}
+            <div class="info-row info-row-muted">
+                <span>معرّف الشركة</span>
+                <code class="copyable" data-copy="{{ order.pickup_point_id or order.commune_external_id }}"
+                      title="اضغط باش تنسخو">{{ order.pickup_point_id or order.commune_external_id }}</code>
+            </div>
+            {% endif %}
+            <div class="info-row"><span>نوع التوصيل</span><strong>{{ order.delivery_type_label }}</strong></div>
+            <div class="info-row"><span>الشركة</span><strong>{{ order.carrier_name or '—' }}</strong></div>
+            {% if order.address_note %}
+            <div class="info-row">
+                <span>عنوان دقيق</span>
+                <strong class="copyable" data-copy="{{ order.address_note }}"
+                        title="اضغط باش تنسخو">{{ order.address_note }}</strong>
+            </div>
+            {% endif %}
+            <div class="info-row"><span>تاريخ الطلب</span><strong>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</strong></div>
+
+            {# نسخة كاملة — للصق مرة وحدة فنموذج الشركة #}
+            <div class="info-row info-row-actions">
+                <button type="button" class="btn-admin btn-sm btn-ghost"
+                        data-copy="{{ order.customer_name }} | {{ order.customer_phone }} | {{ order.wilaya_code }} {{ order.wilaya_name }}{% if order.commune %} | {{ order.commune }}{% endif %}{% if order.pickup_point_name %} | {{ order.pickup_point_name }}{% endif %} | {{ order.total }} دج">
+                    📋 انسخ كل المعلومات
+                </button>
+            </div>
+        </div>
+
+        {% if order.customer_note %}
+        <div class="hint-block"><strong>ملاحظة الزبون:</strong><br>{{ order.customer_note }}</div>
+        {% endif %}
+
+        {# ═══════════ تواصل مع الزبون ═══════════
+           ⚠️ الرسائل مبنية فالنموذج (`Order.whatsapp_message`) ماشي هنا:
+           تحتاج بيانات الطلبية، وبناؤها فـJinja يخلّيها صعيبة تتصلّح
+           ومستحيلة تتختبر.
+
+           كل زر يفتح الواتساب برسالة **جاهزة قابلة للتعديل** — الأدمن
+           يقراها ويبدّل فيها قبل ما يبعث. #}
+        <h2 class="section-title">تواصل مع الزبون</h2>
+
+        {% if order.whatsapp_phone %}
+        {% set wa = 'https://wa.me/' ~ order.whatsapp_phone ~ '?text=' %}
+        {# ⚠️ رابط الموقع الكامل — الواتساب يوري معاينة (صورة + اسم)
+           لأول رابط فالرسالة. أقرب حاجة لإرسال صور. #}
+        {% set site = request.url_root.rstrip('/') %}
+
+        <div class="wa-panel">
+            <p class="hint">
+                الرسالة تتفتح فالواتساب جاهزة — تقدر تبدّل فيها قبل ما تبعث.
+            </p>
+
+            <div class="wa-grid">
+                <a class="wa-btn wa-primary" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('confirm', store_name) | urlencode }}">
+                    ✅ <span>أكّد الطلبية</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('confirm', store_name, site) | urlencode }}"
+                   title="نفس الرسالة مع رابط كل منتج — الواتساب يوري معاينة بالصورة">
+                    🖼️ <span>أكّد + روابط المنتجات</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('modify', store_name) | urlencode }}">
+                    ✏️ <span>تعديل أو زيادة</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('noreply', store_name) | urlencode }}">
+                    📞 <span>ما جاوبش</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('shipped', store_name) | urlencode }}">
+                    🚚 <span>خرجت للتوصيل</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('arrived', store_name) | urlencode }}">
+                    📍 <span>وصلت للمكتب</span>
+                </a>
+
+                <a class="wa-btn wa-warn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('returned', store_name) | urlencode }}"
+                   title="الطرد رجع بلا ما يتسلّم — نسقسيو الزبون واش راح">
+                    ↩️ <span>رجعت لينا</span>
+                </a>
+
+                <a class="wa-btn wa-warn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('missing', store_name) | urlencode }}">
+                    😔 <span>منتج ما بقاش</span>
+                </a>
+
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('thanks', store_name) | urlencode }}">
+                    💜 <span>شكر بعد التسليم</span>
+                </a>
+
+                {# ⚠️ نمرّرو `site` باش الرابط يخرج كاملاً — الواتساب ما
+                   يخدمش رابطًا نسبيًا، ويوري معاينة للرابط الكامل. #}
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="{{ wa }}{{ order.whatsapp_message('review', store_name, site) | urlencode }}"
+                   title="طلب رأي — الرابط يودّي لصفحة تقييمات المتجر">
+                    ⭐ <span>اطلب رأيه</span>
+                </a>
+
+                {# محادثة فاضية — للحالات اللي ماكانش ليها قالب #}
+                <a class="wa-btn wa-ghost" target="_blank" rel="noopener"
+                   href="https://wa.me/{{ order.whatsapp_phone }}">
+                    💬 <span>محادثة عادية</span>
+                </a>
+            </div>
+
+            <div class="wa-foot">
+                <a href="tel:{{ order.customer_phone }}" class="btn-admin btn-sm btn-ghost">
+                    📱 اتصل ({{ order.customer_phone }})
+                </a>
+                <button type="button" class="btn-admin btn-sm btn-ghost"
+                        data-copy="{{ order.customer_phone }}">
+                    نسخ الرقم
+                </button>
+            </div>
+        </div>
+        {% else %}
+        <p class="hint">⚠️ ماكانش رقم هاتف صالح لهاد الزبون.</p>
+        {% endif %}
+
+        {# ═══════════ 🎁 مكافأة الزبون ═══════════
+           كوبون شخصي: تاع هاد الزبون، للطلبية الجاية، مرة وحدة.
+           يظهر كي تكون الطلبية «تم التسليم» برك. الرسالة مبنية فالنموذج
+           (`Order.reward_coupon_message`) والأدمن يقدر يعدّلها قبل ما يبعث. #}
+        {% if order.status == 'delivered' %}
+        {% set rc = order.reward_coupon %}
+        <h2 class="section-title">🎁 مكافأة الزبون</h2>
+        <div class="reward-panel">
+            {% if rc %}
+                <div class="info-row"><span>الكود</span><strong class="tracking-num">{{ rc.code }}</strong></div>
+                <div class="info-row"><span>الخصم</span><strong>{{ rc.value_display }}</strong></div>
+                <div class="info-row"><span>الحالة</span><strong>{{ rc.state_label }}</strong></div>
+                {% if rc.min_order_amount %}
+                <div class="info-row"><span>للطلبية اللي تفوق</span><strong>{{ '{:,}'.format(rc.min_order_amount) }} دج</strong></div>
+                {% endif %}
+                {% if rc.ends_at %}
+                <div class="info-row"><span>صالح حتى</span><strong>{{ rc.ends_at.strftime('%d/%m/%Y') }}</strong></div>
+                {% endif %}
+
+                {% if order.whatsapp_phone and rc.is_active and not rc.is_exhausted %}
+                <a class="wa-btn" target="_blank" rel="noopener"
+                   href="https://wa.me/{{ order.whatsapp_phone }}?text={{ order.reward_coupon_message(rc, store_name, request.url_root.rstrip('/')) | urlencode }}">
+                    🎁 <span>ابعث الكوبون عبر واتساب</span>
+                </a>
+                {% endif %}
+                <p class="hint">لتعطيل الكوبون: صفحة «كوبونات الخصم».</p>
+            {% else %}
+                <form method="post" action="{{ url_for('admin.order_create_reward_coupon', order_id=order.id) }}"
+                      class="reward-form"
+                      onsubmit="return confirm('تصنع كوبون خصم تاع هاد الزبون؟')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label>نسبة الخصم %
+                        <input type="number" name="percent" min="1" max="100" required placeholder="مثلاً 10">
+                    </label>
+                    <label>صالح لـ(يوم)
+                        <input type="number" name="days" min="1" max="365" value="30" placeholder="فارغ = بلا انتهاء">
+                    </label>
+                    <label>للطلبية اللي تفوق (دج)
+                        <input type="number" name="min_amount" min="0" max="1000000" placeholder="فارغ = بلا شرط">
+                    </label>
+                    <button type="submit" class="btn-admin btn-sm">🎁 اصنع الكوبون</button>
+                </form>
+                <p class="hint">تاع هاد الزبون برك، للطلبية الجاية، ويخدم مرة وحدة.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <h2 class="section-title">شركة التوصيل</h2>
+        {% set is_world = (order.carrier_code == 'worldexpress') %}
+        {% set is_yalidine = (order.carrier_code == 'yalidine') %}
+        {% set carrier_title = 'World Express' if is_world else ('Yalidine' if is_yalidine else 'ZR Express') %}
+        <div class="carrier-panel">
+            {% if order.tracking_number and is_world %}
+            <a href="{{ url_for('admin.order_world_label', order_id=order.id) }}" target="_blank"
+               class="btn-admin btn-sm">🖨️ بوردرو World الرسمي</a>
+            {% elif order.tracking_number and is_yalidine %}
+            <a href="{{ url_for('admin.order_yalidine_label', order_id=order.id) }}" target="_blank"
+               class="btn-admin btn-sm">🖨️ بوردرو Yalidine الرسمي</a>
+            {% elif order.tracking_number %}
+            <a href="{{ url_for('admin.order_zr_label', order_id=order.id) }}" target="_blank"
+               class="btn-admin btn-sm">🖨️ بوردرو ZR الرسمي</a>
+            {% endif %}
+            <a href="{{ url_for('admin.order_bordereau', order_id=order.id) }}" target="_blank"
+               class="btn-admin btn-sm btn-ghost">🖨️ بوردرو بسيط</a>
+            {% if order.tracking_number %}
+                <div class="info-row">
+                    <span>رقم التتبّع</span>
+                    <strong class="tracking-num">{{ order.tracking_number }}</strong>
+                </div>
+                {% if order.carrier_state %}
+                <div class="info-row">
+                    <span>الحالة عندهم</span>
+                    <strong>{{ order.carrier_state }}</strong>
+                </div>
+                {% endif %}
+
+                <form method="post" action="{{ url_for('admin.order_refresh_tracking', order_id=order.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-admin btn-sm btn-ghost">🔄 حدّث حالة التتبّع من {{ 'World Express' if is_world else ('Yalidine' if is_yalidine else 'ZR') }}</button>
+                </form>
+
+                {% if is_world and order.carrier_state in (None, '', 'prete_a_expedier') %}
+                <p class="hint">الطرد مازال «prête à expédier» — ما سلّمناهش للشركة بعد.</p>
+                <form method="post" action="{{ url_for('admin.order_world_validate', order_id=order.id) }}"
+                      onsubmit="return confirm('تأكّد الإرسال لـWorld Express؟\n\nبعدها ما تقدرش تبدّل الطرد ولا تمسحو.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="field" style="flex-direction:row;gap:8px;align-items:center;">
+                        <input type="checkbox" name="ask_collection" value="1">
+                        <span>اطلب منهم يجو يهزّو الطرد (ramassage)</span>
+                    </label>
+                    <button type="submit" class="btn-admin btn-block">✅ تأكيد الإرسال (Expédier)</button>
+                </form>
+                {% endif %}
+            {% else %}
+                <p class="hint">هاد الطلبية ما تبعثتش لشركة التوصيل بعد.</p>
+                {% if order.send_error %}
+                <p class="hint" style="color:#b45309;">آخر محاولة: {{ order.send_error }}</p>
+                {% endif %}
+
+                <form method="post" action="{{ url_for('admin.order_send_to_carrier', order_id=order.id) }}"
+                      onsubmit="return confirm('تبعث هاد الطلبية لـ{{ carrier_title }}؟')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-admin btn-block">📦 ابعث لـ{{ carrier_title }}</button>
+                </form>
+
+                {% if is_world %}
+                <p class="hint">
+                    يحتاج WORLD_API_TOKEN فـ.env —
+                    <a href="{{ url_for('admin.integrations') }}">شوف التكاملات</a>
+                </p>
+                {% elif is_yalidine %}
+                <p class="hint">
+                    يحتاج YALIDINE_API_ID و YALIDINE_API_TOKEN و YALIDINE_FROM_WILAYA فـ.env —
+                    <a href="{{ url_for('admin.integrations') }}">شوف التكاملات</a>
+                </p>
+                {% else %}
+                <p class="hint">
+                    يحتاج مفاتيح ZR فـ.env —
+                    <a href="{{ url_for('admin.integrations') }}">شوف التكاملات</a>
+                    · <a href="{{ url_for('admin.order_zr_debug', order_id=order.id) }}">🔍 تشخيص الإرسال</a>
+                </p>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        <h2 class="section-title">
+            حالة الطلبية عندنا
+            <span class="hint" style="font-weight:400;font-size:13px;">
+                (جديدة ← مؤكدة ← قيد التجهيز ← إلخ)
+            </span>
+        </h2>
+        <form method="post" action="{{ url_for('admin.order_update_status', order_id=order.id) }}" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="field">
+                <span>الحالة</span>
+                <select name="status">
+                    {% for code, label in status_labels.items() %}
+                    <option value="{{ code }}" {{ 'selected' if order.status == code }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label class="field">
+                <span>ملاحظة داخلية (ما يشوفهاش الزبون)</span>
+                <textarea name="admin_note" rows="3">{{ order.admin_note or '' }}</textarea>
+            </label>
+
+            <p class="hint">
+                ⚠️ الإلغاء يرجّع المخزون تلقائيًا. وإرجاع طلبية ملغاة يخصمو من جديد.
+            </p>
+
+            <button type="submit" class="btn-admin btn-block">حفظ</button>
+        </form>
+
+        {# ---------- منطقة الخطر ---------- #}
+        <div class="danger-zone">
+            <h2 class="section-title">حذف الطلبية</h2>
+            <p class="hint">
+                الحذف <strong>نهائي</strong> وما يترجعش.
+                المخزون يرجع تلقائيًا للمنتجات.
+                {% if order.tracking_number %}
+                <br>⚠️ هاد الطلبية مبعوثة لـ{{ 'World Express' if order.carrier_code == 'worldexpress' else ('Yalidine' if order.carrier_code == 'yalidine' else 'ZR') }} — الحذف هنا
+                <strong>ما يلغيش الطرد</strong> عندهم.
+                {% endif %}
+            </p>
+
+            <form method="post" action="{{ url_for('admin.order_delete', order_id=order.id) }}"
+                  onsubmit="return confirm('تحذف الطلبية {{ order.order_number }} نهائيًا؟\n\nما ترجعش.')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-admin btn-block btn-danger">
+                    🗑️ احذف الطلبية نهائيًا
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

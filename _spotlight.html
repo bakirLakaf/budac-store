@@ -1,0 +1,46 @@
+{# ═══════════ قسم "عرض خاص" — صورة كبيرة + تفاصيل جنبها ═══════════ #}
+{% macro spotlight_section(offer) %}
+<section class="spotlight-section">
+    <div class="container spotlight-inner">
+        <div class="spotlight-media">
+            {% if offer.banner_filename %}
+                <img src="{{ url_for('static', filename='img/offers/' + offer.banner_filename) }}"
+                     alt="{{ offer.title }}" loading="lazy">
+            {% else %}
+                <div class="spotlight-placeholder">
+                    <span>{{ offer.title[0] }}</span>
+                </div>
+            {% endif %}
+            {% if offer.savings_percent > 0 %}
+                <span class="spotlight-badge">وفّر {{ offer.savings_percent }}%</span>
+            {% endif %}
+        </div>
+
+        <div class="spotlight-body">
+            <p class="spotlight-eyebrow">عرض خاص</p>
+            <h2 class="spotlight-title">{{ offer.title }}</h2>
+
+            {% if offer.subtitle %}
+                <p class="spotlight-sub">{{ offer.subtitle }}</p>
+            {% endif %}
+
+            {% set body_text = offer.spotlight_text or offer.description %}
+            {% if body_text %}
+                <p class="spotlight-text">{{ body_text }}</p>
+            {% endif %}
+
+            <p class="spotlight-price">
+                <span class="spotlight-price-now">{{ offer.bundle_price_display }}</span>
+                {% if offer.savings > 0 %}
+                    <span class="spotlight-price-was">{{ offer.original_total_display }}</span>
+                {% endif %}
+            </p>
+
+            <a href="{{ url_for('shop.offer_detail', slug=offer.slug) }}"
+               class="btn-primary spotlight-btn">اطلب العرض درك</a>
+
+            <p class="spotlight-note">🚚 توصيل لكل الولايات · 💵 الدفع عند الاستلام</p>
+        </div>
+    </div>
+</section>
+{% endmacro %}

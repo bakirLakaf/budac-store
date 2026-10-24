@@ -1,0 +1,91 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">
+    صفحات الهبوط <span class="count-pill">{{ pages|length }}</span>
+</h1>
+
+<p class="muted" style="margin: -8px 0 18px;">
+    صفحة لكل حملة إعلانية — منتج واحد وفورم طلب مباشر، بلا سلة ولا تشتيت.
+</p>
+
+<p style="margin-bottom: 20px;">
+    <a href="{{ url_for('admin.landing_new') }}" class="btn-admin">+ صفحة جديدة</a>
+</p>
+
+{% if pages %}
+<div class="admin-table-wrap">
+<table class="admin-table">
+    <thead>
+        <tr>
+            <th>الصفحة</th>
+            <th>المنتج</th>
+            <th>السعر</th>
+            <th>زيارات</th>
+            <th>طلبيات</th>
+            <th>التحويل</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in pages %}
+        <tr class="{{ 'row-muted' if not p.is_active }}">
+            <td>
+                <strong>{{ p.internal_name }}</strong><br>
+                <a href="{{ url_for('landing.view', slug=p.slug) }}"
+                   target="_blank" rel="noopener">
+                    <code>/lp/{{ p.slug }}</code>
+                </a>
+            </td>
+            <td>{{ p.product.name if p.product else '—' }}</td>
+            <td>
+                <strong>{{ "{:,}".format(p.unit_price) }} دج</strong>
+                {% if p.has_discount %}
+                <br><small class="muted-cell">-{{ p.discount_percent }}%</small>
+                {% endif %}
+            </td>
+            <td>{{ p.view_count }}</td>
+            <td><strong>{{ p.order_count }}</strong></td>
+            <td>
+                {% if p.view_count %}
+                <strong>{{ p.conversion_rate }}%</strong>
+                {% else %}—{% endif %}
+            </td>
+            <td>
+                <div class="row-actions">
+                    <a href="{{ url_for('admin.landing_edit', page_id=p.id) }}"
+                       class="btn-admin btn-sm">تعديل</a>
+
+                    <form method="post" action="{{ url_for('admin.landing_toggle', page_id=p.id) }}"
+                          style="display:inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn-admin btn-sm {{ 'btn-ghost' if p.is_active else '' }}">
+                            {{ 'تعطيل' if p.is_active else 'تفعيل' }}
+                        </button>
+                    </form>
+
+                    <form method="post" action="{{ url_for('admin.landing_delete', page_id=p.id) }}"
+                          style="display:inline"
+                          onsubmit="return confirm('تحذف صفحة «{{ p.internal_name }}»؟ الطلبيات تبقى محفوظة.')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn-admin btn-sm btn-danger">حذف</button>
+                    </form>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% else %}
+<div class="empty-state">
+    <p>ماكانش صفحات هبوط بعد.</p>
+    <p class="muted">
+        أنشئ وحدة، وحط رابطها فإعلان فيسبوك.
+        الزائر يوصل مباشرة للمنتج والفورم بلا ما يضيع فالموقع.
+    </p>
+</div>
+{% endif %}
+
+{% endblock %}

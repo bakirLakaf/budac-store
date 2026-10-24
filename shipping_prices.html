@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}أسعار التوصيل — {{ store_name }}{% endblock %}
+{% block meta_description %}أسعار التوصيل لكل ولايات الجزائر مع {{ store_name }} — الدفع عند الاستلام، توصيل للمنزل أو لمكتب الشركة.{% endblock %}
+
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/shipping-carriers.css') }}">{% endblock %}
+
+{% block content %}
+<section class="ship-page">
+    <div class="container container-narrow">
+        <h1 class="page-heading">أسعار التوصيل</h1>
+        <p class="ship-intro">
+            الأسعار بالدينار الجزائري لكل قطعة توصيل.
+            <strong>الدفع عند الاستلام</strong> — تخلّص السعر + التوصيل كي توصلك الطلبية.
+        </p>
+
+        {% if carriers and wilayas %}
+        {# ⚠️ بحث فوري: 58 ولاية × عدة شركات = جدول طويل. الزبون
+           يحتاج ولايتو وحدها، ماشي يقرا كلش. #}
+        <div class="ship-search">
+            <input type="search" id="shipSearch" placeholder="🔍 اكتب اسم ولايتك..."
+                   aria-label="ابحث عن ولايتك" autocomplete="off">
+            <span class="ship-count" id="shipCount">{{ wilayas | length }} ولاية</span>
+        </div>
+
+        {# خلية سعر: كل شركة بلونها (ship-c-<code>) #}
+        {% macro price_cell(value, code) %}
+        <td class="ship-c-{{ code }}">
+            {% if value %}<strong>{{ "{:,}".format(value) }}</strong>
+            {% else %}<span class="ship-no">—</span>{% endif %}
+        </td>
+        {% endmacro %}
+
+        {% macro carrier_logo(c, cls) %}
+            {% if carrier_logos.get(c.code) %}
+            <img class="{{ cls }} ship-logo-{{ c.code }}"
+                 src="{{ url_for('static', filename=carrier_logos[c.code]) }}"
+                 alt="{{ c.name }}" loading="lazy">
+            {% else %}<span class="ship-carrier-name">{{ c.name }}</span>{% endif %}
+        {% endmacro %}
+
+        {# ═══ سطح المكتب والتابلت: جدول برأس ثابت ═══ #}
+        <div class="ship-table-wrap">
+            <table class="ship-table">
+                <colgroup>
+                    <col class="ship-col-w">
+                    {% for c in carriers %}<col><col>{% endfor %}
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th class="ship-w">الولاية</th>
+                        {% for c in carriers %}
+                        <th colspan="2" class="ship-carrier ship-c-{{ c.code }}" title="{{ c.name }}">
+                            {{ carrier_logo(c, 'ship-logo') }}
+                        </th>
+                        {% endfor %}
+                    </tr>
+                    <tr class="ship-sub">
+                        <th class="ship-w"></th>
+                        {% for c in carriers %}
+                        <th class="ship-carrier ship-c-{{ c.code }}"><span class="ship-pill">🏠 للمنزل</span></th>
+                        <th class="ship-c-{{ c.code }}"><span class="ship-pill">🏢 للمكتب</span></th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody id="shipBody">
+                    {% for w in wilayas %}
+                    <tr data-name="{{ w.name }}" data-code="{{ w.code }}">
+                        <td class="ship-w">
+                            <span class="ship-code">{{ w.code }}</span>{{ w.name }}
+                        </td>
+                        {% for c in carriers %}
+                            {% set pr = w.prices.get(c.code) or {} %}
+                            {{ price_cell(pr.get('home'), c.code) }}
+                            {{ price_cell(pr.get('office'), c.code) }}
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# ═══ الهاتف: بطاقة لكل ولاية (الشركات جنب بعض، بلا تمرير أفقي) ═══ #}
+        <div class="ship-cards" id="shipCards">
+            {% for w in wilayas %}
+            <article class="ship-card" data-name="{{ w.name }}" data-code="{{ w.code }}">
+                <header class="ship-card-head">
+                    <span class="ship-code">{{ w.code }}</span>
+                    <h2>{{ w.name }}</h2>
+                </header>
+                <div class="ship-card-grid">
+                    <span></span>
+                    <span class="ship-pill">🏠 للمنزل</span>
+                    <span class="ship-pill">🏢 للمكتب</span>
+                    {% for c in carriers %}
+                        {% set pr = w.prices.get(c.code) or {} %}
+                        <span class="ship-card-carrier ship-c-{{ c.code }}">{{ carrier_logo(c, 'ship-card-logo') }}</span>
+                        {% for kind in ('home', 'office') %}
+                            {% set v = pr.get(kind) %}
+                            <span class="ship-card-price ship-c-{{ c.code }}">
+                                {% if v %}<strong>{{ "{:,}".format(v) }}</strong>
+                                {% else %}<span class="ship-no">—</span>{% endif %}
+                            </span>
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+
+        <p class="ship-empty" id="shipEmpty" hidden>ما لقيناش هاد الولاية.</p>
+
+        <ul class="ship-notes">
+            <li><strong>—</strong> معناها الخدمة غير متوفرة لهاد الولاية بهاد الشركة.</li>
+            <li>🏢 <strong>للمكتب</strong> أرخص — تروح تاخذ الطرد من مكتب الشركة.</li>
+            <li>الأسعار قابلة للتغيير حسب تسعير شركات التوصيل.</li>
+        </ul>
+        {% else %}
+        <p class="ship-intro">أسعار التوصيل مازال ما تعمّراتش. راسلنا على واتساب ونجيبوك السعر.</p>
+        {% endif %}
+    </div>
+</section>
+
+<script>
+/** بحث فوري فجدول الولايات — بلا طلب للسيرفر */
+(function () {
+    var input = document.getElementById('shipSearch');
+    if (!input) return;
+
+    // الجدول (سطح المكتب) + البطاقات (الهاتف) — نفس البحث لاثنين
+    var rows = Array.prototype.slice.call(
+        document.querySelectorAll('#shipBody tr, .ship-card')
+    );
+    var tableRows = document.querySelectorAll('#shipBody tr');
+    var count = document.getElementById('shipCount');
+    var empty = document.getElementById('shipEmpty');
+
+    input.addEventListener('input', function () {
+        var q = input.value.trim();
+        var shown = 0;
+
+        rows.forEach(function (row) {
+            var hit = !q
+                || row.dataset.name.indexOf(q) !== -1
+                || row.dataset.code.indexOf(q) === 0;
+            row.hidden = !hit;
+            if (hit && row.tagName === 'TR') shown++;
+        });
+
+        count.textContent = shown + ' ولاية';
+        empty.hidden = shown > 0;
+    });
+})();
+</script>
+{% endblock %}
