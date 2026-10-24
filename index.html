@@ -1,197 +1,515 @@
-<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>النشر على السوشيال ميديا</title>
+{% extends "admin/base_admin.html" %}
+
+{% block title %}النشر على السوشيال ميديا — {{ store_name }}{% endblock %}
+
+{% block content %}
 <style>
-  :root { --bg:#f6f4ef; --card:#fff; --ink:#23201b; --mut:#7a746a; --line:#e4dfd5; --brand:#8a5a2b; --ok:#2e7d32; --bad:#c62828; --warn:#b26a00; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#1b1916; --card:#25221e; --ink:#efeae0; --mut:#a39c90; --line:#3a352e; --brand:#d8a15f; } }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font-family:"Segoe UI",Tahoma,Arial,sans-serif; line-height:1.6; }
-  .wrap { max-width:860px; margin:0 auto; padding:16px; }
-  h1 { font-size:1.4rem; margin:8px 0 4px; } h2 { font-size:1.05rem; margin:0 0 10px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:14px 0; }
-  .chips { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  .chip { padding:3px 10px; border-radius:99px; font-size:.85rem; border:1px solid var(--line); }
-  .chip.on { color:var(--ok); border-color:var(--ok); } .chip.off { color:var(--mut); }
-  .msg { padding:10px 14px; border-radius:8px; margin:10px 0; } .msg.ok { background:#e7f4e8; color:#1b5e20; } .msg.bad { background:#fdeaea; color:#8e1b1b; }
-  label.f { display:block; font-weight:600; margin:12px 0 6px; }
-  textarea, input[type=text], input[type=datetime-local], input[type=search] { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:transparent; color:inherit; font:inherit; }
-  textarea { min-height:150px; resize:vertical; }
-  .row { display:flex; flex-wrap:wrap; gap:14px; align-items:center; } .small { font-size:.85rem; color:var(--mut); }
-  button, .btn { cursor:pointer; border:1px solid var(--line); background:transparent; color:inherit; padding:8px 14px; border-radius:8px; font:inherit; }
-  button.primary { background:var(--brand); color:#fff; border-color:var(--brand); font-weight:600; padding:11px 22px; }
-  .results { margin-top:8px; display:grid; gap:6px; } .res { display:flex; gap:10px; align-items:center; padding:6px; border:1px solid var(--line); border-radius:8px; cursor:pointer; }
-  .res:hover { border-color:var(--brand); } .res img, .ph { width:44px; height:44px; object-fit:cover; border-radius:6px; background:var(--line); }
-  .grid { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
-  .thumb { position:relative; width:92px; } .thumb img { width:92px; height:92px; object-fit:cover; border-radius:8px; border:2px solid var(--line); display:block; }
-  .thumb input { position:absolute; top:6px; right:6px; width:18px; height:18px; }
-  table { width:100%; border-collapse:collapse; font-size:.92rem; } th, td { text-align:right; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
-  .st-done { color:var(--ok); } .st-failed, .st-partial { color:var(--bad); } .st-scheduled, .st-publishing { color:var(--warn); }
-  .err { color:var(--bad); font-size:.82rem; } .actions form { display:inline; } .actions button { padding:3px 9px; font-size:.82rem; }
-  #check-out { margin-top:8px; font-size:.9rem; white-space:pre-line; }
+  /* ═══ لوحة النشر — كل الألوان من متغيرات --a-* (تتبدّل وحدها فالدارك مود) ═══ */
+  .sp { --sp-surface2: var(--a-surface-2, #FAF8F5); --sp-accent: var(--a-accent-text, var(--a-primary)); max-width: 1120px; }
+  .sp * { box-sizing: border-box; }
+  .sp-sub { color: var(--a-text-soft); margin: -8px 0 18px; font-size: 14px; }
+
+  /* تبويبات */
+  .sp-tabs { display: flex; gap: 6px; background: var(--sp-surface2); border: 1px solid var(--a-border); border-radius: 14px; padding: 5px; margin-bottom: 18px; overflow-x: auto; }
+  .sp-tab { flex: 1 1 0; white-space: nowrap; border: 0; background: transparent; color: var(--a-text-soft); font: inherit; font-weight: 600; font-size: 14px;
+    padding: 10px 14px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .sp-tab:hover { color: var(--a-text); }
+  .sp-tab.is-active { background: var(--a-surface); color: var(--sp-accent); box-shadow: 0 1px 6px rgba(0,0,0,.12); }
+  .sp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--a-warning); display: inline-block; }
+  .sp-count { background: var(--a-gold); color: #2E1A47; font-size: 11px; font-weight: 700; border-radius: 99px; padding: 1px 8px; }
+  .sp-js .sp-panel { display: none; } .sp-js .sp-panel.is-active { display: block; }
+
+  /* بطاقات */
+  .sp-card { background: var(--a-surface); border: 1px solid var(--a-border); border-radius: 14px; padding: 20px; margin: 0 0 16px; }
+  .sp-card > h2 { font-size: 16px; margin: 0 0 14px; color: var(--sp-accent); display: flex; align-items: center; gap: 10px; }
+  .sp-step { width: 26px; height: 26px; border-radius: 50%; background: var(--a-gold); color: #2E1A47; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .sp-small { font-size: 13px; color: var(--a-text-soft); }
+  .sp-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .sp-hint { margin-top: 6px; }
+
+  /* حقول */
+  .sp input[type=search], .sp input[type=datetime-local], .sp textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--a-border); border-radius: 10px;
+    font: inherit; background: var(--sp-surface2); color: var(--a-text); }
+  .sp input:focus, .sp textarea:focus { outline: 2px solid var(--a-gold); outline-offset: 1px; }
+  .sp textarea { min-height: 170px; resize: vertical; line-height: 1.7; }
+  .sp input[type=datetime-local] { width: auto; }
+
+  /* تخطيط الإنشاء */
+  .sp-compose { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; align-items: start; }
+  @media (max-width: 980px) { .sp-compose { grid-template-columns: 1fr; } }
+  .sp-preview { position: sticky; top: 14px; }
+  @media (max-width: 980px) { .sp-preview { position: static; } }
+
+  /* اختيار المنتج */
+  .sp-results { display: grid; gap: 6px; margin-top: 8px; max-height: 280px; overflow: auto; }
+  .sp-res { display: flex; gap: 10px; align-items: center; padding: 7px; border: 1px solid var(--a-border); border-radius: 10px; cursor: pointer; background: var(--sp-surface2); }
+  .sp-res:hover { border-color: var(--a-gold); }
+  .sp-res img, .sp-ph { width: 46px; height: 46px; object-fit: cover; border-radius: 8px; background: var(--a-border); flex: none; }
+  .sp-picked { margin-top: 10px; padding: 12px; border: 1px dashed var(--a-gold); border-radius: 12px; background: var(--sp-surface2); }
+  .sp-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .sp-thumb { position: relative; width: 92px; height: 92px; border-radius: 10px; overflow: hidden; border: 2px solid var(--a-border); cursor: pointer; }
+  .sp-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .sp-thumb input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+  .sp-thumb .sp-tick { position: absolute; top: 5px; inset-inline-end: 5px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .sp-thumb:has(input:checked) { border-color: var(--a-gold); }
+  .sp-thumb:has(input:checked) .sp-tick { background: var(--a-gold); color: #2E1A47; }
+  .sp-thumb .sp-x { position: absolute; top: 5px; inset-inline-end: 5px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+  .sp-file { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 12px; padding: 6px; background: var(--sp-surface2); word-break: break-all; }
+
+  /* رفع */
+  .sp-drop { display: block; border: 2px dashed var(--a-border); border-radius: 14px; padding: 22px; text-align: center; cursor: pointer; background: var(--sp-surface2); color: var(--a-text-soft); }
+  .sp-drop:hover, .sp-drop.is-over { border-color: var(--a-gold); color: var(--a-text); }
+  .sp-drop strong { display: block; color: var(--a-text); font-size: 15px; margin-bottom: 2px; }
+  .sp-drop input { display: none; }
+
+  /* بطاقات المنصات */
+  .sp-plats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  @media (max-width: 640px) { .sp-plats { grid-template-columns: 1fr; } }
+  .sp-plat { position: relative; display: flex; align-items: center; gap: 10px; padding: 12px; border: 2px solid var(--a-border); border-radius: 12px; cursor: pointer; background: var(--sp-surface2); }
+  .sp-plat input { position: absolute; opacity: 0; }
+  .sp-plat.is-on { border-color: var(--a-gold); background: var(--a-surface); box-shadow: 0 0 0 3px rgba(201,162,39,.15); }
+  .sp-plat.is-off { opacity: .6; cursor: not-allowed; }
+  .sp-ico { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 19px; color: #fff; flex: none; font-weight: 800; }
+  .sp-ico.facebook { background: #1877F2; } .sp-ico.instagram { background: linear-gradient(45deg, #F09433, #DC2743 55%, #8A3AB9); } .sp-ico.tiktok { background: #111; }
+  .sp-plat b { display: block; font-size: 14px; } .sp-plat .sp-small { font-size: 12px; }
+
+  /* الوقت */
+  .sp-seg { display: inline-flex; border: 1px solid var(--a-border); border-radius: 10px; overflow: hidden; }
+  .sp-seg label { padding: 9px 18px; cursor: pointer; font-weight: 600; font-size: 14px; color: var(--a-text-soft); background: var(--sp-surface2); }
+  .sp-seg input { display: none; }
+  .sp-seg label.is-on { background: var(--a-primary); color: #fff; }
+  .sp-when { margin-top: 12px; }
+  .sp-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+  /* أزرار */
+  .sp-btn { border: 1.5px solid var(--a-border); background: transparent; color: var(--a-text); border-radius: 10px; padding: 8px 14px; font: inherit; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+  .sp-btn:hover { border-color: var(--a-gold); }
+  .sp-btn.sm { padding: 5px 10px; font-size: 12px; }
+  .sp-btn.primary { background: var(--a-primary); border-color: var(--a-primary); color: #fff; font-weight: 700; padding: 12px 26px; font-size: 15px; }
+  .sp-btn.primary:hover { background: var(--a-primary-light); }
+  .sp-btn.primary:disabled { opacity: .6; cursor: wait; }
+  .sp-btn.danger:hover { border-color: var(--a-danger); color: var(--a-danger); }
+  .sp-submitbar { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    background: var(--a-surface); border: 1px solid var(--a-border); border-radius: 14px; padding: 14px 18px; box-shadow: 0 -6px 18px rgba(0,0,0,.08); }
+
+  /* معاينة */
+  .sp-pv-media { aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden; background: var(--sp-surface2); border: 1px solid var(--a-border); display: flex; align-items: center; justify-content: center; color: var(--a-text-soft); font-size: 13px; text-align: center; padding: 10px; position: relative; }
+  .sp-pv-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .sp-pv-badge { position: absolute; top: 8px; inset-inline-start: 8px; background: rgba(0,0,0,.6); color: #fff; border-radius: 99px; padding: 2px 10px; font-size: 12px; }
+  .sp-pv-text { margin-top: 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.7; font-size: 14px; max-height: 190px; overflow: auto; }
+  .sp-pv-text.is-empty { color: var(--a-text-soft); }
+  .sp-warns { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .sp-warns li { font-size: 12.5px; padding: 7px 10px; border-radius: 8px; background: rgba(184,134,11,.14); color: var(--a-warning); }
+  .sp-warns li.ok { background: rgba(46,125,83,.14); color: var(--a-ok); }
+
+  /* سجل المنشورات */
+  .sp-posts { display: grid; gap: 10px; }
+  .sp-post { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 14px; border: 1px solid var(--a-border); border-radius: 12px; background: var(--sp-surface2); }
+  @media (max-width: 640px) { .sp-post { grid-template-columns: 1fr; } }
+  .sp-post-text { font-weight: 600; margin-bottom: 6px; overflow-wrap: anywhere; }
+  .sp-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 3px 11px; border-radius: 99px; }
+  .sp-b-done { background: rgba(46,125,83,.16); color: var(--a-ok); } .sp-b-failed, .sp-b-partial { background: rgba(192,57,43,.16); color: var(--a-danger); }
+  .sp-b-scheduled, .sp-b-publishing { background: rgba(184,134,11,.18); color: var(--a-warning); } .sp-b-cancelled { background: var(--a-border); color: var(--a-text-soft); }
+  .sp-res-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .sp-rchip { font-size: 12px; padding: 2px 9px; border-radius: 8px; border: 1px solid var(--a-border); color: var(--a-text-soft); }
+  .sp-rchip.done { border-color: var(--a-ok); color: var(--a-ok); } .sp-rchip.failed { border-color: var(--a-danger); color: var(--a-danger); }
+  .sp-err { color: var(--a-danger); font-size: 12.5px; margin-top: 6px; overflow-wrap: anywhere; }
+  .sp-actions { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; } .sp-actions form { display: inline; }
+  .sp-empty { text-align: center; padding: 34px 10px; color: var(--a-text-soft); }
+
+  /* الربط */
+  .sp-conn { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 800px) { .sp-conn { grid-template-columns: 1fr; } }
+  .sp-conn-card { border: 1px solid var(--a-border); border-radius: 12px; padding: 14px; background: var(--sp-surface2); }
+  .sp-conn-card.ok { border-color: var(--a-ok); }
+  .sp-conn-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .sp-var { display: inline-block; font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 2px 8px; border-radius: 6px; margin: 2px 0 2px 4px; background: var(--a-surface); border: 1px solid var(--a-border); }
+  .sp-var.ok { color: var(--a-ok); border-color: var(--a-ok); } .sp-var.miss { color: var(--a-danger); border-color: var(--a-danger); }
+  .sp-details { border: 1px solid var(--a-border); border-radius: 12px; margin-top: 10px; background: var(--sp-surface2); }
+  .sp-details summary { cursor: pointer; padding: 13px 16px; font-weight: 700; list-style: none; display: flex; align-items: center; gap: 10px; }
+  .sp-details summary::-webkit-details-marker { display: none; }
+  .sp-details summary::after { content: "▾"; margin-inline-start: auto; color: var(--a-text-soft); transition: transform .15s; }
+  .sp-details[open] summary::after { transform: rotate(180deg); }
+  .sp-details ol { margin: 0; padding: 0 38px 14px 16px; line-height: 1.95; }
+  .sp-details li { margin-bottom: 6px; }
+  .sp-details code, .sp-note code { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; background: var(--a-surface); border: 1px solid var(--a-border); border-radius: 6px; padding: 1px 6px; direction: ltr; unicode-bidi: embed; }
+  .sp-note { margin-top: 12px; padding: 11px 14px; border-radius: 10px; background: rgba(184,134,11,.12); color: var(--a-text); font-size: 13.5px; line-height: 1.8; border-inline-start: 4px solid var(--a-warning); }
+  #sp-check-out, #sp-ig-out { font-size: 13px; white-space: pre-line; margin-top: 10px; line-height: 1.8; }
 </style>
-</head>
-<body>
-<div class="wrap">
-  <h1>📣 النشر على السوشيال ميديا</h1>
-  <div class="chips">
-    {% for n in ['facebook','instagram','tiktok'] %}
-      <span class="chip {{ 'on' if configured[n] else 'off' }}">{{ labels[n] }}: {{ 'مربوط' if configured[n] else 'غير مربوط' }}</span>
-    {% endfor %}
-    {% if tiktok_connect and not configured['tiktok'] %}<a class="btn" href="{{ prefix }}/tiktok/connect">ربط تيك توك</a>{% endif %}
-    <button type="button" id="check-btn">فحص الاتصال</button>
+
+<div class="sp" id="sp">
+  <div class="page-head"><h1>📣 النشر على السوشيال ميديا</h1></div>
+  <p class="sp-sub">اكتب المنشور مرة وحدة وانشرو على فيسبوك وانستغرام وتيك توك — درك ولا مجدول.</p>
+
+  {% if msg %}<div class="flash flash-success">{{ msg }}</div>{% endif %}
+  {% if err %}<div class="flash flash-error">{{ err }}</div>{% endif %}
+
+  <div class="sp-tabs" role="tablist">
+    <button type="button" class="sp-tab is-active" data-tab="compose">✍️ منشور جديد</button>
+    <button type="button" class="sp-tab" data-tab="posts">🗂️ المنشورات
+      {% if posts %}<span class="sp-count">{{ posts|length }}</span>{% endif %}</button>
+    <button type="button" class="sp-tab" data-tab="setup">🔗 الربط والإعداد
+      {% if not all_connected %}<span class="sp-dot" title="فيه منصة ما تربطتش"></span>{% endif %}</button>
   </div>
-  <div id="check-out"></div>
 
-  {% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
-  {% if err %}<div class="msg bad">{{ err }}</div>{% endif %}
+  {# ═════════════ تبويب 1: منشور جديد ═════════════ #}
+  <section class="sp-panel is-active" data-panel="compose">
+  <form method="post" action="{{ prefix }}/posts" enctype="multipart/form-data" id="sp-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="sp-compose">
+      <div>
+        <div class="sp-card">
+          <h2><span class="sp-step">1</span> المحتوى</h2>
 
-  <form class="card" method="post" action="{{ prefix }}/posts" enctype="multipart/form-data" id="post-form">
-    {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
-    <h2>منشور جديد</h2>
+          <label class="sp-small" for="sp-q">ضيف منتج من المتجر (اختياري) — نجيبو لك صوره</label>
+          <input type="search" id="sp-q" placeholder="🔍 قلّب على منتج بالاسم…" autocomplete="off">
+          <div class="sp-results" id="sp-results"></div>
+          <div class="sp-picked" id="sp-picked" hidden>
+            <div class="sp-row">
+              <strong id="sp-picked-name"></strong>
+              <button type="button" class="sp-btn sm" id="sp-insert">＋ أدرج الاسم والسعر والرابط في النص</button>
+              <button type="button" class="sp-btn sm danger" id="sp-clear">إلغاء المنتج</button>
+            </div>
+            <div class="sp-small sp-hint">اختار الصور اللي تحب تنشرها. صور المتجر ما تتكوبيش في السيرفر، نستعملوها كيما هي.</div>
+            <div class="sp-grid" id="sp-gallery"></div>
+            <input type="hidden" name="product_id" id="sp-product-id">
+          </div>
 
-    <label class="f">1) منتج من المتجر (اختياري)</label>
-    <input type="search" id="q" placeholder="قلّب على منتج بالاسم…" autocomplete="off">
-    <div class="results" id="results"></div>
-    <div id="picked" hidden>
-      <div class="row" style="margin-top:8px"><strong id="picked-name"></strong>
-        <button type="button" id="insert-info">إدراج الاسم والسعر والرابط في النص</button>
-        <button type="button" id="clear-product">إلغاء المنتج</button></div>
-      <div class="small">اختار الصور اللي تحب تنشرها (ما راحش تتكرر في السيرفر، نستعملو الصور تاع المتجر كيما هي):</div>
-      <div class="grid" id="gallery"></div>
-      <input type="hidden" name="product_id" id="product_id">
+          <label class="sp-small" for="sp-caption" style="display:block;margin-top:18px">نص المنشور</label>
+          <textarea name="caption" id="sp-caption" placeholder="اكتب المنشور هنا…">{{ form.caption or '' }}</textarea>
+          <div class="sp-small sp-hint"><span id="sp-count">0</span> حرف — انستغرام الحد 2200</div>
+        </div>
+
+        <div class="sp-card">
+          <h2><span class="sp-step">2</span> صور أو فيديو من عندك <span class="sp-small">(اختياري)</span></h2>
+          <label class="sp-drop" id="sp-drop">
+            <strong>📎 اضغط باش تختار ولا جرّ الملفات هنا</strong>
+            <span class="sp-small">حتى {{ max_images }} صور، ولا فيديو واحد (حتى {{ max_video_mb }}MB) — jpg · png · webp · mp4 · mov</span>
+            <input type="file" name="files" id="sp-files" multiple accept=".jpg,.jpeg,.png,.webp,.mp4,.mov">
+          </label>
+          <div class="sp-grid" id="sp-previews"></div>
+          <div class="sp-small sp-hint">💾 الملفات تترفع مؤقتًا وتتحذف من السيرفر وحدها بعد ما ينتشر المنشور.</div>
+        </div>
+
+        <div class="sp-card">
+          <h2><span class="sp-step">3</span> المنصات</h2>
+          <div class="sp-plats">
+            {% set icons = {'facebook': 'f', 'instagram': '◎', 'tiktok': '♪'} %}
+            {% for n in ['facebook','instagram','tiktok'] %}
+            {% set on = (form.platforms is defined and n in (form.platforms or [])) or (not form.platforms and configured[n] and n != 'tiktok') %}
+            <label class="sp-plat {{ 'is-on' if on and configured[n] }} {{ 'is-off' if not configured[n] }}" data-plat="{{ n }}">
+              <input type="checkbox" name="platforms" value="{{ n }}" {{ 'checked' if on and configured[n] }} {{ 'disabled' if not configured[n] }}>
+              <span class="sp-ico {{ n }}">{{ icons[n] }}</span>
+              <span><b>{{ labels[n] }}</b>
+                {% if configured[n] %}<span class="sp-small">مربوط ✓</span>
+                {% else %}<a class="sp-small" href="#setup" data-goto="setup">غير مربوط — اربطو</a>{% endif %}</span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="sp-small sp-hint">انستغرام يحتاج صورة ولا فيديو. تيك توك يحتاج فيديو ولا صور{% if tiktok_mode == 'inbox' %} (وضع المسودة: يوصلك للتطبيق وإنت تكمل النشر){% endif %}.</div>
+        </div>
+
+        <div class="sp-card">
+          <h2><span class="sp-step">4</span> الوقت</h2>
+          <div class="sp-seg" id="sp-seg">
+            <label class="{{ 'is-on' if form.mode != 'schedule' }}"><input type="radio" name="mode" value="now" {{ 'checked' if form.mode != 'schedule' }}>⚡ انشر درك</label>
+            <label class="{{ 'is-on' if form.mode == 'schedule' }}"><input type="radio" name="mode" value="schedule" {{ 'checked' if form.mode == 'schedule' }}>🗓️ جدولة</label>
+          </div>
+          <div class="sp-when" id="sp-when-box" {{ 'hidden' if form.mode != 'schedule' }}>
+            <div class="sp-row">
+              <input type="datetime-local" name="scheduled_at" id="sp-when" value="{{ form.scheduled_at or '' }}">
+              <span class="sp-small">توقيت الجزائر</span>
+            </div>
+            <div class="sp-presets">
+              <button type="button" class="sp-btn sm" data-preset="+60">بعد ساعة</button>
+              <button type="button" class="sp-btn sm" data-preset="today20">اليوم 20:00</button>
+              <button type="button" class="sp-btn sm" data-preset="tom10">غدوة 10:00</button>
+              <button type="button" class="sp-btn sm" data-preset="tom20">غدوة 20:00</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sp-submitbar">
+          <span class="sp-small" id="sp-summary">اختار المنصات واكتب المنشور</span>
+          <button class="sp-btn primary" id="sp-submit" type="submit">انشر درك</button>
+        </div>
+      </div>
+
+      <aside class="sp-preview">
+        <div class="sp-card">
+          <h2>👁️ معاينة</h2>
+          <div class="sp-pv-media" id="sp-pv-media">ما كاين حتى صورة</div>
+          <div class="sp-pv-text is-empty" id="sp-pv-text">نص المنشور يبان هنا…</div>
+          <ul class="sp-warns" id="sp-warns"></ul>
+        </div>
+      </aside>
     </div>
-
-    <label class="f">2) النص</label>
-    <textarea name="caption" id="caption" placeholder="اكتب المنشور هنا…">{{ form.caption or '' }}</textarea>
-    <div class="small"><span id="count">0</span> حرف — انستغرام الحد 2200</div>
-
-    <label class="f">3) صور أو فيديو من عندك (اختياري)</label>
-    <input type="file" name="files" id="files" multiple accept=".jpg,.jpeg,.png,.webp,.mp4,.mov">
-    <div class="small">حتى {{ max_images }} صور، ولا فيديو واحد (حتى {{ max_video_mb }}MB). تتحذف من السيرفر بعد ما ينتشر المنشور.</div>
-    <div class="grid" id="previews"></div>
-
-    <label class="f">4) المنصات</label>
-    <div class="row">
-      {% for n in ['facebook','instagram','tiktok'] %}
-        <label><input type="checkbox" name="platforms" value="{{ n }}"
-          {{ 'checked' if (form.platforms is defined and n in (form.platforms or [])) or (not form.platforms and configured[n] and n != 'tiktok') }}
-          {{ 'disabled' if not configured[n] }}> {{ labels[n] }}{{ '' if configured[n] else ' (غير مربوط)' }}</label>
-      {% endfor %}
-    </div>
-
-    <label class="f">5) الوقت</label>
-    <div class="row">
-      <label><input type="radio" name="mode" value="now" {{ 'checked' if form.mode != 'schedule' }}> انشر درك</label>
-      <label><input type="radio" name="mode" value="schedule" {{ 'checked' if form.mode == 'schedule' }}> جدولة</label>
-      <input type="datetime-local" name="scheduled_at" id="when" value="{{ form.scheduled_at or '' }}" style="width:auto">
-      <span class="small">(توقيت الجزائر)</span>
-    </div>
-
-    <div style="margin-top:16px"><button class="primary" id="submit-btn" type="submit">انشر</button></div>
   </form>
+  </section>
 
-  <div class="card">
-    <h2>آخر المنشورات</h2>
-    {% if posts %}
-    <table>
-      <tr><th>#</th><th>النص</th><th>الحالة</th><th>الوقت</th><th></th></tr>
-      {% for p in posts %}
-      <tr>
-        <td>{{ p.id }}</td>
-        <td>{{ (p.caption or '—')[:70] }}{{ '…' if p.caption and p.caption|length > 70 }}<div class="small">{{ p.media_count }} ملف</div></td>
-        <td><span class="st-{{ p.status }}">{{ p.status|sp_status }}</span>
-          {% for r in p.results or [] %}
-            <div class="small">{{ labels[r.platform] }}: {{ r.status|sp_status }}</div>
-            {% if r.error %}<div class="err">{{ r.error }}</div>{% endif %}
-          {% endfor %}</td>
-        <td class="small">{{ (p.scheduled_at if p.status == 'scheduled' else (p.finished_at or p.created_at))|sp_local }}</td>
-        <td class="actions">
-          {% for a, t in [('retry','إعادة'),('cancel','إلغاء'),('delete','حذف')] %}
-            {% if (a == 'retry' and p.status in ['failed','partial']) or (a == 'cancel' and p.status == 'scheduled') or (a == 'delete' and p.status in ['done','failed','partial','cancelled']) %}
-            <form method="post" action="{{ prefix }}/posts/{{ p.id }}/{{ a }}">
-              {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
-              <button {{ 'onclick="return confirm(\'متأكد؟\')"'|safe if a != 'retry' }}>{{ t }}</button></form>
-            {% endif %}
-          {% endfor %}
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
-    {% else %}<div class="small">ما كاين حتى منشور باقي.</div>{% endif %}
-  </div>
+  {# ═════════════ تبويب 2: المنشورات ═════════════ #}
+  <section class="sp-panel" data-panel="posts">
+    <div class="sp-card">
+      <h2>🗂️ آخر المنشورات</h2>
+      {% if posts %}
+      <div class="sp-posts">
+        {% for p in posts %}
+        <div class="sp-post">
+          <div>
+            <div class="sp-post-text">{{ (p.caption or '— (بلا نص)')[:120] }}{{ '…' if p.caption and p.caption|length > 120 }}</div>
+            <span class="sp-badge sp-b-{{ p.status }}">{{ p.status|sp_status }}</span>
+            <span class="sp-small">· #{{ p.id }} · {{ p.media_count }} ملف ·
+              {{ (p.scheduled_at if p.status == 'scheduled' else (p.finished_at or p.created_at))|sp_local }}</span>
+            <div class="sp-res-chips">
+              {% for r in p.results or [] %}
+                <span class="sp-rchip {{ r.status }}">{{ labels[r.platform] }}: {{ r.status|sp_status }}</span>
+              {% endfor %}
+            </div>
+            {% for r in p.results or [] %}{% if r.error %}<div class="sp-err">⚠ {{ labels[r.platform] }}: {{ r.error }}</div>{% endif %}{% endfor %}
+          </div>
+          <div class="sp-actions">
+            {% for a, t in [('retry','↻ إعادة'),('cancel','إلغاء'),('delete','حذف')] %}
+              {% if (a == 'retry' and p.status in ['failed','partial']) or (a == 'cancel' and p.status == 'scheduled') or (a == 'delete' and p.status in ['done','failed','partial','cancelled']) %}
+              <form method="post" action="{{ prefix }}/posts/{{ p.id }}/{{ a }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="sp-btn sm {{ 'danger' if a != 'retry' }}" {{ 'onclick="return confirm(\'متأكد؟\')"'|safe if a != 'retry' }}>{{ t }}</button>
+              </form>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="sp-empty">ما كاين حتى منشور باقي.<br><a href="#compose" data-goto="compose">ابدا بمنشور جديد ←</a></div>
+      {% endif %}
+    </div>
+  </section>
+
+  {# ═════════════ تبويب 3: الربط والإعداد ═════════════ #}
+  <section class="sp-panel" data-panel="setup">
+    <div class="sp-card">
+      <h2>🔗 حالة الربط</h2>
+      <div class="sp-conn">
+        {% for s in setup %}
+        <div class="sp-conn-card {{ 'ok' if s.ok }}">
+          <div class="sp-conn-head"><span class="sp-ico {{ s.key }}">{{ icons[s.key] if icons else '' }}</span>
+            <div><b>{{ labels[s.key] }}</b><div class="sp-small">{{ 'مربوط ✓' if s.ok else 'ما تربطش' }}</div></div></div>
+          <div>{% for v in s.vars %}<span class="sp-var {{ 'ok' if v.ok else 'miss' }}">{{ '✓' if v.ok else '✗' }} {{ v.name }}</span>{% endfor %}</div>
+          {% if s.key == 'tiktok' %}
+            <div style="margin-top:10px">
+              {% if tiktok_connect %}<a class="sp-btn sm" href="{{ prefix }}/tiktok/connect">{{ 'إعادة ربط تيك توك' if s.ok else 'ربط حساب تيك توك' }}</a>
+              {% else %}<span class="sp-small">تيك توك اختياري — عمّر المتغيرات الأول.</span>{% endif %}
+            </div>
+          {% endif %}
+          {% if s.key == 'instagram' and not s.ok %}
+            <div style="margin-top:10px"><button type="button" class="sp-btn sm" id="sp-ig-btn">جيب IG_USER_ID تاعي</button></div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="sp-row" style="margin-top:14px">
+        <button type="button" class="sp-btn" id="sp-check-btn">🔌 فحص الاتصال</button>
+        <span class="sp-small">يتأكد واش المفاتيح خدامين فعلاً (ما ينشر والو).</span>
+      </div>
+      <div id="sp-check-out"></div><div id="sp-ig-out"></div>
+      {% if not public_base_url %}
+      <div class="sp-note">⚠️ زيد متغير <code>SP_PUBLIC_BASE_URL</code> فـ Railway (مثلا <code>https://budacdz.com</code>) باش المنشورات المجدولة تخدم حتى بعد إعادة تشغيل السيرفر.</div>
+      {% endif %}
+    </div>
+
+    <details class="sp-details" open>
+      <summary><span class="sp-ico facebook">f</span> 1) ربط فيسبوك (الصفحة)</summary>
+      <ol>
+        <li>دخل لـ <code>developers.facebook.com</code> بحساب الفيسبوك اللي هو <b>أدمين</b> على صفحة Budac ← <b>My Apps</b> ← <b>Create App</b>. اختار الـ use case: <code>Manage everything on your Page</code>.</li>
+        <li>من <b>Tools ← Graph API Explorer</b>: اختار تطبيقك، ثم <b>Get User Access Token</b> وعلّم الصلاحيات: <code>pages_show_list</code> · <code>pages_read_engagement</code> · <code>pages_manage_posts</code>. اضغط <b>Generate Access Token</b> ووافق على الصفحة.</li>
+        <li>مدّد التوكن لـ«طويل المدى»: من <b>Access Token Debugger</b> اضغط <b>Extend Access Token</b>، ولا ادعي <code>/oauth/access_token?grant_type=fb_exchange_token&amp;client_id=APP_ID&amp;client_secret=APP_SECRET&amp;fb_exchange_token=التوكن</code>.</li>
+        <li>في Explorer، بالتوكن الطويل، اطلب <code>GET me/accounts</code>. تلقى قائمة صفحاتك: <code>id</code> تاع Budac = <b>FB_PAGE_ID</b>، و<code>access_token</code> = <b>FB_PAGE_TOKEN</b> (توكن الصفحة اللي يجي من توكن طويل ما ينتهيش).</li>
+        <li>في <b>Railway ← Variables</b> زيد <code>FB_PAGE_ID</code> و<code>FB_PAGE_TOKEN</code>. استنى الـ deploy يكمل ورجع هنا واضغط <b>فحص الاتصال</b>.</li>
+      </ol>
+    </details>
+
+    <details class="sp-details">
+      <summary><span class="sp-ico instagram">◎</span> 2) ربط انستغرام</summary>
+      <ol>
+        <li>حساب انستغرام لازم يكون <b>Business</b> ولا <b>Creator</b> (من إعدادات انستغرام ← نوع الحساب)، ومربوط بصفحة الفيسبوك (إعدادات الصفحة ← الحسابات المرتبطة).</li>
+        <li>في Graph API Explorer زيد صلاحيتين: <code>instagram_basic</code> و<code>instagram_content_publish</code>، وعاود خطوات 2-4 تاع فيسبوك باش التوكن الجديد يحملهم.</li>
+        <li>بعد ما تحط <code>FB_PAGE_ID</code> و<code>FB_PAGE_TOKEN</code> الجداد، اضغط هنا فوق <b>«جيب IG_USER_ID تاعي»</b> — ياخذو لك الرقم وحدو. حطو في Railway باسم <code>IG_USER_ID</code>.</li>
+        <li>نفس <code>FB_PAGE_TOKEN</code> يخدم لانستغرام. بعد الـ deploy اضغط <b>فحص الاتصال</b>.</li>
+      </ol>
+    </details>
+
+    <details class="sp-details">
+      <summary><span class="sp-ico tiktok">♪</span> 3) ربط تيك توك (اختياري)</summary>
+      <ol>
+        <li>دخل لـ <code>developers.tiktok.com</code> ← <b>Manage apps ← Create app</b>. زيد المنتجات <b>Login Kit</b> و<b>Content Posting API</b>.</li>
+        <li>في الـ Redirect URI حط: <code>{{ tiktok_redirect_suggestion }}</code></li>
+        <li>في Railway زيد: <code>TIKTOK_CLIENT_KEY</code> · <code>TIKTOK_CLIENT_SECRET</code> · <code>TIKTOK_REDIRECT_URI</code> (نفس الرابط فوق).</li>
+        <li>بعد الـ deploy اضغط <b>ربط حساب تيك توك</b> فوق ووافق.</li>
+      </ol>
+      <div class="sp-note" style="margin:0 16px 14px">الوضع الحالي: <b>{{ 'مسودة (inbox)' if tiktok_mode == 'inbox' else 'نشر مباشر (direct)' }}</b>.
+        في وضع المسودة الفيديو يوصل لتطبيق تيك توك وإنت تكمل النشر بضغطة. النشر المباشر قبل موافقة (audit) تيك توك يخرج <b>خاص</b> برك.</div>
+    </details>
+
+    <div class="sp-note">ℹ️ بما أنك أدمين على التطبيق والصفحة، غالبًا يخدم الربط في وضع Development بلا App Review. ولو Meta طلبت مراجعة (خاصة لـ <code>instagram_content_publish</code>)، تلقى الزر في لوحة التطبيق ← App Review. وأول تجربة دير منشور تجريبي.</div>
+  </section>
 </div>
 
 <script>
-const PREFIX = {{ prefix|tojson }};
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let product = null;
+(function () {
+  const PREFIX = {{ prefix|tojson }};
+  const MAX_IMAGES = {{ max_images|tojson }};
+  const ICONS = {facebook: 'f', instagram: '◎', tiktok: '♪'};
+  const LABELS = {{ labels|tojson }};
+  const $ = (id) => document.getElementById(id);
+  const root = $('sp'); root.classList.add('sp-js');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-// عدّاد الأحرف
-const cap = $('caption'); const upd = () => $('count').textContent = cap.value.length; cap.addEventListener('input', upd); upd();
-
-// البحث عن منتج
-let timer;
-async function search() {
-  const q = $('q').value.trim();
-  const r = await fetch(`${PREFIX}/api/products?q=${encodeURIComponent(q)}`);
-  const items = r.ok ? await r.json() : [];
-  $('results').innerHTML = items.map(i => `<div class="res" data-id="${esc(i.id)}">
-    ${i.thumb ? `<img src="${esc(i.thumb)}" alt="">` : '<div class="ph"></div>'}
-    <div><div>${esc(i.name)}</div><div class="small">${esc(i.price)} دج</div></div></div>`).join('');
-}
-$('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 300); });
-$('q').addEventListener('focus', () => { if (!$('results').children.length) search(); });
-$('results').addEventListener('click', async (e) => {
-  const el = e.target.closest('.res'); if (!el) return;
-  const r = await fetch(`${PREFIX}/api/products/${encodeURIComponent(el.dataset.id)}`);
-  if (!r.ok) return;
-  product = await r.json();
-  $('product_id').value = product.id; $('picked-name').textContent = product.name; $('picked').hidden = false;
-  $('gallery').innerHTML = product.images.map(i => `<label class="thumb"><img src="${esc(i.url)}" alt="">
-    <input type="checkbox" name="gallery" value="${esc(i.id)}" checked></label>`).join('')
-    || '<span class="small">هاد المنتج ما عندوش صور.</span>';
-  $('results').innerHTML = ''; $('q').value = '';
-});
-$('clear-product').onclick = () => { product = null; $('product_id').value = ''; $('picked').hidden = true; $('gallery').innerHTML = ''; };
-$('insert-info').onclick = () => {
-  if (!product) return;
-  const t = `${product.name}\nالسعر: ${product.price} دج\n${product.url}`;
-  cap.value = cap.value ? cap.value + '\n\n' + t : t; upd(); cap.focus();
-};
-
-// معاينة الملفات المرفوعة (في المتصفح برك، ما تروحش للسيرفر قبل ما تضغط انشر)
-$('files').addEventListener('change', (e) => {
-  $('previews').innerHTML = '';
-  for (const f of e.target.files) {
-    const url = URL.createObjectURL(f);
-    const el = document.createElement('div'); el.className = 'thumb';
-    el.innerHTML = f.type.startsWith('video') ? `<video src="${url}" style="width:92px;height:92px;object-fit:cover;border-radius:8px"></video>` : `<img src="${url}" alt="">`;
-    $('previews').appendChild(el);
+  // ───── تبويبات (محفوظة فـ hash) ─────
+  function showTab(name) {
+    if (!['compose', 'posts', 'setup'].includes(name)) name = 'compose';
+    document.querySelectorAll('.sp-tab').forEach(t => t.classList.toggle('is-active', t.dataset.tab === name));
+    document.querySelectorAll('.sp-panel').forEach(p => p.classList.toggle('is-active', p.dataset.panel === name));
   }
-});
+  document.querySelectorAll('.sp-tab').forEach(t => t.addEventListener('click', () => { history.replaceState(null, '', '#' + t.dataset.tab); showTab(t.dataset.tab); }));
+  document.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); history.replaceState(null, '', '#' + a.dataset.goto); showTab(a.dataset.goto); window.scrollTo({top: 0, behavior: 'smooth'}); }));
+  showTab(location.hash.slice(1));
+  window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 
-// زر الإرسال حسب الوضع
-const modeEls = document.querySelectorAll('input[name=mode]');
-function syncMode() {
-  const sch = document.querySelector('input[name=mode]:checked').value === 'schedule';
-  $('submit-btn').textContent = sch ? 'جدول المنشور' : 'انشر درك'; $('when').required = sch;
-}
-modeEls.forEach(el => el.addEventListener('change', syncMode)); syncMode();
-$('when').addEventListener('input', () => { document.querySelector('input[name=mode][value=schedule]').checked = true; syncMode(); });
-$('post-form').addEventListener('submit', () => { $('submit-btn').disabled = true; $('submit-btn').textContent = 'راهو يتبعث…'; });
+  // ───── الحالة ─────
+  let product = null;            // المنتج المختار
+  let picked = [];               // ملفات من عندك (File[])
+  const cap = $('sp-caption');
 
-// فحص الاتصال
-$('check-btn').onclick = async () => {
-  $('check-out').textContent = 'نفحص…';
-  const r = await fetch(`${PREFIX}/check`); const d = await r.json();
-  $('check-out').textContent = Object.entries(d).map(([k, v]) => `${v.ok ? '✓' : '✗'} ${k}: ${v.msg}`).join('\n');
-};
+  // ───── البحث عن منتج ─────
+  let timer;
+  async function search() {
+    const r = await fetch(`${PREFIX}/api/products?q=${encodeURIComponent($('sp-q').value.trim())}`, {credentials: 'same-origin'});
+    const items = r.ok ? await r.json() : [];
+    $('sp-results').innerHTML = items.length ? items.map(i => `<div class="sp-res" data-id="${esc(i.id)}">
+      ${i.thumb ? `<img src="${esc(i.thumb)}" alt="">` : '<div class="sp-ph"></div>'}
+      <div><div>${esc(i.name)}</div><div class="sp-small">${esc(i.price)} دج</div></div></div>`).join('')
+      : '<div class="sp-small">ما لقيت حتى منتج.</div>';
+  }
+  $('sp-q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 300); });
+  $('sp-q').addEventListener('focus', () => { if (!$('sp-results').children.length) search(); });
+  $('sp-results').addEventListener('click', async (e) => {
+    const el = e.target.closest('.sp-res'); if (!el) return;
+    const r = await fetch(`${PREFIX}/api/products/${encodeURIComponent(el.dataset.id)}`, {credentials: 'same-origin'});
+    if (!r.ok) return;
+    product = await r.json();
+    $('sp-product-id').value = product.id; $('sp-picked-name').textContent = product.name; $('sp-picked').hidden = false;
+    $('sp-gallery').innerHTML = product.images.map(i => `<label class="sp-thumb"><img src="${esc(i.thumb)}" alt="">
+      <input type="checkbox" name="gallery" value="${esc(i.id)}" data-src="${esc(i.thumb)}" checked><span class="sp-tick">✓</span></label>`).join('')
+      || '<span class="sp-small">هاد المنتج ما عندوش صور.</span>';
+    $('sp-results').innerHTML = ''; $('sp-q').value = '';
+    refresh();
+  });
+  $('sp-gallery').addEventListener('change', refresh);
+  $('sp-clear').onclick = () => { product = null; $('sp-product-id').value = ''; $('sp-picked').hidden = true; $('sp-gallery').innerHTML = ''; refresh(); };
+  $('sp-insert').onclick = () => {
+    if (!product) return;
+    const t = `${product.name}\nالسعر: ${product.price} دج\n${product.url}`;
+    cap.value = cap.value ? cap.value + '\n\n' + t : t; refresh(); cap.focus();
+  };
 
-{% if has_active %}setTimeout(() => location.href = PREFIX + '/', 15000);{% endif %}
+  // ───── الملفات (إضافة / حذف / جرّ) ─────
+  function syncInput() {
+    const dt = new DataTransfer(); picked.forEach(f => dt.items.add(f)); $('sp-files').files = dt.files;
+  }
+  function addFiles(list) {
+    for (const f of list) if (!picked.some(p => p.name === f.name && p.size === f.size)) picked.push(f);
+    syncInput(); renderPicked(); refresh();
+  }
+  function renderPicked() {
+    $('sp-previews').innerHTML = '';
+    picked.forEach((f, i) => {
+      const el = document.createElement('div'); el.className = 'sp-thumb'; el.dataset.idx = i;
+      el.innerHTML = (f.type.startsWith('video') ? `<div class="sp-file">🎬 ${esc(f.name)}</div>` : `<img src="${URL.createObjectURL(f)}" alt="">`)
+        + `<button type="button" class="sp-x" aria-label="حذف">×</button>`;
+      el.querySelector('.sp-x').onclick = () => { picked.splice(i, 1); syncInput(); renderPicked(); refresh(); };
+      $('sp-previews').appendChild(el);
+    });
+  }
+  $('sp-files').addEventListener('change', (e) => { const l = [...e.target.files]; picked = []; addFiles(l); });
+  const drop = $('sp-drop');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('is-over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('is-over'); }));
+  drop.addEventListener('drop', (e) => addFiles([...e.dataTransfer.files]));
+
+  // ───── المنصات والوقت ─────
+  const plats = () => [...document.querySelectorAll('input[name=platforms]:checked')].map(i => i.value);
+  document.querySelectorAll('.sp-plat').forEach(l => l.addEventListener('change', () => { l.classList.toggle('is-on', l.querySelector('input').checked); refresh(); }));
+  function syncMode() {
+    const sch = document.querySelector('input[name=mode]:checked').value === 'schedule';
+    document.querySelectorAll('#sp-seg label').forEach(l => l.classList.toggle('is-on', l.querySelector('input').checked));
+    $('sp-when-box').hidden = !sch; $('sp-when').required = sch;
+    $('sp-submit').textContent = sch ? 'جدول المنشور' : 'انشر درك'; refresh();
+  }
+  document.querySelectorAll('input[name=mode]').forEach(el => el.addEventListener('change', syncMode));
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
+    const d = new Date(), k = b.dataset.preset;
+    if (k === '+60') d.setMinutes(d.getMinutes() + 60);
+    else { if (k.startsWith('tom')) d.setDate(d.getDate() + 1); d.setHours(k.endsWith('10') ? 10 : 20, 0, 0, 0); if (k === 'today20' && d < new Date()) d.setDate(d.getDate() + 1); }
+    $('sp-when').value = fmt(d); refresh();
+  }));
+
+  // ───── المعاينة والتنبيهات ─────
+  function refresh() {
+    const text = cap.value;
+    $('sp-count').textContent = text.length;
+    $('sp-pv-text').textContent = text || 'نص المنشور يبان هنا…'; $('sp-pv-text').classList.toggle('is-empty', !text);
+
+    const gal = [...document.querySelectorAll('#sp-gallery input:checked')].map(i => ({src: i.dataset.src}));
+    const imgs = picked.filter(f => !f.type.startsWith('video')), vids = picked.filter(f => f.type.startsWith('video'));
+    const nImg = gal.length + imgs.length, nVid = vids.length, total = nImg + nVid;
+    const first = gal[0] ? gal[0].src : (imgs[0] ? URL.createObjectURL(imgs[0]) : null);
+    $('sp-pv-media').innerHTML = first
+      ? `<img src="${esc(first)}" alt="">` + (total > 1 ? `<span class="sp-pv-badge">1 / ${total}</span>` : '')
+      : (nVid ? '🎬 ' + esc(vids[0].name) : 'ما كاين حتى صورة');
+
+    const p = plats(), w = [];
+    if (!p.length) w.push('اختار منصة وحدة على الأقل.');
+    if (nVid && nImg) w.push('ما تخلطش صور مع فيديو في منشور واحد.');
+    if (nVid > 1) w.push('فيديو واحد برك في كل منشور.');
+    if (nImg > MAX_IMAGES) w.push(`الحد الأقصى ${MAX_IMAGES} صور.`);
+    if (p.includes('instagram') && !total) w.push('انستغرام يحتاج صورة ولا فيديو.');
+    if (p.includes('instagram') && text.length > 2200) w.push('نص انستغرام أطول من 2200 حرف.');
+    if (p.includes('tiktok') && !total) w.push('تيك توك يحتاج فيديو ولا صور.');
+    if (!text.trim() && !total) w.push('اكتب نص ولا زيد صورة/فيديو.');
+    $('sp-warns').innerHTML = w.length ? w.map(x => `<li>⚠ ${esc(x)}</li>`).join('') : '<li class="ok">✓ كلشي مليح، تقدر تنشر.</li>';
+
+    const sch = document.querySelector('input[name=mode]:checked').value === 'schedule';
+    $('sp-summary').textContent = p.length ? `${p.map(x => LABELS[x]).join(' + ')} · ${total} ملف · ${sch ? 'مجدول' : 'درك'}` : 'اختار المنصات واكتب المنشور';
+  }
+  cap.addEventListener('input', refresh);
+  $('sp-when').addEventListener('input', () => { document.querySelector('input[name=mode][value=schedule]').checked = true; syncMode(); });
+  $('sp-form').addEventListener('submit', () => { $('sp-submit').disabled = true; $('sp-submit').textContent = 'راهو يتبعث…'; });
+  syncMode(); refresh();
+
+  // ───── فحص الاتصال + IG_USER_ID ─────
+  $('sp-check-btn').onclick = async () => {
+    $('sp-check-out').textContent = 'نفحص…';
+    const r = await fetch(`${PREFIX}/check`, {credentials: 'same-origin'}); const d = await r.json();
+    $('sp-check-out').textContent = Object.entries(d).map(([k, v]) => `${v.ok ? '✅' : '❌'} ${LABELS[k]}: ${v.msg}`).join('\n');
+  };
+  const igBtn = $('sp-ig-btn');
+  if (igBtn) igBtn.onclick = async () => {
+    $('sp-ig-out').textContent = 'نقلّب…';
+    const r = await fetch(`${PREFIX}/ig-lookup`, {credentials: 'same-origin'}); const d = await r.json();
+    $('sp-ig-out').textContent = d.ok ? `✅ حساب @${d.username || ''} — IG_USER_ID = ${d.id}\nحطّو فـ Railway باسم IG_USER_ID.` : `❌ ${d.msg}`;
+  };
+
+  // ───── تحديث تلقائي للحالات (فقط لو الأدمن ما يكتبش) ─────
+  {% if has_active %}
+  setTimeout(() => {
+    const idle = !cap.value && !picked.length && !$('sp-product-id').value;
+    if (idle && location.hash === '#posts') location.reload();
+  }, 15000);
+  {% endif %}
+})();
 </script>
-</body>
-</html>
+{% endblock %}

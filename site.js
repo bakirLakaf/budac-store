@@ -1,0 +1,821 @@
+/*
+ * سكريبت الموقع — خفيف وبلا أي مكتبة خارجية.
+ * سبب هذا القرار: jQuery ولا سلايدر جاهز يزيدو 80-100 كيلوبايت للتحميل،
+ * وكلشي هنا يقدر يتعمل بـ40 سطر جافاسكريبت عادي.
+ */
+
+/* ═══════════════════════════════════════════════════════════════
+ * أدوات أمان مشتركة — يستعملوها كل الأجزاء تحت.
+ *
+ * ⚠️ علاش فوق برّا الوحدات (IIFE)؟ لأنها كانت مكرّرة فكل وحدة،
+ * ووحدة وحدة (منتجات «شفتها مؤخرًا») نسيتها كليًا — وهذا كان
+ * منفذ XSS حقيقي. نسخة وحدة = ما تتنساش.
+ * ═══════════════════════════════════════════════════════════════ */
+var BudacSafe = (function () {
+    "use strict";
+
+    /**
+     * يهرّب النص باش ما يتفسّرش كـHTML.
+     * ⚠️ هاذي للنصوص والخصائص (attributes) — ماشي للروابط:
+     * "javascript:alert(1)" ماكانش فيها حتى حرف يتهرّب، فتعدّي سالمة.
+     */
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str == null ? '' : str;
+        return div.innerHTML;
+    }
+
+    /**
+     * ينظّف رابطًا قبل ما يدخل فـhref ولا src.
+     *
+     * القاعدة: نقبلو غير الروابط الداخلية (تبدا بـ/ وماشي //).
+     * كل روابطنا داخلية أصلاً (url_for يولّدهم)، فالتشديد ما يكلّف والو،
+     * ويسدّ javascript: وdata: و//evil.com دفعة وحدة.
+     */
+    function safeUrl(url) {
+        if (typeof url !== 'string') return '#';
+        var trimmed = url.trim();
+        if (trimmed.charAt(0) !== '/' || trimmed.charAt(1) === '/') return '#';
+        return escapeHtml(trimmed);
+    }
+
+    return { escapeHtml: escapeHtml, safeUrl: safeUrl };
+})();
+
+(function () {
+    "use strict";
+
+    var escapeHtml = BudacSafe.escapeHtml;
+    var safeUrl    = BudacSafe.safeUrl;
+
+    // واش المستخدم طالب تقليل الحركة (إعداد فالنظام)؟ نحترموه.
+    var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    /* ═══════════ 1. سلايدر العروض ═══════════ */
+    function initHeroSlider() {
+        var slider = document.getElementById("heroSlider");
+        var track = document.getElementById("heroTrack");
+        if (!slider || !track) return;
+
+        var slides = track.querySelectorAll(".hero-slide");
+        if (slides.length < 2) return;
+
+        var dots = slider.querySelectorAll(".hero-dot");
+        var arrows = slider.querySelectorAll(".hero-arrow");
+        var current = 0;
+        var timer = null;
+        var AUTOPLAY_MS = 6000;
+
+        function goTo(index) {
+            // نلف بشكل دائري: بعد الأخيرة نرجعو للأولى
+            current = (index + slides.length) % slides.length;
+
+            // فـRTL الاتجاه معكوس — نستعملو موجب باش ينزلق صح
+            track.style.transform = "translateX(" + (current * 100) + "%)";
+
+            dots.forEach(function (dot, i) {
+                dot.classList.toggle("is-active", i === current);
+            });
+        }
+
+        function next() { goTo(current + 1); }
+
+        function startAutoplay() {
+            if (reduceMotion) return;
+            stopAutoplay();
+            timer = setInterval(next, AUTOPLAY_MS);
+        }
+        function stopAutoplay() {
+            if (timer) { clearInterval(timer); timer = null; }
+        }
+
+        arrows.forEach(function (arrow) {
+            arrow.addEventListener("click", function () {
+                goTo(current + parseInt(arrow.dataset.dir, 10));
+                startAutoplay();  // نعاودو العد من الصفر بعد تدخل المستخدم
+            });
+        });
+
+        dots.forEach(function (dot) {
+            dot.addEventListener("click", function () {
+                goTo(parseInt(dot.dataset.index, 10));
+                startAutoplay();
+            });
+        });
+
+        // نوقفو التشغيل التلقائي كي الماوس فوق السلايدر — باش الزبون يقرا براحتو
+        slider.addEventListener("mouseenter", stopAutoplay);
+        slider.addEventListener("mouseleave", startAutoplay);
+
+        // نوقفوه كي التبويب مخفي — ما فايدة نستهلكو موارد على صفحة ما يشوفهاش حد
+        document.addEventListener("visibilitychange", function () {
+            document.hidden ? stopAutoplay() : startAutoplay();
+        });
+
+        // السحب بالإصبع فالموبايل
+        var startX = null;
+        track.addEventListener("touchstart", function (e) {
+            startX = e.touches[0].clientX;
+            stopAutoplay();
+        }, { passive: true });
+
+        track.addEventListener("touchend", function (e) {
+            if (startX === null) return;
+            var diff = e.changedTouches[0].clientX - startX;
+            if (Math.abs(diff) > 50) {
+                // فـRTL: السحب لليسار = التالي
+                goTo(current + (diff < 0 ? 1 : -1));
+            }
+            startX = null;
+            startAutoplay();
+        }, { passive: true });
+
+        goTo(0);
+        startAutoplay();
+    }
+
+    /* ═══════════ 2. ظهور الأقسام عند التمرير ═══════════ */
+    function initScrollReveal() {
+        var items = document.querySelectorAll(".reveal");
+        if (!items.length) return;
+
+        // IntersectionObserver أخف بكثير من الاستماع لحدث scroll
+        if (!("IntersectionObserver" in window) || reduceMotion) {
+            items.forEach(function (el) { el.classList.add("is-visible"); });
+            return;
+        }
+
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add("is-visible");
+                    observer.unobserve(entry.target);  // مرة وحدة تكفي
+                }
+            });
+        }, { threshold: 0.08, rootMargin: "0px 0px -40px 0px" });
+
+        items.forEach(function (el) { observer.observe(el); });
+    }
+
+    /* ═══════════ 3. منتجات شفتها مؤخرًا ═══════════ */
+    function initRecentlyViewed() {
+        var section = document.getElementById("recentlyViewed");
+        var grid = document.getElementById("recentlyViewedGrid");
+
+        /*
+         * ⚠️ هاد القسم جالس **فوق** شبكة المنتجات، ويبدا مخفيًا ثم
+         * يتعمّر بعد fetch. يعني ارتفاع الصفحة يتبدّل بعد ما يكون
+         * الزائر خلاص وصل لمكانو — وكلشي تحت ينزل.
+         *
+         * هذا كان يكسر الترقيم: تنقر «3»، الصفحة ترجع، المتصفح
+         * يوقّفك عند #products صح... ثم هاد القسم يبان ويدفعك
+         * لفوق، فتلقى روحك عند «شفتها مؤخرًا» بدل المنتجات.
+         *
+         * الحل: نعلمو الآخرين كي نستقرّو (نجحنا ولا فشلنا ولا
+         * ماكانش شي نعرضو)، وتمرير المرساة يستنّى هاد الإشارة.
+         */
+        function settled() {
+            document.dispatchEvent(new CustomEvent("budac:recent-settled"));
+        }
+
+        if (!section || !grid) { settled(); return; }
+
+        var KEY = "budac_recent";
+        var slugs;
+
+        try {
+            slugs = JSON.parse(localStorage.getItem(KEY) || "[]");
+        } catch (e) {
+            settled();
+            return;
+        }
+
+        if (!slugs.length) { settled(); return; }
+
+        fetch("/api/products-by-slug?slugs=" + encodeURIComponent(slugs.join(",")))
+            .then(function (r) { return r.json(); })
+            .then(function (products) {
+                if (!products.length) { settled(); return; }
+
+                // 🔴 إصلاح: كانت البيانات تدخل innerHTML خام بلا تهريب —
+                // وحدها فالمشروع كامل (كل باقي الأماكن تستعمل escapeHtml).
+                // اسم المنتج يجي من استيراد YouCan/Excel، يعني بيانات
+                // خارجية: اسم فيه <img src=x onerror=...> كان يتنفّذ عند
+                // كل زائر. وCSP فيه 'unsafe-inline' فما كانش يوقفو.
+                //
+                // ⚠️ كل قيمة حسب سياقها: النصوص بـescapeHtml،
+                // والروابط بـsafeUrl (تمنع javascript: وroot-relative مزوّر).
+                grid.innerHTML = products.map(function (p) {
+                    var media = p.image
+                        ? '<img src="' + safeUrl(p.image) + '" alt="" loading="lazy">'
+                        : '<span class="ph-monogram">' + escapeHtml(p.letter) + "</span>";
+
+                    return '<a href="' + safeUrl(p.url) + '" class="product-card">' +
+                        '<div class="product-card-image">' + media + "</div>" +
+                        '<div class="product-card-body">' +
+                        '<h3 class="product-card-name">' + escapeHtml(p.name) + "</h3>" +
+                        '<p class="product-card-price">' + escapeHtml(p.price) + "</p>" +
+                        "</div></a>";
+                }).join("");
+
+                section.hidden = false;
+                settled();
+            })
+            .catch(function () {
+                /* فشل الشبكة — نخليو القسم مخفي، لكن لازم نعلمو
+                   باش التمرير ما يبقاش يستنّى للأبد */
+                settled();
+            });
+
+        var clearBtn = document.getElementById("clearRecent");
+        if (clearBtn) {
+            clearBtn.addEventListener("click", function () {
+                localStorage.removeItem(KEY);
+                section.hidden = true;
+            });
+        }
+    }
+
+    /* ═══════════ 4. إخفاء رسائل flash تلقائيًا ═══════════ */
+    function initFlashAutoHide() {
+        document.querySelectorAll(".flash").forEach(function (flash) {
+            setTimeout(function () {
+                flash.style.transition = "opacity .4s ease, transform .4s ease";
+                flash.style.opacity = "0";
+                flash.style.transform = "translateY(-10px)";
+                setTimeout(function () { flash.remove(); }, 400);
+            }, 5000);
+        });
+    }
+
+    /* ═══════════ التشغيل ═══════════ */
+    function init() {
+        initHeroSlider();
+        initScrollReveal();
+        initRecentlyViewed();
+        initFlashAutoHide();
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+    } else {
+        init();
+    }
+})();
+
+/* ════════════════════════════════════════════════════════════
+   لوحة السلة الجانبية (v15)
+   تتفتح فنفس الصفحة بلا انتقال. كل الأسعار تجي من السيرفر —
+   ما نحسبو والو فالمتصفح باش الزبون ما يقدرش يبدّلهم.
+   ════════════════════════════════════════════════════════════ */
+(function () {
+    var escapeHtml = BudacSafe.escapeHtml;
+
+    var btn      = document.getElementById('cartFloatBtn');
+    var drawer   = document.getElementById('cartDrawer');
+    var overlay  = document.getElementById('cartOverlay');
+    var closeBtn = document.getElementById('cartDrawerClose');
+    var body     = document.getElementById('cartDrawerBody');
+    var foot     = document.getElementById('cartDrawerFoot');
+    var subtotal = document.getElementById('cartDrawerSubtotal');
+    var floatCount = document.getElementById('cartFloatCount');
+
+    if (!btn || !drawer) return;
+
+    var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = tokenMeta ? tokenMeta.getAttribute('content') : '';
+    var isOpen = false;
+
+    function openDrawer() {
+        isOpen = true;
+        overlay.hidden = false;
+        drawer.hidden = false;
+        // نأخّر إضافة الكلاس إطار واحد باش الانتقال (transition) يبان
+        requestAnimationFrame(function () {
+            overlay.classList.add('is-open');
+            drawer.classList.add('is-open');
+        });
+        document.body.classList.add('drawer-open');
+        loadCart();
+    }
+
+    function closeDrawer() {
+        isOpen = false;
+        overlay.classList.remove('is-open');
+        drawer.classList.remove('is-open');
+        document.body.classList.remove('drawer-open');
+        setTimeout(function () {
+            if (!isOpen) { overlay.hidden = true; drawer.hidden = true; }
+        }, 250);
+    }
+
+    function render(data) {
+        if (!data.lines || data.lines.length === 0) {
+            body.innerHTML = '<p class="cart-drawer-empty">سلتك خاوية.<br>تصفّح المنتجات وزيد اللي عجبك.</p>';
+            foot.hidden = true;
+        } else {
+            var html = '';
+            data.lines.forEach(function (line) {
+                var img = line.image
+                    ? '<img class="cd-line-img" src="/static/img/products/' + escapeHtml(line.image) + '" alt="" loading="lazy">'
+                    : '<div class="cd-line-img"></div>';
+                html +=
+                    '<div class="cd-line" data-key="' + escapeHtml(line.key) + '">' +
+                        img +
+                        '<div class="cd-line-info">' +
+                            '<p class="cd-line-name">' + escapeHtml(line.name) + '</p>' +
+                            (line.variant_label ? '<p class="cd-line-variant">' + escapeHtml(line.variant_label) + '</p>' : '') +
+                            '<p class="cd-line-price">' + escapeHtml(line.line_total_display) + '</p>' +
+                            '<div class="cd-line-actions">' +
+                                '<button type="button" class="cd-qty-btn" data-act="dec">−</button>' +
+                                '<span class="cd-qty-val">' + line.quantity + '</span>' +
+                                '<button type="button" class="cd-qty-btn" data-act="inc">+</button>' +
+                                '<button type="button" class="cd-remove" data-act="del">حذف</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+            });
+            body.innerHTML = html;
+            subtotal.textContent = data.subtotal_display;
+            foot.hidden = false;
+        }
+        updateCounts(data.count);
+    }
+
+    function updateCounts(count) {
+        if (floatCount) {
+            floatCount.textContent = count;
+            floatCount.classList.toggle('has-items', count > 0);
+        }
+        // نحدّثو حتى عدّاد الهيدر باش الرقمين ما يختلفوش
+        var headerCount = document.querySelector('.cart-link .cart-count');
+        if (headerCount) {
+            headerCount.textContent = count;
+            headerCount.classList.toggle('has-items', count > 0);
+        }
+    }
+
+    function loadCart() {
+        body.innerHTML = '<p class="cart-drawer-loading">جاري التحميل…</p>';
+        fetch('/api/cart', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(render)
+            .catch(function () {
+                body.innerHTML = '<p class="cart-drawer-empty">تعذّر تحميل السلة. حاول من جديد.</p>';
+            });
+    }
+
+    function changeQty(key, quantity) {
+        fetch('/api/cart/update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ key: key, quantity: quantity })
+        })
+            .then(function (r) { return r.json(); })
+            .then(render)
+            .catch(function () { loadCart(); });
+    }
+
+    // تفويض الأحداث: زر واحد يخدم على كل الأسطر حتى بعد إعادة الرسم
+    body.addEventListener('click', function (e) {
+        var target = e.target.closest('[data-act]');
+        if (!target) return;
+
+        var lineEl = target.closest('.cd-line');
+        if (!lineEl) return;
+
+        var key = lineEl.getAttribute('data-key');
+        var current = parseInt(lineEl.querySelector('.cd-qty-val').textContent, 10) || 1;
+        var act = target.getAttribute('data-act');
+
+        if (act === 'inc')      changeQty(key, current + 1);
+        else if (act === 'dec') changeQty(key, current - 1);
+        else if (act === 'del') changeQty(key, 0);
+    });
+
+    btn.addEventListener('click', openDrawer);
+    closeBtn.addEventListener('click', closeDrawer);
+    overlay.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && isOpen) closeDrawer();
+    });
+})();
+
+/* ════════════════════════════════════════════════════════════
+   ترقيم وفلترة المنتجات — فالمتصفح، بلا إعادة تحميل
+   ────────────────────────────────────────────────────────────
+   السيرفر يبعث كل المنتجات مرة وحدة، وهاد الوحدة تعرض 9 فكل مرة.
+
+   ⚠️ علاش رجعنا للمتصفح بعد ما كان الترقيم فالسيرفر؟
+   كل نقرة على رقم صفحة كانت تعيد تحميل الصفحة كاملة: انتظار
+   الشبكة، وميض أبيض، وقفزة تمرير (قسم «شفتها مؤخرًا» يبان
+   متأخرًا ويدفع كلشي لتحت). درك التبديل فوري.
+
+   ⚠️ التنازل: الصفحة تحمل كل المنتجات فالـHTML. فوق ~300 منتج
+   السيرفر يرجع للترقيم تاعو تلقائيًا (data-client-paginated="0")
+   وهاد الوحدة تتنحّى من الطريق.
+   ════════════════════════════════════════════════════════════ */
+(function () {
+    "use strict";
+
+    var grid = document.getElementById('shopGrid');
+    if (!grid || grid.getAttribute('data-client-paginated') !== '1') return;
+
+    var pager    = document.getElementById('shopPager');
+    var pagerInf = document.getElementById('shopPagerInfo');
+    var countEl  = document.getElementById('shopResultCount');
+    var emptyEl  = document.getElementById('shopEmptyFilter');
+    var section  = document.getElementById('products');
+
+    var cards   = Array.prototype.slice.call(grid.querySelectorAll('.product-card'));
+    var perPage = parseInt(grid.getAttribute('data-per-page'), 10) || 9;
+
+    if (!cards.length) return;
+
+    var currentCat  = null;   // null = كل المنتجات
+    var currentPage = 1;
+
+    /* ---------- الحالة من الرابط ---------- */
+    function readUrl() {
+        var params = new URLSearchParams(window.location.search);
+        currentCat = params.get('category') || null;
+        currentPage = Math.max(1, parseInt(params.get('page'), 10) || 1);
+    }
+
+    /* ⚠️ نحدّثو الرابط بلا إعادة تحميل باش:
+         • زر الرجوع تاع المتصفح يخدم
+         • الزائر يقدر ينسخ الرابط ويشاركو
+       replace=true للحالة الأولى باش ما نزيدوش سطرًا فالتاريخ. */
+    function writeUrl(replace) {
+        var params = new URLSearchParams(window.location.search);
+
+        if (currentCat) { params.set('category', currentCat); }
+        else { params.delete('category'); }
+
+        if (currentPage > 1) { params.set('page', currentPage); }
+        else { params.delete('page'); }
+
+        var query = params.toString();
+        var url = window.location.pathname + (query ? '?' + query : '');
+
+        if (replace) { history.replaceState(null, '', url); }
+        else { history.pushState(null, '', url); }
+    }
+
+    function matching() {
+        if (!currentCat) return cards;
+        return cards.filter(function (card) {
+            return card.getAttribute('data-cat') === currentCat;
+        });
+    }
+
+    function plural(n) {
+        if (n === 1) return 'منتج واحد';
+        if (n === 2) return 'منتجان';
+        if (n <= 10) return n + ' منتجات';
+        return n + ' منتج';
+    }
+
+    /* ---------- بناء أزرار الترقيم ---------- */
+    function pageNumbers(total, current) {
+        // نافذة صغيرة حوالي الصفحة الحالية + الأولى والأخيرة.
+        // null = فجوة (…)
+        if (total <= 7) {
+            var all = [];
+            for (var i = 1; i <= total; i++) all.push(i);
+            return all;
+        }
+
+        var out = [1];
+        var from = Math.max(2, current - 1);
+        var to   = Math.min(total - 1, current + 1);
+
+        if (from > 2) out.push(null);
+        for (var j = from; j <= to; j++) out.push(j);
+        if (to < total - 1) out.push(null);
+        out.push(total);
+
+        return out;
+    }
+
+    function button(label, page, extraClass, ariaLabel) {
+        var el = document.createElement('button');
+        el.type = 'button';
+        el.className = extraClass;
+        el.textContent = label;
+        if (ariaLabel) el.setAttribute('aria-label', ariaLabel);
+
+        if (page === null) {
+            el.disabled = true;
+            el.classList.add('is-disabled');
+        } else {
+            el.addEventListener('click', function () { goTo(page, true); });
+        }
+        return el;
+    }
+
+    function renderPager(totalPages) {
+        pager.innerHTML = '';
+
+        if (totalPages <= 1) {
+            pager.hidden = true;
+            pagerInf.hidden = true;
+            return;
+        }
+
+        // ⚠️ RTL: السهم › = السابق، ‹ = التالي
+        pager.appendChild(button('›',
+            currentPage > 1 ? currentPage - 1 : null,
+            'pager-btn', 'الصفحة السابقة'));
+
+        pageNumbers(totalPages, currentPage).forEach(function (num) {
+            if (num === null) {
+                var gap = document.createElement('span');
+                gap.className = 'pager-gap';
+                gap.setAttribute('aria-hidden', 'true');
+                gap.textContent = '…';
+                pager.appendChild(gap);
+                return;
+            }
+
+            if (num === currentPage) {
+                var cur = document.createElement('span');
+                cur.className = 'pager-num is-current';
+                cur.setAttribute('aria-current', 'page');
+                cur.textContent = num;
+                pager.appendChild(cur);
+            } else {
+                pager.appendChild(button(num, num, 'pager-num'));
+            }
+        });
+
+        pager.appendChild(button('‹',
+            currentPage < totalPages ? currentPage + 1 : null,
+            'pager-btn', 'الصفحة التالية'));
+
+        pager.hidden = false;
+
+        pagerInf.textContent = 'صفحة ' + currentPage + ' من ' + totalPages;
+        pagerInf.hidden = false;
+    }
+
+    /* ---------- العرض ---------- */
+    function render() {
+        var visible = matching();
+        var totalPages = Math.max(1, Math.ceil(visible.length / perPage));
+
+        if (currentPage > totalPages) currentPage = totalPages;
+
+        var first = (currentPage - 1) * perPage;
+        var last  = first + perPage;
+
+        // ⚠️ نخبّيو بـhidden ماشي بـdisplay فالـstyle: نخلّيو
+        // التحكم للـCSS وما نكسروش أي تخطيط (grid).
+        cards.forEach(function (card) { card.hidden = true; });
+        visible.slice(first, last).forEach(function (card) { card.hidden = false; });
+
+        if (countEl) countEl.textContent = plural(visible.length);
+        if (emptyEl) emptyEl.hidden = visible.length > 0;
+
+        renderPager(totalPages);
+    }
+
+    function goTo(page, scroll) {
+        currentPage = page;
+        writeUrl(false);
+        render();
+
+        if (scroll && section) {
+            // ⚠️ ماكانش إعادة تحميل، فالصفحة ما تقفزش. نمرّرو غير
+            // إذا كان رأس القسم فوق الشاشة — باش الزائر يشوف بداية
+            // الصفحة الجديدة بدل ما يقعد فوسط الشبكة.
+            var top = section.getBoundingClientRect().top;
+            if (top < 0) {
+                window.scrollTo({
+                    top: section.getBoundingClientRect().top + window.scrollY - 20,
+                    behavior: 'smooth'
+                });
+            }
+        }
+    }
+
+    function setCategory(slug) {
+        currentCat = slug || null;
+        currentPage = 1;
+        writeUrl(false);
+        render();
+
+        document.querySelectorAll('.side-cat[data-cat], .category-card[data-cat]')
+            .forEach(function (el) {
+                var value = el.getAttribute('data-cat');
+                var active = (value === (currentCat || 'all'));
+                el.classList.toggle('is-active', active);
+            });
+
+        // ⚠️ الحاسوب والموبايل: نمرّرو دايمًا لأعلى قسم المنتجات
+        // عند اختيار تصنيف — الزائر يتوقع يشوف المنتجات مباشرة بلا ما
+        // يمرّر بيدو. الشرط القديم (top < 0) كان يمنع التمرير على
+        // الموبايل لأن الشبكة كانت دايمًا تحت التصنيفات.
+        if (section) {
+            var targetTop = section.getBoundingClientRect().top + window.scrollY - 72;
+            window.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+        }
+    }
+
+    /* ---------- روابط التصنيفات ---------- */
+    document.querySelectorAll('.side-cat[data-cat], .category-card[data-cat]')
+        .forEach(function (el) {
+            el.addEventListener('click', function (event) {
+                // ⚠️ نحترمو النقر بالوسط/Ctrl (فتح فتبويب جديد) —
+                // preventDefault عليه يكسر عادة شائعة عند الزوار.
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+
+                event.preventDefault();
+                var slug = el.getAttribute('data-cat');
+                // ⚠️ التمرير ولّى داخل setCategory نفسها (يمرّر دايمًا،
+                // ماشي غير إذا كانت الشبكة فوق الشاشة) — ما نكرروش
+                // نفس المنطق هنا، كان يسبب عدم توافق بين الحاسوب
+                // والموبايل.
+                setCategory(slug === 'all' ? null : slug);
+            });
+        });
+
+    /* ---------- زر الرجوع تاع المتصفح ---------- */
+    window.addEventListener('popstate', function () {
+        readUrl();
+        render();
+    });
+
+    /* ---------- الإقلاع ---------- */
+    readUrl();
+    render();
+    writeUrl(true);
+})();
+
+
+/**
+ * سلايدر تقييمات الزبائن — يمشي وحدو.
+ *
+ * ⚠️ قرارات:
+ *   • بلا مكتبة خارجية — الصفحة الرئيسية لازم تحمّل بسرعة
+ *   • يوقف عند المرور بالفأرة ولا التركيز — الزائر يقرا براحتو
+ *   • يوقف كي التبويب مخفي — ما نضيّعوش بطارية الموبايل
+ *   • السحب بالإصبع يخدم طبيعي (scroll-snap تاع CSS)
+ *   • يحترم prefers-reduced-motion
+ */
+(function () {
+    'use strict';
+
+    var viewport = document.getElementById('testiViewport');
+    var track = document.getElementById('testiTrack');
+    var dotsBox = document.getElementById('testiDots');
+
+    if (!viewport || !track) return;
+
+    var cards = track.querySelectorAll('.testi-card');
+    if (cards.length < 2) return;   // بطاقة وحدة ما تحتاجش سلايدر
+
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var timer = null;
+    var paused = false;
+
+    /** كم بطاقة تبان فالشاشة درك */
+    function perView() {
+        var cardWidth = cards[0].getBoundingClientRect().width;
+        if (!cardWidth) return 1;
+        return Math.max(1, Math.round(viewport.clientWidth / cardWidth));
+    }
+
+    function pageCount() {
+        return Math.max(1, Math.ceil(cards.length / perView()));
+    }
+
+    function currentPage() {
+        var pageWidth = viewport.clientWidth || 1;
+        // ⚠️ RTL: scrollLeft يجي سالب فمعظم المتصفحات
+        return Math.round(Math.abs(viewport.scrollLeft) / pageWidth);
+    }
+
+    function goTo(page) {
+        var total = pageCount();
+        var target = ((page % total) + total) % total;   // دوران
+        var offset = target * viewport.clientWidth;
+
+        viewport.scrollTo({
+            left: isRTL() ? -offset : offset,
+            behavior: reduced ? 'auto' : 'smooth',
+        });
+    }
+
+    function isRTL() {
+        return getComputedStyle(document.documentElement).direction === 'rtl';
+    }
+
+    // ---------- النقاط ----------
+
+    function buildDots() {
+        var total = pageCount();
+        dotsBox.innerHTML = '';
+
+        if (total < 2) return;
+
+        for (var i = 0; i < total; i++) {
+            var dot = document.createElement('button');
+            dot.type = 'button';
+            dot.className = 'testi-dot';
+            dot.setAttribute('aria-label', 'التقييم ' + (i + 1));
+            dot.dataset.page = i;
+            dotsBox.appendChild(dot);
+        }
+        markActive();
+    }
+
+    function markActive() {
+        var active = currentPage();
+        dotsBox.querySelectorAll('.testi-dot').forEach(function (d, i) {
+            d.classList.toggle('is-on', i === active);
+        });
+    }
+
+    // ---------- التشغيل التلقائي ----------
+
+    function start() {
+        if (reduced || timer) return;
+        timer = setInterval(function () {
+            if (!paused && !document.hidden) goTo(currentPage() + 1);
+        }, 5000);
+    }
+
+    // ---------- الأحداث ----------
+
+    ['mouseenter', 'focusin', 'touchstart'].forEach(function (ev) {
+        viewport.addEventListener(ev, function () { paused = true; }, { passive: true });
+    });
+    ['mouseleave', 'focusout', 'touchend'].forEach(function (ev) {
+        viewport.addEventListener(ev, function () { paused = false; }, { passive: true });
+    });
+
+    viewport.addEventListener('scroll', function () {
+        clearTimeout(viewport._t);
+        viewport._t = setTimeout(markActive, 90);
+    }, { passive: true });
+
+    dotsBox.addEventListener('click', function (e) {
+        var dot = e.target.closest('.testi-dot');
+        if (dot) goTo(parseInt(dot.dataset.page, 10));
+    });
+
+    window.addEventListener('resize', function () {
+        clearTimeout(window._testiR);
+        window._testiR = setTimeout(buildDots, 200);
+    });
+
+    buildDots();
+    start();
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════
+ * منتقي النجوم — يكتب للزبون واش اختار بالضبط (v150)
+ *
+ * المشكل: زبون اختار نجمة وحدة بالغلط وهو يقصد تقييم إيجابي. السطر هذا يوريه «1 من 5» فالحين،
+ * فيقدر يصحّح قبل الإرسال.
+ * ═══════════════════════════════════════════════════════════════ */
+(function () {
+    "use strict";
+    var LABELS = {
+        1: "نجمة وحدة — ضعيف بزاف",
+        2: "نجمتين — ضعيف",
+        3: "3 نجوم — عادي",
+        4: "4 نجوم — مليح",
+        5: "5 نجوم — ممتاز"
+    };
+
+    document.querySelectorAll("[data-rating-picker]").forEach(function (picker) {
+        var form = picker.closest("form");
+        var hint = form && form.querySelector("[data-rating-hint]");
+        if (!form || !hint) { return; }
+
+        picker.addEventListener("change", function (e) {
+            var n = parseInt(e.target.value, 10);
+            if (!LABELS[n]) { return; }
+            hint.textContent = "اخترت: " + LABELS[n];
+            hint.classList.toggle("is-low", n <= 2);
+            if (n <= 2) {
+                hint.textContent += " — واش تقصد هكا؟ تقدر تبدّل قبل الإرسال";
+            }
+        });
+
+        // حماية إضافية: ما نبعثوش الفورم بلا نجوم
+        form.addEventListener("submit", function (e) {
+            if (!form.querySelector('input[name="rating"]:checked')) {
+                e.preventDefault();
+                hint.textContent = "من فضلك اختار عدد النجوم";
+                hint.classList.add("is-low");
+            }
+        });
+    });
+})();

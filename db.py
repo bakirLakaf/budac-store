@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS sp_tokens (
 def init_pool(dsn):
     global _pool
     if _pool is None:
-        _pool = psycopg2.pool.ThreadedConnectionPool(1, 8, dsn)
+        _pool = psycopg2.pool.ThreadedConnectionPool(1, 4, dsn)
 
 
 def close_pool():

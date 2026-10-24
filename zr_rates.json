@@ -1,0 +1,350 @@
+[
+  {
+    "wilaya_code": "01",
+    "wilaya_name": "أدرار",
+    "home": 1400,
+    "office": 970
+  },
+  {
+    "wilaya_code": "02",
+    "wilaya_name": "الشلف",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "03",
+    "wilaya_name": "الأغواط",
+    "home": 950,
+    "office": 670
+  },
+  {
+    "wilaya_code": "04",
+    "wilaya_name": "أم البواقي",
+    "home": 500,
+    "office": 370
+  },
+  {
+    "wilaya_code": "05",
+    "wilaya_name": "باتنة",
+    "home": 700,
+    "office": 520
+  },
+  {
+    "wilaya_code": "06",
+    "wilaya_name": "بجاية",
+    "home": 750,
+    "office": 520
+  },
+  {
+    "wilaya_code": "07",
+    "wilaya_name": "بسكرة",
+    "home": 850,
+    "office": 670
+  },
+  {
+    "wilaya_code": "08",
+    "wilaya_name": "بشار",
+    "home": 1100,
+    "office": 720
+  },
+  {
+    "wilaya_code": "09",
+    "wilaya_name": "البليدة",
+    "home": 750,
+    "office": 520
+  },
+  {
+    "wilaya_code": "10",
+    "wilaya_name": "البويرة",
+    "home": 750,
+    "office": 520
+  },
+  {
+    "wilaya_code": "11",
+    "wilaya_name": "تمنراست",
+    "home": 1600,
+    "office": 1120
+  },
+  {
+    "wilaya_code": "12",
+    "wilaya_name": "تبسة",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "13",
+    "wilaya_name": "تلمسان",
+    "home": 900,
+    "office": 570
+  },
+  {
+    "wilaya_code": "14",
+    "wilaya_name": "تيارت",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "15",
+    "wilaya_name": "تيزي وزو",
+    "home": 700,
+    "office": 520
+  },
+  {
+    "wilaya_code": "16",
+    "wilaya_name": "الجزائر",
+    "home": 600,
+    "office": 520
+  },
+  {
+    "wilaya_code": "17",
+    "wilaya_name": "الجلفة",
+    "home": 900,
+    "office": 670
+  },
+  {
+    "wilaya_code": "18",
+    "wilaya_name": "جيجل",
+    "home": 750,
+    "office": 520
+  },
+  {
+    "wilaya_code": "19",
+    "wilaya_name": "سطيف",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "20",
+    "wilaya_name": "السعيدة",
+    "home": 800,
+    "office": 570
+  },
+  {
+    "wilaya_code": "21",
+    "wilaya_name": "سكيكدة",
+    "home": 750,
+    "office": 520
+  },
+  {
+    "wilaya_code": "22",
+    "wilaya_name": "سيدي بلعباس",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "23",
+    "wilaya_name": "عنابة",
+    "home": 700,
+    "office": 520
+  },
+  {
+    "wilaya_code": "24",
+    "wilaya_name": "قالمة",
+    "home": 700,
+    "office": 520
+  },
+  {
+    "wilaya_code": "25",
+    "wilaya_name": "قسنطينة",
+    "home": 700,
+    "office": 520
+  },
+  {
+    "wilaya_code": "26",
+    "wilaya_name": "المدية",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "27",
+    "wilaya_name": "مستغانم",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "28",
+    "wilaya_name": "المسيلة",
+    "home": 800,
+    "office": 570
+  },
+  {
+    "wilaya_code": "29",
+    "wilaya_name": "معسكر",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "30",
+    "wilaya_name": "ورقلة",
+    "home": 950,
+    "office": 670
+  },
+  {
+    "wilaya_code": "31",
+    "wilaya_name": "وهران",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "32",
+    "wilaya_name": "البيض",
+    "home": 1100,
+    "office": 670
+  },
+  {
+    "wilaya_code": "33",
+    "wilaya_name": "إليزي",
+    "home": 1600,
+    "office": 1270
+  },
+  {
+    "wilaya_code": "34",
+    "wilaya_name": "برج بوعريريج",
+    "home": 750,
+    "office": 520
+  },
+  {
+    "wilaya_code": "35",
+    "wilaya_name": "بومرداس",
+    "home": 750,
+    "office": 520
+  },
+  {
+    "wilaya_code": "36",
+    "wilaya_name": "الطارف",
+    "home": 750,
+    "office": 520
+  },
+  {
+    "wilaya_code": "37",
+    "wilaya_name": "تندوف",
+    "home": 1600,
+    "office": 1270
+  },
+  {
+    "wilaya_code": "38",
+    "wilaya_name": "تسيمسيلت",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "39",
+    "wilaya_name": "الوادي",
+    "home": 950,
+    "office": 670
+  },
+  {
+    "wilaya_code": "40",
+    "wilaya_name": "خنشلة",
+    "home": 700,
+    "office": 450
+  },
+  {
+    "wilaya_code": "41",
+    "wilaya_name": "سوق اهراس",
+    "home": 700,
+    "office": 520
+  },
+  {
+    "wilaya_code": "42",
+    "wilaya_name": "تيبازة",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "43",
+    "wilaya_name": "ميلة",
+    "home": 750,
+    "office": 520
+  },
+  {
+    "wilaya_code": "44",
+    "wilaya_name": "عين الدفلى",
+    "home": 750,
+    "office": 520
+  },
+  {
+    "wilaya_code": "45",
+    "wilaya_name": "النعامة",
+    "home": 1100,
+    "office": 670
+  },
+  {
+    "wilaya_code": "46",
+    "wilaya_name": "عين تموشنت",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "47",
+    "wilaya_name": "غرداية",
+    "home": 950,
+    "office": 670
+  },
+  {
+    "wilaya_code": "48",
+    "wilaya_name": "غليزان",
+    "home": 800,
+    "office": 520
+  },
+  {
+    "wilaya_code": "49",
+    "wilaya_name": "تيميمون",
+    "home": 1400,
+    "office": 970
+  },
+  {
+    "wilaya_code": "50",
+    "wilaya_name": "برج باجي مختار",
+    "home": null,
+    "office": null
+  },
+  {
+    "wilaya_code": "51",
+    "wilaya_name": "أولاد جلال",
+    "home": 950,
+    "office": 670
+  },
+  {
+    "wilaya_code": "52",
+    "wilaya_name": "بني عباس",
+    "home": 1200,
+    "office": 970
+  },
+  {
+    "wilaya_code": "53",
+    "wilaya_name": "عين صالح",
+    "home": 1600,
+    "office": 1120
+  },
+  {
+    "wilaya_code": "54",
+    "wilaya_name": "عين قزام",
+    "home": 1600,
+    "office": null
+  },
+  {
+    "wilaya_code": "55",
+    "wilaya_name": "تقرت",
+    "home": 950,
+    "office": 670
+  },
+  {
+    "wilaya_code": "56",
+    "wilaya_name": "جانت",
+    "home": 1600,
+    "office": 1270
+  },
+  {
+    "wilaya_code": "57",
+    "wilaya_name": "المغير",
+    "home": 950,
+    "office": null
+  },
+  {
+    "wilaya_code": "58",
+    "wilaya_name": "المنيعة",
+    "home": 1000,
+    "office": 670
+  }
+]
