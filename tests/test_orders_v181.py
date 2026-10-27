@@ -280,3 +280,12 @@ def test_landing_page_has_save_info_checkbox(client, app):
     from tests.test_landing_v179 import _make
     _make(app)
     assert 'id="saveInfoCheck" checked' in client.get("/lp/ac").get_data(as_text=True)
+
+
+def test_offer_end_date_covers_the_whole_last_day(app):
+    """«ينتهي فـ 31/10» يعني العرض يبقى شغال طول 31 أكتوبر (توقيت الجزائر)."""
+    from datetime import datetime
+    from routes.admin import _parse_end_of_day
+    end = _parse_end_of_day("2026-10-31")
+    assert end == datetime(2026, 10, 31, 22, 59, 59)     # = 23:59:59 بتوقيت الجزائر
+    assert _parse_end_of_day("") is None and _parse_end_of_day("غلط") is None

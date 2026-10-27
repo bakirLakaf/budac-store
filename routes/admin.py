@@ -1542,7 +1542,7 @@ def offer_form(offer_id=None):
 
         # التواريخ اختيارية
         offer.starts_at = _parse_date(request.form.get("starts_at"))
-        offer.ends_at = _parse_date(request.form.get("ends_at"))
+        offer.ends_at = _parse_end_of_day(request.form.get("ends_at"))
 
         # صورة البانر
         file = request.files.get("banner")
@@ -1685,6 +1685,16 @@ def shipping_update():
 
 
 # ==================== أدوات مساعدة داخلية ====================
+
+def _parse_end_of_day(value):
+    """
+    «ينتهي فـ 31/10» = آخر لحظة من 31 أكتوبر بتوقيت الجزائر (UTC+1)،
+    مخزّنة بالـUTC (22:59:59). قبل كانت تتحفظ 00:00 يعني العرض يوقف
+    فبداية اليوم المذكور ماشي فنهايتو.
+    """
+    d = _parse_date(value)
+    return d.replace(hour=22, minute=59, second=59) if d else None
+
 
 def _parse_date(value):
     """يحول نص تاريخ من الفورم لـdatetime. يرجع None إذا فارغ أو غير صالح."""
