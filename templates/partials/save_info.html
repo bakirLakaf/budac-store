@@ -1,0 +1,21 @@
+{# خيار «احفظ معلوماتي» — مفعّل تلقائيًا أول مرة. المعلومات تتخزّن فجهاز الزبون
+   (localStorage) ماشي فالسيرفر. الاختيار نفسو يتحفظ: إذا طفّاه ما نرجّعوهوش. #}
+<div class="save-info" data-save-info>
+    <label class="save-info-check">
+        <input type="checkbox" id="saveInfoCheck" checked>
+        <span>احفظ معلوماتي فهاد الجهاز للمرة الجاية</span>
+    </label>
+    <small class="save-info-note">
+        تتخزّن فهاتفك أنت برك، ماشي عندنا.
+        <button type="button" class="save-info-clear" hidden>مسح المعلومات المحفوظة</button>
+    </small>
+</div>
+<style>
+    .save-info { margin: 14px 0 10px; font-size: 14px; }
+    .save-info-check { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; }
+    .save-info-check input { width: 18px; height: 18px; accent-color: currentColor; flex: none; }
+    .save-info-note { display: block; margin-top: 4px; opacity: .7; font-size: 12.5px; }
+    .save-info-clear { background: none; border: 0; padding: 0; margin-inline-start: 6px;
+                       color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+</style>
+<script src="{{ url_for('static', filename='js/saved-info.js') }}" defer></script>

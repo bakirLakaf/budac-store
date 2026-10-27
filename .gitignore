@@ -1,0 +1,30 @@
+# ── أسرار: ما تتبعث أبدًا لـGit ──
+.env
+.env.*
+!.env.example
+
+# ── بايثون ──
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+.pytest_cache/
+
+# ── بيانات محلية وصور مرفوعة (على Railway تعيش في Volume /data) ──
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+sp_tmp/
+*.log
+
+# ── محرّرات ونظام ──
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ── ملفات مضغوطة ونسخ احتياطية ──
+*.zip
+*.bak

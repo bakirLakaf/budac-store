@@ -1,0 +1,85 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">التصنيفات <span class="count-pill">{{ categories|length }}</span></h1>
+
+<div class="form-grid">
+    <div class="form-col">
+        {% if categories %}
+        <div class="admin-table-wrap">
+<table class="admin-table">
+            <thead><tr><th>صورة</th><th>الاسم</th><th>الرابط</th><th>منتجات</th><th></th></tr></thead>
+            <tbody>
+                {% for c in categories %}
+                {# ⚠️ التعديل فمكانو: الاسم حقل مباشرة فالجدول. صفحة
+                   منفصلة لحقل واحد تضيّع نقرتين بلا فائدة. #}
+                <tr>
+                    <td>
+                        {% if c.image_filename %}
+                            <img class="thumb-sm"
+                                 src="{{ url_for('static', filename='img/categories/' + (c.image_filename | thumb)) }}"
+                                 data-full="{{ url_for('static', filename='img/categories/' + c.image_filename) }}"
+                                 alt="{{ c.name }}" title="اضغط باش تكبّرها">
+                        {% else %}
+                            <span class="thumb-sm thumb-empty">؟</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <input type="text" name="name" value="{{ c.name }}"
+                               form="cat-{{ c.id }}" maxlength="120" required
+                               class="cat-name-input" aria-label="اسم التصنيف">
+                    </td>
+                    <td>
+                        {# الرابط ما يتبدّلش — يكسر السيو والروابط القديمة #}
+                        <code title="ما يتبدّلش — مربوط بجوجل والروابط">{{ c.slug }}</code>
+                    </td>
+                    <td>{{ counts.get(c.id, 0) }}</td>
+                    <td>
+                        <div class="cat-actions">
+                            <form method="post" id="cat-{{ c.id }}"
+                                  enctype="multipart/form-data"
+                                  action="{{ url_for('admin.category_edit', category_id=c.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="is_active" value="1">
+                                <button type="submit" class="btn-admin btn-sm">احفظ</button>
+                            </form>
+
+                            <form method="post" action="{{ url_for('admin.category_delete', category_id=c.id) }}"
+                                  onsubmit="return confirm('تمسح التصنيف «{{ c.name }}»؟')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-admin btn-sm btn-danger">حذف</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+</div>
+        {% else %}
+        <div class="empty-box"><p>ماكاين حتى تصنيف بعد.</p></div>
+        {% endif %}
+    </div>
+
+    <div class="form-col">
+        <h2 class="section-title">تصنيف جديد</h2>
+        <form method="post" enctype="multipart/form-data" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="field">
+                <span>الاسم *</span>
+                <input type="text" name="name" required>
+            </label>
+            <label class="field">
+                <span>الرابط (slug)</span>
+                <input type="text" name="slug" placeholder="يتولد تلقائيًا">
+            </label>
+            <label class="field">
+                <span>صورة (اختيارية)</span>
+                <input type="file" name="image" accept="image/*" data-image-editor="1">
+            </label>
+            <button type="submit" class="btn-admin btn-block">إنشاء</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

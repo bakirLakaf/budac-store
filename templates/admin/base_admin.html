@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}لوحة التحكم — {{ store_name }}{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+    {# المظهر (فاتح/داكن) يتطبّق قبل رسم الصفحة باش ما يبانش وميض أبيض. الاختيار محفوظ فالمتصفح. #}
+    <script>
+    (function () {
+        try {
+            var t = localStorage.getItem('budac-admin-theme');
+            if (t !== 'dark' && t !== 'light') {
+                t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+    })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-dark.css') }}">
+
+    {# ⚠️ نفس الأيقونات تاع المتجر — اللوحة كانت بلا favicon، فتبان
+       بأيقونة فارغة فالتبويب وتضيع بين التبويبات المفتوحة.
+       البصمة التلقائية تجبر المتصفح يعيد تحميلها بدل ما ياخذ القديمة من الكاش. #}
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/png" sizes="192x192"
+          href="{{ url_for('static', filename='img/brand/icon-192.png') }}">
+    <link rel="apple-touch-icon"
+          href="{{ url_for('static', filename='img/brand/apple-touch-icon.png') }}">
+</head>
+<body class="admin-body">
+
+<aside class="admin-sidebar">
+    <div class="admin-brand">
+        {# الشعار يودّي للمتجر — الأدمن يحتاج يقفز للواجهة بزاف #}
+        <a href="{{ url_for('shop.home') }}" class="admin-brand-logo" title="عرض المتجر">
+            <img src="{{ url_for('static', filename='img/brand/logo.png') }}"
+                 alt="{{ store_name }}" width="445" height="217">
+        </a>
+        <span class="admin-brand-sub">لوحة التحكم</span>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="{{ url_for('admin.dashboard') }}" class="{{ 'is-active' if request.endpoint == 'admin.dashboard' }}">
+            نظرة عامة
+        </a>
+        <a href="{{ url_for('admin.visitors') }}" class="{{ 'is-active' if 'visitor' in request.endpoint }}">
+            الزوار
+        </a>
+        {# ⚠️ نوعين من الأرقام، وباينين بالألوان:
+             • ذهبي = تنبيه، ثمة حاجة تستنى منك (طلبية جديدة)
+             • هادي = جرد برك، كم عندك من كل شي #}
+        <a href="{{ url_for('admin.orders_list') }}" class="{{ 'is-active' if 'order' in request.endpoint }}">
+            الطلبيات
+            {% if new_orders %}
+            <span class="nav-badge" title="طلبيات جديدة ما تواصلتش معاهم">{{ new_orders }}</span>
+            {% elif total_orders %}
+            <span class="nav-count">{{ total_orders }}</span>
+            {% endif %}
+        </a>
+        <a href="{{ url_for('admin.products_list') }}" class="{{ 'is-active' if 'product' in request.endpoint or 'variant' in request.endpoint }}">
+            المنتجات
+            {% if total_products %}<span class="nav-count">{{ total_products }}</span>{% endif %}
+        </a>
+        {# ⚠️ التجميع: 14 رابط فقائمة وحدة يخلّي العين تمشي فيهم كلهم
+           فكل مرة. العناوين تخلّيك تقفز مباشرة للمجموعة اللي تحتاجها. #}
+        <span class="nav-group">المتجر</span>
+        <a href="{{ url_for('admin.categories_list') }}" class="{{ 'is-active' if 'categor' in request.endpoint }}">
+            التصنيفات
+            {% if total_categories %}<span class="nav-count">{{ total_categories }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin.offers_list') }}" class="{{ 'is-active' if 'offer' in request.endpoint }}">
+            العروض الخاصة
+        </a>
+        <span class="nav-group">التسويق</span>
+        <a href="{{ url_for('admin.abandoned_list') }}" class="{{ 'is-active' if 'abandoned' in request.endpoint }}">
+            السلات المتروكة
+            {% if pending_abandoned %}<span class="nav-badge">{{ pending_abandoned }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin.reviews_list') }}" class="{{ 'is-active' if 'review' in request.endpoint }}">
+            التقييمات
+            {% if pending_reviews %}<span class="nav-badge">{{ pending_reviews }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin.upsells_list') }}" class="{{ 'is-active' if 'upsell' in request.endpoint }}">
+            الاقتراحات
+        </a>
+        <a href="{{ url_for('admin.wa_templates_page') }}" class="{{ 'is-active' if 'wa_template' in request.endpoint }}">
+            رسائل واتساب
+        </a>
+        <a href="{{ url_for('admin.wa_auto_page') }}" class="{{ 'is-active' if 'wa_auto' in request.endpoint }}">
+            واتساب التلقائي
+        </a>
+        <a href="{{ url_for('admin.coupons_list') }}" class="{{ 'is-active' if 'coupon' in request.endpoint }}">
+            كوبونات الخصم
+        </a>
+        {% if config.get('SOCIAL_PUBLISHER_ENABLED') %}
+        <a href="{{ url_for('social_publisher.index') }}" class="{{ 'is-active' if request.endpoint and request.endpoint.startswith('social_publisher') }}">
+            📣 النشر على السوشيال
+        </a>
+        {% endif %}
+        <a href="{{ url_for('admin.landing_list') }}" class="{{ 'is-active' if 'landing' in request.endpoint }}">
+            صفحات الهبوط
+        </a>
+        <span class="nav-group">الإعدادات</span>
+        <a href="{{ url_for('admin.shipping_list') }}" class="{{ 'is-active' if 'shipping' in request.endpoint or 'carrier' in request.endpoint }}">
+            أسعار التوصيل
+        </a>
+        <a href="{{ url_for('admin.youcan_settings') }}" class="{{ 'is-active' if 'youcan' in request.endpoint }}">
+            ربط YouCan
+        </a>
+        <a href="{{ url_for('admin.integrations') }}" class="{{ 'is-active' if 'integration' in request.endpoint }}">
+            التكاملات
+        </a>
+
+        <a href="{{ url_for('admin.settings') }}" class="{{ 'is-active' if 'settings' in request.endpoint }}">
+            ⚙️ الإعدادات
+        </a>
+    </nav>
+
+    <div class="admin-sidebar-footer">
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="تبديل المظهر">
+            <span id="theme-toggle-icon">🌙</span> <span id="theme-toggle-label">المظهر الداكن</span>
+        </button>
+        <a href="{{ url_for('shop.home') }}" target="_blank" class="admin-view-store">عرض المتجر ↗</a>
+        <form method="post" action="{{ url_for('admin.logout') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="admin-logout">خروج ({{ session.admin_username }})</button>
+        </form>
+        {# رقم الإصدار — تحقّق فوري أن النشر وصل #}
+        <p class="admin-version" title="نسخة الكود اللي تخدم درك">
+            {{ app_version }}
+        </p>
+    </div>
+</aside>
+
+<main class="admin-main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-stack">
+            {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</main>
+
+{# ═══════════ معاينة الصور — يخدم فكل اللوحة ═══════════
+   ⚠️ كان موجودًا فصفحة تعديل المنتج برك. درك هنا فالقالب الأساسي،
+   فأي صورة صغيرة فأي صفحة (طلبيات، منتجات، تصنيفات، عروض) تتكبّر
+   بضغطة — بلا ما نكرّرو الكود فكل قالب. #}
+<div class="zoomer" id="adminZoomer" hidden>
+    <button type="button" class="zoomer-x" data-zoom-close aria-label="سكّر">×</button>
+    <img id="adminZoomerImg" src="" alt="">
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var box = document.getElementById('adminZoomer');
+    var img = document.getElementById('adminZoomerImg');
+    if (!box || !img) return;
+
+    /**
+     * يرجّع رابط الصورة بالحجم الكامل.
+     *
+     * ⚠️ الصور الصغيرة فاللوحة مصغّرات اسمها ينتهي بـ`-thumb`.
+     * نحيّدوه باش نجيبو الأصل. إذا كان `data-full` موجودًا، نستعملوه
+     * مباشرة (أدق من التخمين على الاسم).
+     */
+    function fullUrl(el) {
+        if (el.dataset.full) return el.dataset.full;
+        return el.getAttribute('src').replace(/-thumb(\.[a-z0-9]+)$/i, '$1');
+    }
+
+    function open(src) {
+        img.src = src;
+        box.hidden = false;
+        document.body.style.overflow = 'hidden';
+    }
+
+    function close() {
+        box.hidden = true;
+        img.src = '';
+        document.body.style.overflow = '';
+    }
+
+    document.addEventListener('click', function (e) {
+        // سكّر
+        if (e.target.closest('[data-zoom-close]') || e.target === box) {
+            close();
+            return;
+        }
+
+        // ⚠️ ما نفتحوش المعاينة إذا الصورة داخل رابط ولا زر — الضغطة
+        // تخص الرابط، ماشي التكبير.
+        var thumb = e.target.closest('.thumb-sm');
+        if (!thumb || thumb.tagName !== 'IMG') return;
+        if (thumb.closest('a, button')) return;
+
+        e.preventDefault();
+        open(fullUrl(thumb));
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !box.hidden) close();
+    });
+})();
+
+/* ---------- زر نسخ سريع ---------- */
+/* أي زر عندو `data-copy` ينسخ قيمتو ويوري تأكيدًا قصيرًا. */
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-copy]');
+    if (!btn) return;
+
+    var text = btn.dataset.copy || '';
+    if (!text) return;
+
+    // ⚠️ الأزرار نبدّلو نصها، لكن خانات المعلومات (الاسم، الهاتف)
+    // ما نمسّوش نصها — نستعملو صنفًا يوري تأكيدًا بالألوان بدلها،
+    // وإلا الاسم يختفي ويتبدّل بـ«تنسخ».
+    var isButton = btn.tagName === 'BUTTON';
+    var original = btn.textContent;
+
+    function done(ok) {
+        if (isButton) {
+            btn.textContent = ok ? '✅ تنسخ' : '🔴 ما تنسخش';
+            setTimeout(function () { btn.textContent = original; }, 1600);
+            return;
+        }
+        btn.classList.toggle('is-copied', ok);
+        setTimeout(function () { btn.classList.remove('is-copied'); }, 1200);
+    }
+
+    // ⚠️ `navigator.clipboard` ما يخدمش إلا فـHTTPS ولا localhost.
+    // نديرو تراجعًا لطريقة قديمة باش تخدم فكل الحالات.
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(function () { done(true); },
+                                                 function () { done(false); });
+        return;
+    }
+
+    try {
+        var tmp = document.createElement('textarea');
+        tmp.value = text;
+        tmp.style.position = 'fixed';
+        tmp.style.opacity = '0';
+        document.body.appendChild(tmp);
+        tmp.select();
+        var ok = document.execCommand('copy');
+        document.body.removeChild(tmp);
+        done(ok);
+    } catch (err) {
+        done(false);
+    }
+});
+</script>
+
+<script src="{{ url_for('static', filename='js/image-editor.js') }}" defer></script>
+<script>
+(function () {
+    var root = document.documentElement, btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    function paint() {
+        var dark = root.getAttribute('data-theme') === 'dark';
+        document.getElementById('theme-toggle-icon').textContent = dark ? '☀️' : '🌙';
+        document.getElementById('theme-toggle-label').textContent = dark ? 'المظهر الفاتح' : 'المظهر الداكن';
+    }
+    btn.addEventListener('click', function () {
+        var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        try { localStorage.setItem('budac-admin-theme', next); } catch (e) {}
+        paint();
+    });
+    paint();
+})();
+</script>
+</body>
+</html>

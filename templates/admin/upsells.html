@@ -1,0 +1,86 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">الاقتراحات (Upsell)</h1>
+
+<p class="hint-block">
+    الاقتراحات تبان <strong>فصفحة السلة</strong> — الزبون مازال فوضع شراء،
+    فاحتمال القبول أعلى من الاقتراح بعد الدفع.
+</p>
+
+<div class="form-grid">
+    <div class="form-col">
+        {% if rules %}
+        <table class="admin-table">
+            <thead><tr><th>كي يشري</th><th>نقترح</th><th>خصم</th><th></th></tr></thead>
+            <tbody>
+                {% for r in rules %}
+                <tr>
+                    <td>
+                        {% if r.is_general %}
+                            <span class="tag tag-gold">كل السلات</span>
+                        {% else %}
+                            {{ r.trigger_product.name if r.trigger_product else '—' }}
+                        {% endif %}
+                    </td>
+                    <td><strong>{{ r.suggested_product.name if r.suggested_product else '—' }}</strong></td>
+                    <td>{% if r.discount_percent %}<span class="tag tag-gold">-{{ r.discount_percent }}%</span>{% else %}—{% endif %}</td>
+                    <td>
+                        <form method="post" action="{{ url_for('admin.upsell_delete', rule_id=r.id) }}"
+                              onsubmit="return confirm('تمسح هاد الاقتراح؟')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn-admin btn-sm btn-danger">حذف</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-box"><p>ماكاين حتى اقتراح بعد.</p></div>
+        {% endif %}
+    </div>
+
+    <div class="form-col">
+        <h2 class="section-title">اقتراح جديد</h2>
+        <form method="post" class="admin-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <label class="field">
+                <span>كي يكون فالسلة</span>
+                <select name="trigger_product_id">
+                    <option value="">— كل السلات (اقتراح عام) —</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+                <small class="hint">خليه فارغ باش يبان الاقتراح دائمًا</small>
+            </label>
+
+            <label class="field">
+                <span>نقترح عليه *</span>
+                <select name="suggested_product_id" required>
+                    <option value="">اختر منتج</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">{{ p.name }} — {{ p.price_display }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label class="field">
+                <span>خصم تحفيزي (%)</span>
+                <input type="number" name="discount_percent" min="0" max="90" value="0">
+                <small class="hint">خصم صغير (5-15%) يزيد نسبة القبول بشكل ملحوظ</small>
+            </label>
+
+            <label class="field">
+                <span>ترتيب الظهور</span>
+                <input type="number" name="sort_order" value="0">
+            </label>
+
+            <button type="submit" class="btn-admin btn-block">إضافة</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

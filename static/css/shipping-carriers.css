@@ -1,0 +1,8 @@
+/* صفحة أسعار التوصيل: لون خاص بكل شركة (رأس الجدول + الخلايا + بطاقات الهاتف) */
+.ship-c-zrexpress    { background-color: #FFF4D6; }   /* ذهبي */
+.ship-c-worldexpress { background-color: #E6F0FC; }   /* أزرق */
+.ship-c-yalidine     { background-color: #FDE8E6; }   /* أحمر */
+.ship-table thead .ship-c-zrexpress    { background-color: #F8E3A3; }
+.ship-table thead .ship-c-worldexpress { background-color: #C9DDF7; }
+.ship-table thead .ship-c-yalidine     { background-color: #F8C9C4; }
+.ship-table tbody td:nth-child(2n) { border-inline-start: 1px solid var(--color-border); }  /* بداية كل شركة */

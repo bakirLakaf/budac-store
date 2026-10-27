@@ -1,0 +1,1910 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<div class="page-head">
+    <h1 class="page-title">{{ 'تعديل: ' + product.name if product else 'منتج جديد' }}</h1>
+    <div class="page-head-actions">
+        {% if product %}
+        {# نسخة من هنا كذلك — كي تكون قاعد تعدّل وتلاحظ أنك تحتاج
+           منتجًا مشابهًا، ما تخرجش للقائمة. #}
+        <form method="post" class="inline-form"
+              action="{{ url_for('admin.product_duplicate', product_id=product.id) }}"
+              onsubmit="return confirm('تنسخ هاد المنتج بكل موديلاتو وأسعارو؟')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-admin btn-ghost"
+                    title="نسخة كاملة بالموديلات والأسعار">⧉ نسخة</button>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('admin.products_list', **nav_args) }}" class="btn-admin btn-ghost">← رجوع للقائمة</a>
+    </div>
+</div>
+
+{# ═══════ التنقّل بين المنتجات ═══════
+   يخلّيك تعمّر أسعار عشرات المنتجات بلا ما ترجع للقائمة كل مرة.
+   التنقّل يتبع **نفس الفلترة** اللي جيت منها. #}
+{% if product and nav_total %}
+<div class="prod-nav">
+    {% if prev_product %}
+    <a class="btn-admin btn-ghost btn-sm"
+       href="{{ url_for('admin.product_form', product_id=prev_product.id, **nav_args) }}"
+       title="{{ prev_product.name }}">→ السابق</a>
+    {% else %}
+    <span class="btn-admin btn-ghost btn-sm is-disabled">→ السابق</span>
+    {% endif %}
+
+    <span class="prod-nav-count">{{ nav_position }} من {{ nav_total }}</span>
+
+    {% if next_product %}
+    <a class="btn-admin btn-ghost btn-sm"
+       href="{{ url_for('admin.product_form', product_id=next_product.id, **nav_args) }}"
+       title="{{ next_product.name }}">التالي ←</a>
+    {% else %}
+    <span class="btn-admin btn-ghost btn-sm is-disabled">التالي ←</span>
+    {% endif %}
+
+    {% if next_product %}
+    <span class="prod-nav-peek">التالي: {{ next_product.name }}</span>
+    {% endif %}
+</div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" class="admin-form" id="productForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+        <div class="form-col">
+            <h2 class="section-title">المعلومات الأساسية</h2>
+
+            <label class="field">
+                <span>اسم المنتج *</span>
+                <input type="text" name="name" required value="{{ product.name if product else '' }}">
+            </label>
+
+            <label class="field">
+                <span>الرابط (slug)</span>
+                <input type="text" name="slug" value="{{ product.slug if product else '' }}"
+                       placeholder="يتولد تلقائيًا من الاسم إذا خليتو فارغ">
+            </label>
+
+            <label class="field">
+                <span>التصنيف</span>
+                <select name="category_id">
+                    <option value="">— بلا تصنيف —</option>
+                    {% for c in categories %}
+                    <option value="{{ c.id }}" {{ 'selected' if product and product.category_id == c.id }}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <div class="field-row">
+                {# ═══════ وحدة البيع ═══════
+                   ⚠️ ماشي كل شي ينباع بالحبة — الشريط والسفيفة بالمتر.
+                   الاختيار هنا يبدّل كل النصوص فالموقع: «سعر الحبة»
+                   تولّي «سعر المتر»، والحاسبة والعروض معاها. #}
+                {% set u = product.unit if product else 'piece' %}
+                {% set is_custom = u not in ['piece', 'meter'] %}
+                <label class="field">
+                    <span>وحدة البيع</span>
+                    <select name="unit" id="unitPicker">
+                        <option value="piece" {{ 'selected' if u == 'piece' else '' }}>حبة</option>
+                        <option value="meter" {{ 'selected' if u == 'meter' else '' }}>متر</option>
+                        <option value="custom" {{ 'selected' if is_custom else '' }}>اختياري (اكتبها)</option>
+                    </select>
+                    <input type="text" name="unit_custom" id="unitCustom"
+                           value="{{ u if is_custom else '' }}"
+                           placeholder="مثلاً: رولو · علبة · كيلو"
+                           maxlength="40" {{ '' if is_custom else 'hidden' }}>
+                    <small class="hint">
+                        الزبون يشوف «سعر {{ product.unit_label if product else 'الحبة' }}» فصفحة المنتج.
+                    </small>
+                </label>
+
+                <label class="field">
+                    <span>السعر (دج) *</span>
+                    <input type="number" name="price" min="0" required value="{{ product.price if product else '' }}">
+                    {# ⚠️ كي يكون فيه موديلات، السعر اللي يشوفو الزبون هو
+                       سعر الموديل الافتراضي. هذا الحقل يبقى احتياطيًا
+                       للموديلات اللي خليتها بلا سعر. #}
+                    {% if product and product.default_variant %}
+                    <small class="hint">
+                        الزبون يشوف سعر الموديل المربوط بالصورة الرئيسية ★
+                        (<strong>{{ product.default_variant.label }}</strong> —
+                        {{ product.default_variant.price_display }}).
+                        بدّل الصورة الرئيسية باش تبدّل الموديل الافتراضي.
+                        هذا الحقل يخدم للموديلات بلا سعر تاعهم برك.
+                    </small>
+                    {% endif %}
+                </label>
+                <label class="field">
+                    <span>السعر قبل التخفيض</span>
+                    <input type="number" name="compare_at_price" min="0"
+                           value="{{ product.compare_at_price if product and product.compare_at_price else '' }}"
+                           placeholder="خليه فارغ إذا ماكانش عرض">
+                </label>
+            </div>
+
+            <label class="field">
+                <span>الوصف</span>
+                <textarea name="description" rows="8"
+                          placeholder="تقدر تكتب HTML — يتحول تلقائيًا لنص واضح فالمتجر">{{ product.description_html if product and product.description_html else (product.description if product else '') }}</textarea>
+            </label>
+
+            <label class="checkbox-field">
+                <input type="checkbox" name="is_active" {{ 'checked' if not product or product.is_active }}>
+                <span>مفعّل (يبان فالمتجر)</span>
+            </label>
+
+            <label class="checkbox-field">
+                <input type="checkbox" name="is_featured" {{ 'checked' if product and product.is_featured }}>
+                <span>مميّز — يبان فقسم «الأكثر طلبًا»</span>
+            </label>
+            <small class="hint">
+                هاد الخانة تخدم حتى يجمع المتجر مبيعات حقيقية (5 منتجات مباعة على الأقل).
+                بعدها القسم يتحوّل أوتوماتيكيًا للأكثر مبيعًا فعليًا.
+            </small>
+
+            <details class="calc-settings" {{ 'open' if product and product.calculator_type }}>
+                <summary>حاسبة الكمية (اختيارية)</summary>
+
+                <p class="hint">
+                    للمنتجات اللي تتباع بالمتر. الزبون يعطي مقاس الحاجة، والموقع
+                    يحسبلو قداش يحتاج — يقلل التردد ويزيد الطلبات.
+                </p>
+
+                <label class="field">
+                    <span>نوع الحاسبة</span>
+                    <select name="calculator_type" id="calcTypeSelect">
+                        <option value="">— بلا حاسبة —</option>
+                        <option value="perimeter" {{ 'selected' if product and product.calculator_type == 'perimeter' }}>
+                            محيط (أشرطة، سفيفة، حواف)
+                        </option>
+                        <option value="area" {{ 'selected' if product and product.calculator_type == 'area' }}>
+                            مساحة (ورق لاصق)
+                        </option>
+                    </select>
+                </label>
+
+                <label class="field" id="rollWidthField">
+                    <span>عرض اللفة (متر) *</span>
+                    <input type="number" name="roll_width_m" step="0.1" min="0"
+                           value="{{ product.roll_width_m if product and product.roll_width_m else '' }}"
+                           placeholder="1 أو 1.2">
+                    <small class="hint">ضروري لحاسبة المساحة</small>
+                </label>
+
+                <label class="field">
+                    <span>هامش الأمان (%)</span>
+                    <input type="number" name="calculator_margin" min="0" max="50"
+                           value="{{ product.calculator_margin if product else 10 }}">
+                    <small class="hint">يُزاد على الحساب للقص والأخطاء</small>
+                </label>
+            </details>
+
+            <script>
+            (function () {
+                var sel = document.getElementById("calcTypeSelect");
+                var widField = document.getElementById("rollWidthField");
+                if (!sel || !widField) return;
+
+                /* 🔴 اتحيّدت خانة «طول اللفة» — حاسبة المحيط ولّات
+                   تعطي أمتار برك، فما بقاتش تحتاج أي إعداد. */
+                function sync() {
+                    widField.style.display = sel.value === "area" ? "" : "none";
+                }
+                sel.addEventListener("change", sync);
+                sync();
+            })();
+            </script>
+
+            <button type="submit" class="btn-admin btn-block" id="mainSaveBtn">حفظ المنتج</button>
+
+            {# ═══════ حفظ والتالي ═══════
+               الزر اللي يخلّيك تعمّر أسعار عشرات المنتجات وحدة بوحدة
+               بلا ما ترجع للقائمة. يبان غير إذا كان فيه منتج تالي. #}
+            {% if product and next_product %}
+            <button type="submit" name="save_and_next" value="1"
+                    class="btn-admin btn-block btn-ghost" id="saveNextBtn">
+                حفظ والتالي ←
+            </button>
+            <p class="hint hint-sm">التالي: {{ next_product.name }}</p>
+            {% endif %}
+
+            {# ⚠️ الفلاتر تتبعت مع الفورم كحقول مخفية: الـPOST ما فيهش
+               query string، فبلاهم أزرار التنقّل بعد الحفظ تنسى الفلترة
+               وترجع للقائمة الكاملة. #}
+            {% for key, value in nav_args.items() %}
+            <input type="hidden" name="nav_{{ key }}" value="{{ value }}">
+            {% endfor %}
+        </div>
+
+        <div class="form-col">
+            <h2 class="section-title">الصور</h2>
+
+            {% if product and product.main_images %}
+            {# ═══════════ إدارة الصور ═══════════
+               ⚠️ كل شي **محلي** حتى تضغط «حفظ المنتج»:
+                 • الترتيب، الصورة الرئيسية، والحذف كلهم يتطبّقو فالمتصفح
+                 • ما نعاودوش نحمّلو الصفحة فكل حركة
+                 • تقدر تتراجع قبل الحفظ
+               الحقول المخفية تحت تحمل القرارات للسيرفر. #}
+            <div class="image-manager" id="imageManager">
+                {% for img in product.main_images %}
+                {% set is_main = img.image_filename == product.image_filename %}
+                <div class="image-item {{ 'is-main' if is_main }}"
+                     data-id="{{ img.id }}"
+                     data-file="{{ img.image_filename }}">
+
+                    <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
+                         alt="" data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}">
+
+                    {# رقم الصورة — يوافق «صورة N» فبطاقات الموديلات #}
+                    <span class="image-no">{{ loop.index }}</span>
+                    <span class="image-main-tag">★ رئيسية</span>
+                    <span class="image-del-tag">سيُحذف</span>
+
+                    <div class="image-item-actions">
+                        {# ⚠️ فـRTL: «‹» تمشي لليمين بصريًا و«›» لليسار.
+                           كانو معكوسين — اتصلّحو. #}
+                        <button type="button" class="img-btn img-btn-move" data-move="start"
+                                title="حرّكها لليمين" aria-label="حرّكها لليمين">‹</button>
+
+                        <button type="button" class="img-btn img-btn-zoom" data-zoom
+                                title="شوفها كاملة" aria-label="تكبير">🔍</button>
+
+                        <button type="button" class="img-btn img-btn-edit" data-edit
+                                title="قص / تدوير / قلب" aria-label="تعديل الصورة">✂</button>
+
+                        <button type="button" class="img-btn img-btn-main" data-main
+                                title="اجعلها الصورة الرئيسية" aria-label="رئيسية">★</button>
+
+                        <button type="button" class="img-btn img-btn-del" data-del
+                                title="حذف" aria-label="حذف">×</button>
+
+                        <button type="button" class="img-btn img-btn-move" data-move="end"
+                                title="حرّكها لليسار" aria-label="حرّكها لليسار">›</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {# القرارات تمشي للسيرفر مع «حفظ المنتج» #}
+            <input type="hidden" name="image_order" id="imageOrder">
+            <input type="hidden" name="image_main" id="imageMain">
+            <input type="hidden" name="image_deleted" id="imageDeleted">
+
+            <p class="hint" id="imageDirtyNote" hidden>
+                ⚠️ فيه تعديلات على الصور — اضغط <strong>حفظ المنتج</strong> باش تتطبّق.
+                <button type="button" class="bulk-link" id="imageUndo">تراجع</button>
+            </p>
+
+            <p class="hint">
+                مرّر الماوس على الصورة: <strong>‹ ›</strong> للترتيب ·
+                <strong>🔍</strong> تكبير · <strong>★</strong> رئيسية · <strong>×</strong> حذف.
+            </p>
+
+            {# الصور هي المرجع — نوضّحو للأدمن باش يعرف أن ترتيبها يأثّر #}
+            <p class="hint">
+                📌 <strong>ترتيب الصور يحدّد ترتيب الموديلات.</strong>
+                الموديل المربوط بالصورة الرئيسية ★ يولّي الافتراضي
+                (مختار من البداية وسعرو هو اللي يبان للزبون).
+            </p>
+            {% endif %}
+
+            {% if product %}
+            {# ═══════ رفع صورة بصورة ═══════
+               🔴 قبل، الصور كانت تتبعث مع الفورم كامل فطلب واحد — و3 صور
+               متوسطات كانو يتعدّاو حد الطلب (6 ميغا) فيقطع الاتصال
+               وتضيع كل التعديلات. درك كل صورة طلب مستقل، بشريط تقدّم،
+               وزر الحفظ مقفول حتى تكمل. #}
+            <div class="field uploader"
+                 data-url="{{ url_for('admin.product_image_upload', product_id=product.id) }}">
+                <span class="uploader-label">زيد صور (تقدر تختار أكثر من وحدة)</span>
+                <input type="file" id="imagePicker" accept="image/*" multiple>
+                <small class="hint">
+                    JPG / PNG / WebP — صور الهاتف عادي، نصغّروها تلقائيًا قبل الرفع.
+                    كل صورة تترفع وحدها وتتزاد فورًا للمعرض.
+                </small>
+
+                <div class="upload-progress" id="uploadProgress" hidden>
+                    <div class="upload-bar"><span id="uploadBarFill"></span></div>
+                    <p class="upload-status" id="uploadStatus" role="status"></p>
+                    <ul class="upload-list" id="uploadList"></ul>
+                </div>
+            </div>
+            {% else %}
+            <p class="hint">
+                💡 احفظ المنتج أول، ومن بعد تقدر تزيد الصور وحدة بوحدة.
+            </p>
+            {% endif %}
+
+            {# ═══════════ صور أخرى (توضيحية) ═══════════
+               ⚠️ الفرق عن الصور فوق:
+                 • فوق = صور السلعة الحقيقية، مربوطة بالموديلات
+                 • هنا = صور توضيحية برك (كيفاش تستعملو، وين يتحط)
+               التوضيحية **ما تدخلش** فترتيب الموديلات وما تقدرش تكون
+               رئيسية. تبان تحت المعرض فصفحة المنتج. #}
+            {% if product %}
+            <hr class="divider">
+
+            <h2 class="section-title">صور أخرى (توضيحية)</h2>
+            <p class="hint">
+                صور تشرح المنتج: كيفاش يتستعمل، وين يتحط، المقاسات…
+                <strong>ما تتربطش بموديل</strong> وما تأثّرش على الترتيب.
+                <br>رفعت صورة موديل هنا بالغلط؟ استعمل <strong>«↑ لصور المنتج»</strong>
+                تحت الصورة، واختار الموديل من القائمة.
+            </p>
+
+            {% if product.extra_images %}
+            <div class="image-manager extra-manager">
+                {% for img in product.extra_images %}
+                <div class="image-item is-extra" data-id="{{ img.id }}">
+                    {# ⚠️ الصورة والأزرار داخل مربّع مقصوص، والوصف وزر
+                       النقل **برّاه**. قبل، كل شي كان داخل مربّع
+                       aspect-ratio:1 + overflow:hidden — فخانة الوصف
+                       وزر النقل كانو موجودين بصح مقصوصين وما يبانوش. #}
+                    <div class="image-shot">
+                        <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
+                             alt="" data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}">
+
+                        <span class="image-no">{{ loop.index }}</span>
+
+                    <div class="image-item-actions">
+                        <form method="post" class="img-inline-form"
+                              action="{{ url_for('admin.product_image_move', product_id=product.id, image_id=img.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="dir" value="up">
+                            <button type="submit" class="img-btn img-btn-move"
+                                    title="حرّكها لليمين">‹</button>
+                        </form>
+
+                        <button type="button" class="img-btn img-btn-zoom" data-zoom
+                                title="شوفها كاملة">🔍</button>
+
+                        <button type="button" class="img-btn img-btn-edit" data-edit
+                                title="قص / تدوير / قلب">✂</button>
+
+                        <form method="post" class="img-inline-form"
+                              onsubmit="return confirm('تمسح هاد الصورة التوضيحية؟')"
+                              action="{{ url_for('admin.product_image_delete', product_id=product.id, image_id=img.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="img-btn img-btn-del" title="حذف">×</button>
+                        </form>
+
+                        <form method="post" class="img-inline-form"
+                              action="{{ url_for('admin.product_image_move', product_id=product.id, image_id=img.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="dir" value="down">
+                            <button type="submit" class="img-btn img-btn-move"
+                                    title="حرّكها لليسار">›</button>
+                        </form>
+                        </div>
+                    </div>{# /image-shot #}
+
+                    {# وصف قصير يبان تحت الصورة فصفحة المنتج #}
+                    <input type="text" class="extra-caption"
+                           value="{{ img.caption or '' }}" maxlength="200"
+                           placeholder="وصف قصير (اختياري)"
+                           aria-label="وصف الصورة"
+                           data-url="{{ url_for('admin.product_image_caption', product_id=product.id, image_id=img.id) }}">
+
+                    {# ═══════ نقّلها لصور المنتج ═══════
+                       للحالة اللي ترفع فيها صورة موديل بالغلط هنا.
+                       القائمة تخليك تربطها بموديل مباشرة — بلاها
+                       تولّي صورة معرض بلا موديل. #}
+                    <form method="post" class="img-promote"
+                          action="{{ url_for('admin.product_image_regroup', product_id=product.id, image_id=img.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="to" value="main">
+                        {% if product.variants %}
+                        <select name="variant_id" aria-label="اربطها بموديل">
+                            <option value="">بلا موديل</option>
+                            {% for v in product.variants %}
+                            <option value="{{ v.id }}">{{ v.label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% endif %}
+                        <button type="submit" class="btn-admin btn-sm btn-ghost"
+                                title="نقّلها لصور المنتج">↑ لصور المنتج</button>
+                    </form>
+
+
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="hint empty-note">ماكانش صور توضيحية بعد.</p>
+            {% endif %}
+
+            {# رافع مستقل — نفس المسار مع kind=extra #}
+            <div class="field uploader"
+                 data-url="{{ url_for('admin.product_image_upload', product_id=product.id) }}"
+                 data-kind="extra">
+                <span class="uploader-label">زيد صور توضيحية</span>
+                <input type="file" id="extraPicker" accept="image/*" multiple>
+                <small class="hint">
+                    JPG / PNG / WebP — صور الهاتف عادي، نصغّروها تلقائيًا قبل الرفع.
+                </small>
+
+                <div class="upload-progress" id="extraProgress" hidden>
+                    <div class="upload-bar"><span id="extraBarFill"></span></div>
+                    <p class="upload-status" id="extraStatus" role="status"></p>
+                    <ul class="upload-list" id="extraList"></ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</form>
+
+{% if product %}
+<hr class="divider">
+
+<h2 class="section-title">الموديلات وأسعار الجملة</h2>
+
+{% if product.variants %}
+{# ═══════════ عرض جاهز لعدة موديلات ═══════════
+   منتج فيه 10 ألوان بنفس التغليف — «رولو (12 متر)» ينطبق عليهم كلهم.
+   بلا هذا، الأدمن يعمّر نفس العرض 10 مرات. #}
+<details class="bulk-packs">
+    <summary>
+        <span class="bulk-icon">⚡</span>
+        طبّق سعر على عدة موديلات ضربة وحدة
+    </summary>
+
+    {# تبويبان: مجال كمية (من/إلى) ولا عرض جاهز #}
+    <div class="bulk-tabs" role="tablist">
+        <button type="button" class="bulk-tab is-on" data-tab="tier" role="tab">
+            📊 مجال كمية (من / إلى)
+        </button>
+        <button type="button" class="bulk-tab" data-tab="pack" role="tab">
+            🎁 عرض جاهز
+        </button>
+        <button type="button" class="bulk-tab" data-tab="price" role="tab">
+            🏷️ سعر الموديل
+        </button>
+    </div>
+
+    {# ═══ مجال كمية ═══ #}
+    <form method="post" action="{{ url_for('admin.product_tiers_bulk', product_id=product.id) }}"
+          class="bulk-form bulk-pane" data-pane="tier" id="bulkTiersForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="bulk-row bulk-row-tier">
+            <label class="bulk-field">
+                <span>من (حبة)</span>
+                <input type="number" name="tier_bulk_min" min="1" placeholder="100" required>
+            </label>
+
+            <label class="bulk-field">
+                <span>إلى (حبة)</span>
+                <input type="number" name="tier_bulk_max" min="1" placeholder="بلا حد">
+            </label>
+
+            <label class="bulk-field">
+                <span>سعر {{ product.unit_label if product else 'الحبة' }} (دج)</span>
+                <input type="number" name="tier_bulk_price" min="0" placeholder="420" required>
+            </label>
+        </div>
+
+        <div class="bulk-mode">
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="all" checked>
+                <span>كل الموديلات <em>({{ product.variants | length }})</em></span>
+            </label>
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="selected">
+                <span>موديلات مختارة</span>
+            </label>
+        </div>
+
+        <div class="bulk-picker" hidden>
+            <div class="bulk-picker-head">
+                <button type="button" class="bulk-link" data-pick="all">اختر الكل</button>
+                <button type="button" class="bulk-link" data-pick="none">صفّي</button>
+            </div>
+            <div class="bulk-chips">
+                {% for v in product.ordered_variants %}
+                <label class="bulk-chip">
+                    <input type="checkbox" name="tier_bulk_variants" value="{{ v.id }}">
+                    <span>{{ v.label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <p class="hint hint-sm">
+            خلّي «إلى» فارغ = <strong>وفوق بلا حد</strong>.
+            <br>⚠️ إذا الموديل عندو مجال يبدا من نفس الرقم، <strong>يتحدّث</strong>.
+            والمجالات المتداخلة تتجاوز — التداخل يخلّي السعر غامضًا.
+        </p>
+
+        <div class="bulk-actions">
+            <button type="submit" class="btn-admin btn-sm">طبّق المجال</button>
+            <button type="submit" class="btn-admin btn-sm btn-ghost"
+                    formaction="{{ url_for('admin.product_tiers_bulk_delete', product_id=product.id) }}"
+                    formnovalidate
+                    onclick="return confirm('تمسح هاد المجال من كل الموديلات؟')">
+                امسحو من الكل
+            </button>
+        </div>
+    </form>
+
+    <form method="post" action="{{ url_for('admin.product_packs_bulk', product_id=product.id) }}"
+          class="bulk-form bulk-pane" data-pane="pack" id="bulkPacksForm" hidden>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="bulk-row">
+            <label class="bulk-field bulk-qty">
+                <span>عدد</span>
+                <input type="number" name="bulk_quantity" value="1" min="1">
+            </label>
+
+            <label class="bulk-field bulk-name">
+                <span>اسم العرض</span>
+                <input type="text" name="bulk_label" placeholder="رولو (فيه 12 متر)" required>
+            </label>
+
+            <label class="bulk-field bulk-price">
+                <span>السعر (دج)</span>
+                <input type="number" name="bulk_price" min="0" placeholder="700" required>
+            </label>
+        </div>
+
+        <div class="bulk-mode">
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="all" checked>
+                <span>كل الموديلات <em>({{ product.variants | length }})</em></span>
+            </label>
+
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="selected">
+                <span>موديلات مختارة</span>
+            </label>
+        </div>
+
+        <div class="bulk-picker" hidden>
+            <div class="bulk-picker-head">
+                <button type="button" class="bulk-link" data-pick="all">اختر الكل</button>
+                <button type="button" class="bulk-link" data-pick="none">صفّي</button>
+            </div>
+
+            <div class="bulk-chips">
+                {% for v in product.ordered_variants %}
+                <label class="bulk-chip">
+                    <input type="checkbox" name="bulk_variants" value="{{ v.id }}">
+                    <span>{{ v.label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <p class="hint hint-sm">
+            ⚠️ إذا الموديل عندو عرض بنفس الاسم، <strong>يتحدّث</strong> بدل
+            ما يتكرّر — فتقدر تبدّل سعر عرض على كل الموديلات بضغطة وحدة.
+        </p>
+
+        <div class="bulk-actions">
+            <button type="submit" class="btn-admin btn-sm">طبّق على الموديلات</button>
+            <button type="submit" class="btn-admin btn-sm btn-ghost"
+                    formaction="{{ url_for('admin.product_packs_bulk_delete', product_id=product.id) }}"
+                    formnovalidate
+                    onclick="return confirm('تمسح هاد العرض من كل الموديلات؟')">
+                امسحو من الكل
+            </button>
+        </div>
+    </form>
+
+    {# ═══ سعر الموديل ═══ #}
+    <form method="post" action="{{ url_for('admin.product_variant_price_bulk', product_id=product.id) }}"
+          class="bulk-form bulk-pane" data-pane="price" hidden>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="bulk-row bulk-row-price">
+            <label class="bulk-field">
+                <span>الطريقة</span>
+                <select name="price_kind">
+                    <option value="fixed">سعر ثابت (دج)</option>
+                    <option value="percent">نسبة ± (%)</option>
+                </select>
+            </label>
+
+            <label class="bulk-field">
+                <span>القيمة</span>
+                <input type="number" name="price_value" placeholder="125" required>
+            </label>
+        </div>
+
+        <div class="bulk-mode">
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="all" checked>
+                <span>كل الموديلات <em>({{ product.variants | length }})</em></span>
+            </label>
+            <label class="bulk-radio">
+                <input type="radio" name="bulk_mode" value="selected">
+                <span>موديلات مختارة</span>
+            </label>
+        </div>
+
+        <div class="bulk-picker" hidden>
+            <div class="bulk-picker-head">
+                <button type="button" class="bulk-link" data-pick="all">اختر الكل</button>
+                <button type="button" class="bulk-link" data-pick="none">صفّي</button>
+            </div>
+            <div class="bulk-chips">
+                {% for v in product.ordered_variants %}
+                <label class="bulk-chip">
+                    <input type="checkbox" name="price_bulk_variants" value="{{ v.id }}">
+                    <span>{{ v.label }} <em>({{ v.effective_price }})</em></span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <p class="hint hint-sm">
+            <strong>سعر ثابت</strong>: كل الموديلات تولّي بهاد السعر.
+            <br><strong>نسبة</strong>: <code>10</code> = زيادة 10% · <code>-15</code> = تخفيض 15%،
+            وتُحسب من سعر <em>كل موديل</em> على حدا.
+        </p>
+
+        <div class="bulk-actions">
+            <button type="submit" class="btn-admin btn-sm">طبّق السعر</button>
+        </div>
+    </form>
+</details>
+{% endif %}
+<p class="hint">
+    الموديل = نوع من المنتج (لون، شكل، مقاس). لكل موديل:
+    <strong>صورة</strong> يشوفها الزبون كي يختارو، و<strong>أسعار حسب الكمية</strong>
+    (كل ما زاد يشري، كل ما رخص سعر {{ product.unit_label if product else 'الحبة' }}).
+</p>
+
+{# ═══════ تشخيص الترتيب ═══════
+   ⚠️ الموديلات تتبع ترتيب الصور. إذا موديل ماشي فبلاصتو، غالبًا صورتو
+   ماشي مربوطة مليح. هاد اللوحة تخليك تشوف الحقيقة بلا تخمين. #}
+{% if product.variants %}
+{% set rank = product._image_rank %}
+{% set unlinked = product.ordered_variants
+                  | rejectattr('image_filename', 'in', rank) | list %}
+{% if unlinked %}
+<div class="flash flash-warning">
+    ⚠️ <strong>{{ unlinked | length }}</strong> موديل بلا صورة مربوطة —
+    يمشيو للآخر فالترتيب:
+    {% for v in unlinked %}«{{ v.label }}»{% if not loop.last %} · {% endif %}{% endfor %}.
+    اربطهم بصورة من قائمة «صورة الموديل» تحت باش يدخلو فالترتيب.
+</div>
+{% endif %}
+
+<div class="variants-manager">
+    {% for v in product.ordered_variants %}
+    <div class="variant-card {{ '' if v.is_available else 'is-unavailable' }}">
+
+        {# ---------- الرأس: الاسم والسعر والحذف ---------- #}
+        <div class="variant-head">
+            <div class="variant-info">
+                {# رقم الترتيب + رقم الصورة المربوطة — تشخيص فوري #}
+                <span class="variant-rank"
+                      title="ترتيب الموديل · الصورة المربوطة">
+                    {{ loop.index }}
+                    {%- if v.image_filename in rank %}
+                        <span class="variant-imgno">صورة {{ rank[v.image_filename] + 1 }}</span>
+                    {%- else %}
+                        <span class="variant-imgno is-none">بلا صورة</span>
+                    {%- endif %}
+                </span>
+                {# ⚠️ الاسم قابل للتعديل فمكانو. قبل كان نصًا ثابتًا، وباش
+                   تبدّل اسمًا لازم تمسح الموديل وتعاود تزيدو — وتخسر
+                   معاه أسعار الكمية والعروض كاملين. #}
+                <span class="vlabel" data-url="{{ url_for('admin.variant_label', variant_id=v.id) }}">
+                    <input type="text" class="vlabel-input"
+                           value="{{ v.label }}" maxlength="160"
+                           aria-label="اسم الموديل">
+                    <button type="button" class="vlabel-save" title="احفظ الاسم">✓</button>
+                    <span class="vlabel-state" role="status"></span>
+                </span>
+                {# ⚠️ السعر قابل للتعديل فمكانو — قبل كان نصًا فقط،
+                   والأدمن ما يعرفش وين يبدّلو. الحفظ فوري بلا إعادة
+                   تحميل الصفحة. #}
+                <span class="variant-meta">
+                    <span class="vprice" data-url="{{ url_for('admin.variant_price', variant_id=v.id) }}">
+                        <input type="number" class="vprice-input"
+                               value="{{ v.price if v.price is not none else '' }}"
+                               placeholder="{{ product.price }}" min="0"
+                               aria-label="سعر {{ v.label }}">
+                        <span class="vprice-unit">دج</span>
+                        <button type="button" class="vprice-save" title="احفظ السعر">✓</button>
+                        <span class="vprice-state" role="status"></span>
+                    </span>
+
+                    {% if v.price is none %}
+                    <span class="vprice-hint" title="فارغ = يرث سعر المنتج">↳ سعر المنتج</span>
+                    {% endif %}
+
+                    {% if v.sku %}<span class="dot">·</span>{{ v.sku }}{% endif %}
+                    {# ⚠️ الافتراضي درك يتحدّد من **الصورة الرئيسية**، ماشي
+                       من علامة `is_default` وحدها. نعرضو الحقيقة باش
+                       الأدمن ما يحتارش. #}
+                    {% if v == product.default_variant %}
+                    <span class="tag-default" title="مربوط بالصورة الرئيسية ★">افتراضي</span>
+                    {% endif %}
+
+                    {# ═══════ توفّر الموديل ═══════
+                       ⚠️ التعطيل أحسن من الحذف: الموديل يبقى بأسعارو
+                       وعروضو، ويرجع بضغطة كي يوصل من عند المورّد. #}
+                    <form method="post" class="avail-form"
+                          action="{{ url_for('admin.variant_toggle_available', variant_id=v.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit"
+                                class="avail-btn {{ 'is-on' if v.is_available else 'is-off' }}"
+                                title="{{ 'اضغط باش تعطّلو' if v.is_available else 'اضغط باش ترجّعو' }}">
+                            {{ '✓ متوفر' if v.is_available else '✕ غير متوفر' }}
+                        </button>
+                    </form>
+                </span>
+            </div>
+
+            <form method="post" action="{{ url_for('admin.variant_delete', variant_id=v.id) }}"
+                  onsubmit="return confirm('تمسح الموديل «{{ v.label }}» وكل أسعارو؟')"
+                  class="variant-del-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="variant-del"
+                        title="حذف الموديل «{{ v.label }}»"
+                        aria-label="حذف الموديل {{ v.label }}">حذف</button>
+            </form>
+        </div>
+
+        {# ---------- الجسم: العيّنة | الأسعار ---------- #}
+        <div class="variant-body">
+
+            {# العيّنة — صورة الموديل كيما عيّنة يشوفها الزبون #}
+            <div class="variant-swatch">
+                {% if product.images %}
+                <div class="vimg" data-variant="{{ v.id }}"
+                     data-url="{{ url_for('admin.variant_image', variant_id=v.id) }}"
+                     data-label="{{ v.label }}">
+
+                    <button type="button" class="vimg-current"
+                            aria-label="بدّل صورة {{ v.label }}">
+                        {% if v.image_filename %}
+                        <img src="{{ url_for('static', filename='img/products/' + (v.image_filename | thumb)) }}"
+                             alt="">
+                        {% else %}
+                        <span class="vimg-empty">اختر<br>صورة</span>
+                        {% endif %}
+                        <span class="vimg-edit">تبديل</span>
+                    </button>
+
+                    <span class="vimg-state" role="status"></span>
+                </div>
+                {% else %}
+                <p class="hint hint-sm">ارفع صور المنتج فوق أولاً.</p>
+                {% endif %}
+            </div>
+
+        {# ⚠️ الأسعار والعروض فحاوية وحدة: .variant-body شبكة من عمودين
+           (صورة | محتوى). بلا هاد الغلاف، كل قسم يولّي طفلًا مستقلاً
+           ويطيح فعمود الصورة الضيق (108px) وتتكدّس الحقول فوق بعضها. #}
+        <div class="variant-pricing">
+
+        {# ---------- أسعار الجملة ---------- #}
+        <div class="variant-tiers">
+            <label class="variant-section-title">أسعار حسب الكمية <em>(اختياري)</em></label>
+            <p class="hint hint-sm">
+                مثال: من <strong>1</strong> إلى <strong>99</strong> بـ500 دج ·
+                من <strong>100</strong> إلى <strong>199</strong> بـ420 دج ·
+                من <strong>200</strong> وفوق بـ380 دج (خلّي «إلى» فارغ).
+            </p>
+
+            <form method="post" action="{{ url_for('admin.variant_tiers', variant_id=v.id) }}"
+                  class="tiers-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <table class="tiers-table">
+                    <thead>
+                        {# ⚠️ عمود رابع مستقل لزر المسح — قبل كان بموضع مطلق
+                           جوّا خانة السعر، فيطيح تحت الحقل ويكسر المحاذاة. #}
+                        <tr>
+                            <th>من (حبة)</th>
+                            <th>إلى (حبة)</th>
+                            <th>سعر {{ product.unit_label }} (دج)</th>
+                            <th class="tiers-x-col"><span class="sr-only">مسح</span></th>
+                        </tr>
+                    </thead>
+                    <tbody class="tiers-body" data-variant="{{ v.id }}">
+                        {% for t in v.price_tiers %}
+                        <tr>
+                            <td><input type="number" name="min_quantity" value="{{ t.min_quantity }}" min="1"></td>
+                            <td><input type="number" name="max_quantity" value="{{ t.max_quantity or '' }}" min="1" placeholder="بلا حد"></td>
+                            <td><input type="number" name="unit_price" value="{{ t.unit_price }}" min="0"></td>
+                            <td class="tiers-x-col">
+                                <button type="button" class="tier-remove" title="امسح هاد السطر"
+                                        aria-label="امسح السطر">×</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+
+                        {# صف فارغ واحد — والباقي يتزاد بزر «+» بلا حدود #}
+                        <tr>
+                            <td><input type="number" name="min_quantity" min="1" placeholder="مثلاً 100"></td>
+                            <td><input type="number" name="max_quantity" min="1" placeholder="بلا حد"></td>
+                            <td><input type="number" name="unit_price" min="0" placeholder="مثلاً 420"></td>
+                            <td class="tiers-x-col">
+                                <button type="button" class="tier-remove" title="امسح هاد السطر"
+                                        aria-label="امسح السطر">×</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="tiers-actions">
+                    <button type="button" class="btn-admin btn-sm btn-ghost tier-add">
+                        + زيد عرض آخر
+                    </button>
+                    <button type="submit" class="btn-admin btn-sm">احفظ الأسعار</button>
+                </div>
+            </form>
+        </div>
+
+            {# ---------- العروض الجاهزة ---------- #}
+            <div class="variant-packs">
+                <label class="variant-section-title">
+                    عروض جاهزة <em>(اختياري)</em>
+                </label>
+                <p class="hint hint-sm">
+                    وحدات بيع لها اسم وسعر ثابت — مثال:
+                    <strong>1</strong> · «رولو (فيه 12 متر)» · <strong>700</strong> دج.
+                    الزبون يختار منها مباشرة بدل ما يحسب بـ{{ product.unit_short }}.
+                </p>
+
+                <form method="post" action="{{ url_for('admin.variant_packs', variant_id=v.id) }}"
+                      class="packs-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <table class="packs-table">
+                        <thead>
+                            <tr>
+                                <th class="packs-qty-col">عدد</th>
+                                <th>اسم العرض</th>
+                                <th class="packs-price-col">السعر (دج)</th>
+                                <th class="packs-x-col"><span class="sr-only">مسح</span></th>
+                            </tr>
+                        </thead>
+                        <tbody class="packs-body">
+                            {% for pk in v.packs %}
+                            <tr>
+                                <td class="packs-qty-col">
+                                    <input type="number" name="pack_quantity"
+                                           value="{{ pk.quantity }}" min="1">
+                                </td>
+                                <td><input type="text" name="pack_label" value="{{ pk.label }}"></td>
+                                <td class="packs-price-col">
+                                    <input type="number" name="pack_price"
+                                           value="{{ pk.price }}" min="0">
+                                </td>
+                                <td class="packs-x-col">
+                                    <button type="button" class="pack-remove"
+                                            title="امسح هاد العرض" aria-label="امسح">×</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+
+                            <tr>
+                                <td class="packs-qty-col">
+                                    <input type="number" name="pack_quantity" value="1" min="1">
+                                </td>
+                                <td><input type="text" name="pack_label"
+                                           placeholder="رولو (فيه 12 متر)"></td>
+                                <td class="packs-price-col">
+                                    <input type="number" name="pack_price" min="0" placeholder="700">
+                                </td>
+                                <td class="packs-x-col">
+                                    <button type="button" class="pack-remove"
+                                            title="امسح هاد العرض" aria-label="امسح">×</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="tiers-actions">
+                        <button type="button" class="btn-admin btn-sm btn-ghost pack-add">
+                            + زيد عرض جاهز
+                        </button>
+                        <button type="submit" class="btn-admin btn-sm">احفظ العروض</button>
+                    </div>
+                </form>
+            </div>
+
+            </div>{# /variant-pricing #}
+        </div>{# /variant-body #}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="hint">ماكاين حتى موديل. إذا المنتج عندو ألوان/أشكال مختلفة، زيدهم تحت.</p>
+{% endif %}
+
+<div class="add-variant-box">
+    <h3>زيد موديل جديد</h3>
+    <form method="post" action="{{ url_for('admin.variant_add', product_id=product.id) }}"
+          class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="label" placeholder="اسم الموديل (مثلاً: دوري / الجزيرة)" required>
+        <input type="number" name="price" placeholder="السعر العادي (اختياري)" min="0">
+        <input type="text" name="sku" placeholder="SKU (اختياري)">
+
+        {% if product.images %}
+        <select name="image_filename" class="variant-img-select">
+            <option value="">— اختر صورة (اختياري) —</option>
+            {% for img in product.images %}
+            <option value="{{ img.image_filename }}">صورة {{ loop.index }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+
+        <button type="submit" class="btn-admin btn-sm">+ زيد الموديل</button>
+    </form>
+    <p class="hint">بعد ما تزيدو، تقدر تختار صورتو وتحط أسعار الجملة.</p>
+</div>
+{% endif %}
+
+
+{% if product and product.images %}
+{# ═══════ معرض اختيار صورة الموديل ═══════ #}
+{# ⚠️ اللايت-بوكس ولّى فـbase_admin.html — يخدم فكل اللوحة.
+   المحلي كان داخل `{% if product.images %}`، فلو المنتج عندو صور
+   توضيحية برك، زر التكبير كان يطيح بـnull. #}
+
+<div class="gal" id="imgGallery" hidden>
+    <div class="gal-backdrop" data-close></div>
+
+    <div class="gal-box" role="dialog" aria-modal="true" aria-labelledby="galTitle">
+        <div class="gal-head">
+            <h3 id="galTitle">اختر صورة لـ<span id="galLabel"></span></h3>
+            <button type="button" class="gal-x" data-close aria-label="سكّر">×</button>
+        </div>
+
+        <div class="gal-grid">
+            <button type="button" class="gal-item gal-none" data-file="">
+                <span>بلا صورة</span>
+            </button>
+
+            {# ⚠️ الصور هنا هي **نفسها** صور المنتج فوق. إذا مسحت صورة
+               من فوق، تختفي من هنا تلقائيًا ومن الموديلات اللي كانت
+               تستعملها — نفس المصدر، بلا نسخ. #}
+            {% for img in product.images %}
+            <div class="gal-cell">
+                <button type="button" class="gal-item"
+                        data-file="{{ img.image_filename }}"
+                        data-thumb="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}">
+                    <img src="{{ url_for('static', filename='img/products/' + (img.image_filename | thumb)) }}"
+                         alt="" loading="lazy">
+                </button>
+
+                {# ⚠️ زر منفصل للمعاينة: الضغط على الصورة يختارها ويسكّر
+                   المعرض. بلا هاد الزر، الأدمن ما يقدرش يشوف التفاصيل
+                   قبل ما يقرر. #}
+                <button type="button" class="gal-zoom"
+                        data-full="{{ url_for('static', filename='img/products/' + img.image_filename) }}"
+                        title="شوفها كاملة" aria-label="معاينة">🔍</button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+
+<script>
+/**
+ * 🔴 إصلاح: `getCsrf()` كانت معرّفة داخل كتلة سكربت أخرى ملفوفة
+ * فـIIFE، فكانت **غير مرئية** هنا. النتيجة: خطأ ReferenceError يوقف
+ * حفظ سعر الموديل قبل `fetch` — الحالة تبقى «...» بلا حفظ ولا رسالة.
+ * درك معرّفة مرة وحدة فالنطاق العام وكل الكتل تستعملها.
+ */
+window.getCsrf = window.getCsrf || function () {
+    var input = document.querySelector('input[name="csrf_token"]');
+    return input ? input.value : '';
+};
+
+/**
+ * أسعار حسب الكمية — إضافة/مسح صفوف بلا حدود.
+ *
+ * ⚠️ علاش JS وماشي صفوف ثابتة؟
+ * قبل كانو صفّين فارغين فقط. الأدمن اللي يحتاج 4 عروض ولا 5 كان لازم
+ * يحفظ ويعاود يفتح فكل مرة. درك يزيد قد ما يحب فنفس الصفحة.
+ */
+(function () {
+    'use strict';
+
+    /** يبني صف فارغ جديد */
+    function makeRow() {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td><input type="number" name="min_quantity" min="1" placeholder="مثلاً 100"></td>' +
+            '<td><input type="number" name="max_quantity" min="1" placeholder="بلا حد"></td>' +
+            '<td><input type="number" name="unit_price" min="0" placeholder="مثلاً 420"></td>' +
+            '<td class="tiers-x-col">' +
+                '<button type="button" class="tier-remove" title="امسح هاد السطر" ' +
+                'aria-label="امسح السطر">×</button>' +
+            '</td>';
+        return tr;
+    }
+
+    // ═══════════ إدارة الصور — كلش محلي ═══════════
+    var mgr = document.getElementById('imageManager');
+    if (mgr) {
+        var orderInput = document.getElementById('imageOrder');
+        var mainInput = document.getElementById('imageMain');
+        var delInput = document.getElementById('imageDeleted');
+        var note = document.getElementById('imageDirtyNote');
+        var snapshot = mgr.innerHTML;   // للتراجع
+
+        function items() {
+            return Array.prototype.slice.call(mgr.querySelectorAll('.image-item'));
+        }
+
+        /** يحدّث الحقول المخفية من الحالة الحالية */
+        function sync(dirty) {
+            var live = items().filter(function (el) {
+                return !el.classList.contains('is-deleted');
+            });
+
+            orderInput.value = live.map(function (el) { return el.dataset.id; }).join(',');
+
+            var main = live.filter(function (el) {
+                return el.classList.contains('is-main');
+            })[0];
+            mainInput.value = main ? main.dataset.id : '';
+
+            delInput.value = items()
+                .filter(function (el) { return el.classList.contains('is-deleted'); })
+                .map(function (el) { return el.dataset.id; })
+                .join(',');
+
+            if (dirty) note.hidden = false;
+        }
+
+        mgr.addEventListener('click', function (e) {
+            var item = e.target.closest('.image-item');
+            if (!item) return;
+
+            // ---------- تكبير ----------
+            if (e.target.closest('[data-zoom]')) {
+                document.getElementById('adminZoomerImg').src =
+                    item.querySelector('img').dataset.full;
+                document.getElementById('adminZoomer').hidden = false;
+                return;
+            }
+
+            // ---------- ترتيب ----------
+            var moveBtn = e.target.closest('[data-move]');
+            if (moveBtn) {
+                var toStart = moveBtn.dataset.move === 'start';
+                var sibling = toStart ? item.previousElementSibling
+                                      : item.nextElementSibling;
+                if (sibling) {
+                    if (toStart) mgr.insertBefore(item, sibling);
+                    else mgr.insertBefore(sibling, item);
+                    sync(true);
+                }
+                return;
+            }
+
+            // ---------- رئيسية ----------
+            if (e.target.closest('[data-main]')) {
+                // ⚠️ صورة محذوفة ما تولّيش رئيسية
+                if (item.classList.contains('is-deleted')) return;
+                items().forEach(function (el) { el.classList.remove('is-main'); });
+                item.classList.add('is-main');
+                sync(true);
+                return;
+            }
+
+            // ---------- حذف / تراجع عن الحذف ----------
+            if (e.target.closest('[data-del]')) {
+                item.classList.toggle('is-deleted');
+
+                // لو حذفنا الرئيسية، أول صورة باقية تولّي رئيسية
+                if (item.classList.contains('is-deleted') &&
+                    item.classList.contains('is-main')) {
+                    item.classList.remove('is-main');
+                    var next = items().filter(function (el) {
+                        return !el.classList.contains('is-deleted');
+                    })[0];
+                    if (next) next.classList.add('is-main');
+                }
+                sync(true);
+                return;
+            }
+        });
+
+        document.getElementById('imageUndo').addEventListener('click', function () {
+            mgr.innerHTML = snapshot;
+            orderInput.value = mainInput.value = delInput.value = '';
+            note.hidden = true;
+        });
+
+        sync(false);
+    }
+
+    // ---------- تعديل اسم الموديل فمكانو ----------
+    function saveVariantLabel(box) {
+        var input = box.querySelector('.vlabel-input');
+        var state = box.querySelector('.vlabel-state');
+        var value = input.value.trim();
+
+        if (!value) {
+            state.textContent = '🔴';
+            state.title = 'الاسم ما يقدرش يكون فارغ';
+            state.className = 'vlabel-state is-bad';
+            return;
+        }
+
+        state.textContent = '...';
+        state.className = 'vlabel-state is-busy';
+
+        var body = new FormData();
+        body.append('label', value);
+        body.append('csrf_token', getCsrf());
+
+        fetch(box.dataset.url, {
+            method: 'POST',
+            body: body,
+            headers: { 'X-Requested-With': 'fetch' },
+        })
+            .then(function (r) {
+                return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+            })
+            .then(function (res) {
+                if (!res.ok || !res.d.ok) throw new Error(res.d.message || 'فشل');
+
+                state.textContent = '✓';
+                state.title = '';
+                state.className = 'vlabel-state is-ok';
+                input.dataset.was = value;
+                setTimeout(function () { state.textContent = ''; }, 1800);
+            })
+            .catch(function (err) {
+                state.textContent = '🔴';
+                state.title = err.message;
+                state.className = 'vlabel-state is-bad';
+            });
+    }
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.vlabel-save');
+        if (btn) saveVariantLabel(btn.closest('.vlabel'));
+    });
+
+    // الحفظ عند مغادرة الحقل — غير إذا تبدّلت القيمة فعلاً
+    document.addEventListener('focusin', function (e) {
+        var input = e.target.closest('.vlabel-input');
+        if (input) input.dataset.was = input.value.trim();
+    });
+
+    document.addEventListener('focusout', function (e) {
+        var input = e.target.closest('.vlabel-input');
+        if (!input) return;
+        if (input.value.trim() === (input.dataset.was || '')) return;
+        saveVariantLabel(input.closest('.vlabel'));
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        var input = e.target.closest('.vlabel-input');
+        if (!input) return;
+        e.preventDefault();
+        input.blur();
+    });
+
+    // ---------- تعديل سعر الموديل فمكانو ----------
+    function saveVariantPrice(box) {
+        var input = box.querySelector('.vprice-input');
+        var state = box.querySelector('.vprice-state');
+
+        state.textContent = '...';
+        state.className = 'vprice-state is-busy';
+
+        var body = new FormData();
+        body.append('price', input.value.trim());
+        body.append('csrf_token', getCsrf());
+
+        fetch(box.dataset.url, {
+            method: 'POST',
+            body: body,
+            headers: { 'X-Requested-With': 'fetch' },
+        })
+            .then(function (r) {
+                return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+            })
+            .then(function (res) {
+                if (!res.ok || !res.d.ok) throw new Error(res.d.message || 'فشل');
+
+                state.textContent = '✓';
+                state.className = 'vprice-state is-ok';
+
+                // ⚠️ نحدّثو تلميح «يرث سعر المنتج» — الأدمن يحتاج يعرف
+                // واش الموديل عندو سعرو الخاص ولا يتبع المنتج
+                var hint = box.parentNode.querySelector('.vprice-hint');
+                if (res.d.inherited && !hint) {
+                    hint = document.createElement('span');
+                    hint.className = 'vprice-hint';
+                    hint.textContent = '↳ سعر المنتج';
+                    box.parentNode.insertBefore(hint, box.nextSibling);
+                } else if (!res.d.inherited && hint) {
+                    hint.remove();
+                }
+
+                setTimeout(function () { state.textContent = ''; }, 1800);
+            })
+            .catch(function (err) {
+                state.textContent = '🔴';
+                state.title = err.message;
+                state.className = 'vprice-state is-bad';
+            });
+    }
+
+    document.addEventListener('click', function (e) {
+        var saveBtn = e.target.closest('.vprice-save');
+        if (saveBtn) saveVariantPrice(saveBtn.closest('.vprice'));
+    });
+
+    // ⚠️ الحفظ عند مغادرة الحقل كذلك — الأدمن يكتب السعر وينتقل،
+    // وما يفتكرش يضغط ✓. نحفظو غير إذا تبدّلت القيمة فعلاً.
+    document.addEventListener('focusin', function (e) {
+        var input = e.target.closest('.vprice-input');
+        if (input) input.dataset.was = input.value.trim();
+    });
+
+    document.addEventListener('focusout', function (e) {
+        var input = e.target.closest('.vprice-input');
+        if (!input) return;
+        if (input.value.trim() === (input.dataset.was || '')) return;
+        saveVariantPrice(input.closest('.vprice'));
+    });
+
+    // Enter يحفظ كذلك — أسرع من الضغط على الزر
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        var input = e.target.closest('.vprice-input');
+        if (!input) return;
+        e.preventDefault();
+        saveVariantPrice(input.closest('.vprice'));
+    });
+
+    // ---------- العرض الجماعي ----------
+    // ⚠️ نخدمو على كل الفورمات (مجال كمية + عرض جاهز) بنفس الكود
+    // بدل ما نعاودو نفس المنطق مرتين.
+    document.querySelectorAll('.bulk-pane').forEach(function (form) {
+        var picker = form.querySelector('.bulk-picker');
+        if (!picker) return;
+
+        form.addEventListener('change', function (e) {
+            if (e.target.name !== 'bulk_mode') return;
+            picker.hidden = e.target.value !== 'selected';
+        });
+
+        picker.addEventListener('click', function (e) {
+            var link = e.target.closest('[data-pick]');
+            if (!link) return;
+            var on = link.dataset.pick === 'all';
+            picker.querySelectorAll('input[type=checkbox]').forEach(function (c) {
+                c.checked = on;
+            });
+        });
+    });
+
+    // تبديل التبويبات
+    var tabs = document.querySelectorAll('.bulk-tab');
+    tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            var name = tab.dataset.tab;
+
+            tabs.forEach(function (t) {
+                t.classList.toggle('is-on', t === tab);
+            });
+            document.querySelectorAll('.bulk-pane').forEach(function (pane) {
+                pane.hidden = pane.dataset.pane !== name;
+            });
+        });
+    });
+
+    document.addEventListener('click', function (e) {
+        // ---------- زيد عرض ----------
+        var addBtn = e.target.closest('.tier-add');
+        if (addBtn) {
+            var body = addBtn.closest('form').querySelector('.tiers-body');
+            var row = makeRow();
+            body.appendChild(row);
+            row.querySelector('input').focus();   // الفوكس على «من» مباشرة
+            return;
+        }
+
+        // ---------- زيد عرض جاهز ----------
+        var packAdd = e.target.closest('.pack-add');
+        if (packAdd) {
+            var pBody = packAdd.closest('form').querySelector('.packs-body');
+            var pRow = document.createElement('tr');
+            pRow.innerHTML =
+                '<td class="packs-qty-col">' +
+                    '<input type="number" name="pack_quantity" value="1" min="1"></td>' +
+                '<td><input type="text" name="pack_label" placeholder="رولو (فيه 12 متر)"></td>' +
+                '<td class="packs-price-col">' +
+                    '<input type="number" name="pack_price" min="0" placeholder="700"></td>' +
+                '<td class="packs-x-col">' +
+                    '<button type="button" class="pack-remove" title="امسح هاد العرض" ' +
+                    'aria-label="امسح">×</button></td>';
+            pBody.appendChild(pRow);
+            pRow.querySelector('input[name="pack_label"]').focus();
+            return;
+        }
+
+        // ---------- امسح عرض جاهز ----------
+        var packRemove = e.target.closest('.pack-remove');
+        if (packRemove) {
+            var pTr = packRemove.closest('tr');
+            var pTbody = pTr.parentNode;
+            if (pTbody.querySelectorAll('tr').length > 1) {
+                pTr.remove();
+            } else {
+                pTr.querySelectorAll('input').forEach(function (i) {
+                    i.value = i.name === 'pack_quantity' ? '1' : '';
+                });
+            }
+            return;
+        }
+
+        // ---------- امسح سطر ----------
+        var removeBtn = e.target.closest('.tier-remove');
+        if (removeBtn) {
+            var tr = removeBtn.closest('tr');
+            var tbody = tr.parentNode;
+
+            // ⚠️ نخليو دايمًا سطر واحد على الأقل — وإلا الأدمن يلقى
+            // جدول فارغ بلا طريقة يزيد بيها بلا زر
+            if (tbody.querySelectorAll('tr').length > 1) {
+                tr.remove();
+            } else {
+                tr.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+            }
+        }
+    });
+})();
+</script>
+
+<script>
+/**
+ * صورة الموديل — معرض منبثق + حفظ بلا إعادة تحميل.
+ *
+ * ⚠️ علاش تبدّل عن الشريط القديم؟
+ *   • الشريط يطوّل الصفحة بشكل مرهق مع كل موديل زايد
+ *   • كان لازم ضغطتين: اختر ثم احفظ — درك ضغطة وحدة
+ *   • كل حفظ كان يعيد تحميل الصفحة ويرجّعك لفوق
+ */
+(function () {
+    'use strict';
+
+    var gallery = document.getElementById('imgGallery');
+
+    // ⚠️ المعرض ما يتبنىش إذا المنتج بلا صور. بدل ما الزر يسكت
+    // ويحيّر الأدمن، نقولّو السبب.
+    if (!gallery) {
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.vimg-current');
+            if (!btn) return;
+            var state = btn.closest('.vimg').querySelector('.vimg-state');
+            if (state) {
+                state.textContent = 'ارفع صور للمنتج فوق أولاً';
+                state.className = 'vimg-state is-bad';
+            }
+        });
+        return;
+    }
+
+    var label = document.getElementById('galLabel');
+    var current = null;   // عنصر .vimg اللي فتح المعرض
+
+    // ---------- فتح وسكّر ----------
+
+    function open(box) {
+        current = box;
+        label.textContent = box.dataset.label || '';
+
+        // نعلّمو الصورة الحالية
+        var picked = box.querySelector('img');
+        var pickedSrc = picked ? picked.getAttribute('src') : '';
+
+        gallery.querySelectorAll('.gal-item').forEach(function (item) {
+            var isCurrent = item.dataset.thumb
+                ? item.dataset.thumb === pickedSrc
+                : !picked;                      // «بلا صورة»
+            item.classList.toggle('is-current', isCurrent);
+        });
+
+        gallery.hidden = false;
+        document.body.style.overflow = 'hidden';
+    }
+
+    function close() {
+        gallery.hidden = true;
+        document.body.style.overflow = '';
+        current = null;
+    }
+
+    // ---------- الحفظ ----------
+
+    function save(file, thumb) {
+        if (!current) return;
+
+        var box = current;
+        var state = box.querySelector('.vimg-state');
+        var btn = box.querySelector('.vimg-current');
+
+        close();
+        state.textContent = 'جاري الحفظ...';
+        state.className = 'vimg-state is-busy';
+
+        var body = new FormData();
+        body.append('image_filename', file);
+        body.append('csrf_token', box.dataset.csrf || getCsrf());
+
+        fetch(box.dataset.url, {
+            method: 'POST',
+            body: body,
+            headers: { 'X-Requested-With': 'fetch' },
+        })
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+            .then(function (res) {
+                if (!res.ok || !res.d.ok) {
+                    throw new Error(res.d.message || 'فشل الحفظ');
+                }
+
+                // نحدّثو الصورة المعروضة بلا ما نعاودو نحمّلو الصفحة
+                btn.innerHTML = file
+                    ? '<img src="' + thumb + '" alt="">' +
+                      '<span class="vimg-edit">تبديل</span>'
+                    : '<span class="vimg-empty">اختر صورة</span>' +
+                      '<span class="vimg-edit">تبديل</span>';
+
+                state.textContent = '✓ تحفظ';
+                state.className = 'vimg-state is-ok';
+                setTimeout(function () { state.textContent = ''; }, 2200);
+            })
+            .catch(function (err) {
+                state.textContent = '🔴 ' + err.message;
+                state.className = 'vimg-state is-bad';
+            });
+    }
+
+    // ---------- الأحداث ----------
+
+    document.addEventListener('click', function (e) {
+        var opener = e.target.closest('.vimg-current');
+        if (opener) {
+            open(opener.closest('.vimg'));
+            return;
+        }
+
+        if (e.target.closest('[data-close]')) {
+            close();
+            return;
+        }
+
+        // ---------- معاينة كاملة ----------
+        var zoomBtn = e.target.closest('.gal-zoom');
+        if (zoomBtn) {
+            document.getElementById('adminZoomerImg').src = zoomBtn.dataset.full;
+            document.getElementById('adminZoomer').hidden = false;
+            return;   // ⚠️ ما نختاروش الصورة — المعاينة فقط
+        }
+        if (e.target.closest('[data-zoom-close]') ||
+            e.target.id === 'adminZoomer') {
+            document.getElementById('adminZoomer').hidden = true;
+            return;
+        }
+
+        var item = e.target.closest('.gal-item');
+        if (item && gallery.contains(item)) {
+            save(item.dataset.file || '', item.dataset.thumb || '');
+        }
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !gallery.hidden) close();
+    });
+})();
+</script>
+
+
+{# ═══════ شريط حفظ ثابت ═══════
+   ⚠️ الصفحة طويلة بزاف (بيانات + صور + موديلات + أسعار + عروض).
+   الأدمن يعدّل حاجة فالأعلى، ينزل يشوف الموديلات، وينسى يحفظ.
+   الشريط يبان كي يخرج زر الحفظ من الشاشة. #}
+<div class="save-bar" id="saveBar" hidden>
+    <span class="save-bar-text">تعديلات ما تحفظوش</span>
+    <button type="button" class="btn-admin btn-sm" id="saveBarBtn">💾 احفظ المنتج</button>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    var bar = document.getElementById('saveBar');
+    var mainBtn = document.getElementById('mainSaveBtn');
+    if (!bar || !mainBtn) return;
+
+    var dirty = false;
+    var mainForm = mainBtn.closest('form');
+
+    // ⚠️ ما نعرضوش الشريط إلا إذا الأدمن بدّل شي فعلاً —
+    // شريط دايم يولّي ضجيجًا يتجاهلو.
+    mainForm.addEventListener('input', function () { dirty = true; update(); });
+    mainForm.addEventListener('change', function () { dirty = true; update(); });
+
+    var visible = true;
+    if ('IntersectionObserver' in window) {
+        new IntersectionObserver(function (e) {
+            visible = e[0].isIntersecting;
+            update();
+        }, { threshold: 0.5 }).observe(mainBtn);
+    }
+
+    function update() { bar.hidden = !(dirty && !visible); }
+
+    document.getElementById('saveBarBtn').addEventListener('click', function () {
+        mainForm.requestSubmit ? mainForm.requestSubmit() : mainForm.submit();
+    });
+
+    // تحذير قبل مغادرة الصفحة بتعديلات ما تحفظوش
+    window.addEventListener('beforeunload', function (e) {
+        if (!dirty) return;
+        e.preventDefault();
+        e.returnValue = '';
+    });
+
+    mainForm.addEventListener('submit', function () { dirty = false; });
+})();
+</script>
+
+
+<script>
+/* ═══════════ رفع الصور — كتلة مستقلة ═══════════
+   🔴 كان هنا خلل: هاد الكود كان محشورًا داخل IIFE تاع «أسعار
+   الكمية»، وذاك الـIIFE يخرج بـ`return` مبكّر إذا المنتج ما عندوش
+   موديلات — فكود الرفع ما كان يشتغل أبدًا وشريط التقدّم ما يبان.
+
+   درك كتلة وحدها، ما تعتمد على حتى حاجة أخرى. */
+// ---------- رفع الصور وحدة بوحدة ----------
+/**
+ * 🔴 الخلل القديم: كل الصور كانت تتبعث مع الفورم كامل فطلب واحد.
+ * المتصفح يصغّر الصورة قبل الرفع، والسيرفر يقبل حتى 25 ميغا كأمان،
+ * فـ3 صور متوسطات يقطعو الاتصال (ERR_HTTP2_PROTOCOL_ERROR) وتضيع
+ * كل التعديلات اللي درتها فالصفحة.
+ *
+ * الحل: كل صورة طلب مستقل بـXMLHttpRequest (باش نقراو تقدّم الرفع
+ * الحقيقي — `fetch` ما يعطيش تقدّم الرفع). زر الحفظ يتقفل حتى يكملو.
+ */
+/* ⚠️ ولّى يخدم رافعين: صور المنتج وصور توضيحية. كل واحد عندو
+   عناصرو الخاصة، والفرق بيناتهم `data-kind` اللي يتبعث للسيرفر. */
+function initUploader(box) {
+    if (!box) return;
+
+    var ids = box.dataset.kind === 'extra'
+        ? ['extraPicker', 'extraProgress', 'extraBarFill', 'extraStatus', 'extraList']
+        : ['imagePicker', 'uploadProgress', 'uploadBarFill', 'uploadStatus', 'uploadList'];
+
+    var picker = document.getElementById(ids[0]);
+    var wrap = document.getElementById(ids[1]);
+    var fill = document.getElementById(ids[2]);
+    var status = document.getElementById(ids[3]);
+    var list = document.getElementById(ids[4]);
+    var form = document.getElementById('productForm');
+
+    if (!picker) return;
+
+    var busy = false;
+
+    /** يقفل/يفتح كل أزرار الحفظ فالصفحة */
+    function lock(on) {
+        busy = on;
+        document.querySelectorAll(
+            '#productForm button[type="submit"], .save-bar button'
+        ).forEach(function (b) {
+            b.disabled = on;
+            b.textContent = on ? '⏳ جاري رفع الصور...' : (b.dataset.was || b.textContent);
+            if (!on && b.dataset.was) b.textContent = b.dataset.was;
+        });
+    }
+
+    // نحفظو النص الأصلي للأزرار قبل ما نبدّلوه
+    document.querySelectorAll(
+        '#productForm button[type="submit"], .save-bar button'
+    ).forEach(function (b) { b.dataset.was = b.textContent; });
+
+    /** ⚠️ يمنع مغادرة الصفحة فوسط الرفع */
+    window.addEventListener('beforeunload', function (e) {
+        if (!busy) return;
+        e.preventDefault();
+        e.returnValue = '';
+    });
+
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            if (busy) {
+                e.preventDefault();
+                alert('استنى، الصور مازالها ترفع.');
+            }
+        });
+    }
+
+    /**
+     * يصغّر الصورة **فالمتصفح** قبل ما ترفع.
+     *
+     * 🔴 علاه؟ صورة الهاتف تجي 8–12 ميغا، والحد القديم (5 ميغا) كان
+     * يرفضها — والحال أن السيرفر أصلاً يصغّرها ويحوّلها WebP. يعني
+     * كنا نمنعو صورة، ونضيّع بيانات الزبون، على حاجة نديروها بعد.
+     *
+     * درك نصغّرو هنا: 8 ميغا تولّي حوالي 300 كيلو. الرفع أسرع بزاف
+     * (مهم فالأنترنت الجزائري)، والحد ما يوصلوش عمرو.
+     *
+     * ⚠️ الجودة 0.9 و2400 بكسل — أكبر من اللي يحتاجو الموقع، باش
+     * السيرفر يبقى هو اللي يقرّر المقاس النهائي بلا خسارة مضاعفة.
+     */
+    function shrinkImage(file) {
+        return new Promise(function (resolve) {
+            // GIF ولا ملف صغير: نرفعوه كيما هو
+            if (file.size < 900 * 1024 || /gif/i.test(file.type)) {
+                resolve(file);
+                return;
+            }
+
+            var url = URL.createObjectURL(file);
+            var img = new Image();
+
+            img.onload = function () {
+                URL.revokeObjectURL(url);
+
+                var MAX = 2400;
+                var w = img.width, h = img.height;
+
+                if (w > MAX || h > MAX) {
+                    var k = Math.min(MAX / w, MAX / h);
+                    w = Math.round(w * k);
+                    h = Math.round(h * k);
+                }
+
+                var canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+                canvas.toBlob(function (blob) {
+                    // ⚠️ إذا التصغير فشل ولا طلع أكبر، نرجعو للأصل
+                    if (!blob || blob.size >= file.size) {
+                        resolve(file);
+                        return;
+                    }
+                    blob.name = file.name;
+                    resolve(blob);
+                }, 'image/webp', 0.9);
+            };
+
+            img.onerror = function () {
+                URL.revokeObjectURL(url);
+                resolve(file);   // ما قدرناش نقراوها — نخليو السيرفر يقرّر
+            };
+
+            img.src = url;
+        });
+    }
+
+    /** يرفع ملفًا واحدًا ويرجّع Promise */
+    function uploadOne(rawFile, onProgress) {
+        return shrinkImage(rawFile).then(function (file) {
+        return new Promise(function (resolve, reject) {
+            var body = new FormData();
+            // ⚠️ الاسم يتمرّر يدويًا: Blob ما عندوش اسم ملف
+            body.append('image', file, rawFile.name);
+            body.append('csrf_token', getCsrf());
+            // صورة منتج ولا توضيحية — السيرفر يفرّق بيهم
+            body.append('kind', box.dataset.kind || 'main');
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', box.dataset.url);
+            xhr.setRequestHeader('X-Requested-With', 'fetch');
+
+            xhr.upload.addEventListener('progress', function (e) {
+                if (e.lengthComputable) onProgress(e.loaded / e.total);
+            });
+
+            xhr.addEventListener('load', function () {
+                var data;
+                try {
+                    data = JSON.parse(xhr.responseText);
+                } catch (err) {
+                    reject(new Error('رد غير مفهوم من السيرفر (' + xhr.status + ')'));
+                    return;
+                }
+                if (xhr.status >= 200 && xhr.status < 300 && data.ok) resolve(data);
+                else reject(new Error(data.message || 'فشل الرفع'));
+            });
+
+            xhr.addEventListener('error', function () {
+                reject(new Error('انقطع الاتصال — الصورة كبيرة بزاف؟'));
+            });
+
+            xhr.addEventListener('abort', function () {
+                reject(new Error('اتلغى الرفع'));
+            });
+
+            xhr.send(body);
+        });
+        });
+    }
+
+    function addRow(name, text, cls) {
+        var li = document.createElement('li');
+        li.className = 'upload-row ' + (cls || '');
+        li.textContent = text + ' — ' + name;
+        list.appendChild(li);
+        return li;
+    }
+
+    picker.addEventListener('change', function () {
+        var chosen = Array.prototype.slice.call(picker.files || []);
+        if (!chosen.length) return;
+
+        // ✂️ قص وتدوير قبل الرفع (static/js/image-editor.js). الشكل الافتراضي «حر»:
+        // الصورة تبقى كاملة (التدوير ما يقصّهاش). بطاقات القوائم تقص روحها بـCSS،
+        // وصفحة المنتج تعرض الصورة كاملة. «1:1» يبقى متاح كزر.
+        // إذا المحرّر ما تحمّلش لأي سبب، نرفعو الصور كيما هي.
+        var editing = window.BudacImageEditor
+            ? window.BudacImageEditor.edit(chosen, { aspect: NaN })
+            : Promise.resolve(chosen);
+
+        editing.then(function (files) {
+        if (!files.length) { picker.value = ''; return; }
+
+        wrap.hidden = false;
+        list.innerHTML = '';
+        lock(true);
+
+        var done = 0;
+        var failed = 0;
+
+        function step(i) {
+            if (i >= files.length) {
+                lock(false);
+                fill.style.width = '100%';
+                status.textContent = failed
+                    ? '⚠️ ' + done + ' نجحو · ' + failed + ' فشلو — عاود المرة الجاية'
+                    : '✅ ' + done + ' صور اتزادو. حدّث الصفحة باش تبان فالمعرض.';
+                picker.value = '';
+
+                // نحدّثو الصفحة تلقائيًا باش المعرض يبان بالصور الجديدة
+                if (done && !failed) {
+                    setTimeout(function () { location.reload(); }, 1200);
+                }
+                return;
+            }
+
+            var file = files[i];
+            status.textContent = 'يرفع ' + (i + 1) + ' من ' + files.length +
+                                 ' — ' + file.name;
+
+            uploadOne(file, function (ratio) {
+                var total = (i + ratio) / files.length;
+                fill.style.width = Math.round(total * 100) + '%';
+            })
+                .then(function () {
+                    done += 1;
+                    addRow(file.name, '✅', 'is-ok');
+                })
+                .catch(function (err) {
+                    failed += 1;
+                    addRow(file.name, '🔴 ' + err.message, 'is-bad');
+                })
+                .then(function () { step(i + 1); });
+        }
+
+        step(0);
+        });   // نهاية editing.then
+    });
+}
+
+// نشغّلو كل الرافعين الموجودين فالصفحة
+document.querySelectorAll('.uploader').forEach(initUploader);
+
+/* ---------- وحدة البيع ---------- */
+/* حقل النص المخصّص يبان غير كي يختار «اختياري». */
+(function () {
+    var picker = document.getElementById('unitPicker');
+    var custom = document.getElementById('unitCustom');
+    if (!picker || !custom) return;
+
+    function sync() {
+        var on = picker.value === 'custom';
+        custom.hidden = !on;
+        if (on) custom.focus();
+    }
+
+    picker.addEventListener('change', sync);
+})();
+
+/* ---------- وصف الصورة التوضيحية ---------- */
+/* يحفظ عند مغادرة الحقل، غير إذا تبدّلت القيمة فعلاً. */
+document.addEventListener('focusin', function (e) {
+    var i = e.target.closest('.extra-caption');
+    if (i) i.dataset.was = i.value.trim();
+});
+
+document.addEventListener('focusout', function (e) {
+    var input = e.target.closest('.extra-caption');
+    if (!input) return;
+    if (input.value.trim() === (input.dataset.was || '')) return;
+
+    var body = new FormData();
+    body.append('caption', input.value.trim());
+    body.append('csrf_token', getCsrf());
+
+    input.classList.add('is-saving');
+
+    fetch(input.dataset.url, {
+        method: 'POST',
+        body: body,
+        headers: { 'X-Requested-With': 'fetch' },
+    })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            input.classList.remove('is-saving');
+            input.classList.toggle('is-bad', !d.ok);
+            if (d.ok) input.dataset.was = input.value.trim();
+        })
+        .catch(function () {
+            input.classList.remove('is-saving');
+            input.classList.add('is-bad');
+        });
+});
+</script>
+
+
+{# ✂ تعديل صورة موجودة: قص / تدوير / قلب ثم تعويضها فنفس البلاصة (الترتيب والرئيسية
+   والموديلات تبقى). الصفحة تعاود تتحمّل بعدها، كيما بعد رفع صورة جديدة. #}
+<script>
+(function () {
+    var REPLACE_URL = "{{ url_for('admin.product_image_replace', product_id=product.id, image_id=0) if product else '' }}";
+    if (!REPLACE_URL) return;
+
+    function csrf() {
+        var input = document.querySelector('input[name="csrf_token"]');
+        return input ? input.value : '';
+    }
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-edit]');
+        if (!btn) return;
+        var item = btn.closest('.image-item');
+        if (!item || !window.BudacImageEditor) return;
+
+        var img = item.querySelector('img');
+        btn.disabled = true;
+
+        window.BudacImageEditor.editFromUrl(img.dataset.full).then(function (file) {
+            if (!file) { btn.disabled = false; return; }     // ألغى ولا ما بدّل والو
+
+            var body = new FormData();
+            body.append('image', file, file.name);
+            body.append('csrf_token', csrf());
+            fetch(REPLACE_URL.replace(/\/0\/replace$/, '/' + item.dataset.id + '/replace'), {
+                method: 'POST', body: body, credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'fetch' }
+            }).then(function (res) { return res.json(); }).then(function (data) {
+                if (data && data.ok) { location.reload(); return; }
+                btn.disabled = false;
+                alert((data && data.message) || 'ما تحفظتش الصورة');
+            }).catch(function () {
+                btn.disabled = false;
+                alert('فشل الاتصال — جرّب مرة أخرى');
+            });
+        });
+    });
+})();
+</script>
+
+{% endblock %}

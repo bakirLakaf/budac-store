@@ -1,0 +1,352 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+{# القيمة: من الفورم المرفوض أولاً، وإلا من الصفحة المحفوظة، وإلا الافتراضي #}
+{% macro val(key, default='') %}{{ form.get(key) if form.get(key) is not none else (page[key] if page and page[key] is not none else default) }}{% endmacro %}
+
+{# خانة الاختيار: نفس المنطق — الفورم المرفوض يغلب الصفحة المحفوظة #}
+{% macro checked(key) %}{{ 'checked' if (form[key] if form else (page[key] if page else false)) else '' }}{% endmacro %}
+
+{% set cur_theme = form.get('template') or (page.theme if page else 'gold') %}
+{% set cur_fit = form.get('image_fit') or (page.fit if page else 'contain') %}
+{% set cur_layout = form.get('layout') or (page.page_layout if page else 'split') %}
+{% set cur_product = form.get('product_id') or (page.product_id if page else none) %}
+{% set cur_bundle = form.get('bundle_product_id') or (page.bundle_product_id if page else none) %}
+
+<div class="lpf-head">
+    <div>
+        <h1 class="page-title">{{ 'تعديل صفحة الهبوط' if page else 'صفحة هبوط جديدة' }}</h1>
+        {% if page %}
+        <p class="lpf-url" dir="ltr">budacdz.com/lp/{{ page.slug }}</p>
+        {% endif %}
+    </div>
+    {% if page %}
+    <a class="btn-admin btn-ghost" id="lpfOpen"
+       href="{{ url_for('landing.view', slug=page.slug) }}" target="_blank" rel="noopener">شوف الصفحة ↗</a>
+    {% endif %}
+</div>
+
+<form method="post" class="lpf" id="lpfForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="lpf-grid">
+
+    <!-- ══════════ العمود الرئيسي ══════════ -->
+    <div class="lpf-main">
+
+        <section class="lpf-card">
+            <h2>الأساسيات</h2>
+
+            <label class="admin-field">
+                <span>اسم داخلي *</span>
+                <input type="text" name="internal_name" required
+                       value="{{ val('internal_name') }}"
+                       placeholder="مثلاً: حملة شريط الإضاءة — أوت">
+                <small>للتنظيم عندك برك، الزبون ما يشوفوش.</small>
+            </label>
+
+            <label class="admin-field">
+                <span>الرابط *</span>
+                <input type="text" name="slug" required dir="ltr"
+                       value="{{ val('slug') }}" placeholder="strip-promo">
+                <small>حروف لاتينية وشرطات — تولّي <code>/lp/الرابط</code></small>
+            </label>
+
+            <label class="admin-field">
+                <span>المنتج الأساسي *</span>
+                <select name="product_id" id="lpfProduct" required>
+                    <option value="">اختر المنتج</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}"
+                            data-img="{{ url_for('static', filename='img/products/' + p.image_filename) if p.image_filename else '' }}"
+                            data-variants="{{ p.variants | selectattr('is_available') | list | length }}"
+                            {{ 'selected' if cur_product == p.id }}>
+                        {{ p.name }} — {{ "{:,}".format(p.price) }} دج
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+        </section>
+
+        <section class="lpf-card">
+            <h2>المحتوى</h2>
+
+            <label class="admin-field">
+                <span>العنوان الرئيسي *</span>
+                <input type="text" name="headline" required maxlength="200"
+                       value="{{ val('headline') }}"
+                       placeholder="نوّر إطاراتك بلمسة واحدة">
+                <small>أول حاجة يقراها الزائر. ركّز على الفايدة، ماشي اسم المنتج.</small>
+            </label>
+
+            <label class="admin-field">
+                <span>العنوان الفرعي</span>
+                <input type="text" name="subheadline" maxlength="300"
+                       value="{{ val('subheadline') }}"
+                       placeholder="شريط LED يلصق فثواني — بلا أدوات ولا كهربائي">
+            </label>
+
+            <div class="lpf-two">
+                <label class="admin-field">
+                    <span>المميزات</span>
+                    <textarea name="benefits" rows="6"
+                              placeholder="تركيب بلا أدوات&#10;إضاءة تدوم 5 سنين&#10;ضمان 6 أشهر">{{ val('benefits') }}</textarea>
+                    <small><b>سطر لكل ميزة</b> — تبان بعلامة ✓</small>
+                </label>
+
+                <label class="admin-field">
+                    <span>الوصف</span>
+                    <textarea name="body" rows="6">{{ val('body') }}</textarea>
+                    <small><b>سطر لكل فقرة</b></small>
+                </label>
+            </div>
+
+            <label class="admin-field">
+                <span>نص زر الطلب</span>
+                <input type="text" name="cta_text" maxlength="80"
+                       value="{{ val('cta_text', 'اطلب درك') }}">
+            </label>
+        </section>
+
+        <section class="lpf-card">
+            <h2>السعر والتوصيل</h2>
+
+            <div class="lpf-two">
+                <label class="admin-field">
+                    <span>سعر الحملة (دج)</span>
+                    <input type="number" name="campaign_price" min="0" value="{{ val('campaign_price') }}">
+                    <small>فارغ = سعر المنتج العادي. مع الباقة = سعر الباقة كاملة.</small>
+                </label>
+
+                <label class="admin-field">
+                    <span>السعر المشطوب (دج) <em>(اختياري)</em></span>
+                    <input type="number" name="compare_at_price" min="0" value="{{ val('compare_at_price') }}">
+                    <small><b>خليه فارغ = سعر واحد فقط</b>، بلا تخفيض ولا شارة. إذا عمّرتو يبان مشطوب ونسبة الخصم تتحسب وحدها.</small>
+                </label>
+            </div>
+
+            <label class="lpf-switch">
+                <input type="checkbox" name="free_shipping" {{ checked('free_shipping') }}>
+                <span>التوصيل مجاني فهاد الصفحة</span>
+            </label>
+        </section>
+
+        <section class="lpf-card">
+            <h2>العرض والإقناع <em class="lpf-opt">كلها اختيارية</em></h2>
+
+            <label class="admin-field">
+                <span>العرض ساري حتى <em>(اختياري)</em></span>
+                <input type="date" name="offer_ends_on" id="lpfOfferDate" dir="ltr"
+                       value="{{ val('offer_ends_on') }}">
+                <small>
+                    يبان للزبون: «العرض ساري حتى 31 أكتوبر 2026». <b>آخر يوم شامل</b> (يخلص 23:59 بتوقيت الجزائر).
+                    بعدو الصفحة تبان «انتهى العرض» والطلبيات تتوقف. فارغ = عرض مفتوح بلا نهاية.
+                </small>
+            </label>
+
+            <label class="lpf-switch">
+                <input type="checkbox" name="show_countdown" id="lpfCountdown" {{ checked('show_countdown') }}>
+                <span>عرض عدّاد تنازلي <em>(اختياري)</em></span>
+            </label>
+            <p class="lpf-hint" id="lpfCdHint">
+                إذا حطيت تاريخ فوق: العدّاد يعدّ نازل حتى نهاية العرض (أيام وساعات ودقائق).
+                بلا تاريخ: يعدّ على مدة بالساعات تبدا من زيارة الزبون.
+            </p>
+            <label class="admin-field" id="lpfHoursField">
+                <span>مدة العدّاد (ساعات) — بلا تاريخ برك</span>
+                <input type="number" name="countdown_hours" min="1" max="168" value="{{ val('countdown_hours', 24) }}">
+            </label>
+
+            <div class="lpf-two">
+                <label class="admin-field">
+                    <span>الكمية المتبقية <em>(اختياري)</em></span>
+                    <input type="number" name="stock_left" min="1" value="{{ val('stock_left') }}" placeholder="مثلاً 9">
+                    <small>يبان «⚡ باقي 9 قطع فقط». فارغ = ما يبانش. ⚠️ اكتب رقم حقيقي — الزبون اللي يرجع ويلقى نفس الرقم يحس بالخداع.</small>
+                </label>
+                <label class="admin-field">
+                    <span>أقصى كمية للطلبية</span>
+                    <input type="number" name="max_quantity" min="1" max="100" value="{{ val('max_quantity', 10) }}">
+                </label>
+            </div>
+
+            <details class="lpf-more">
+                <summary>نص مخصص بدل الرقم (اختياري)</summary>
+                <label class="admin-field">
+                    <input type="text" name="stock_warning" maxlength="120"
+                           value="{{ val('stock_warning') }}" placeholder="مثلاً: الكمية محدودة">
+                    <small>يبان فقط إذا «الكمية المتبقية» فارغة.</small>
+                </label>
+            </details>
+        </section>
+    </div>
+
+    <!-- ══════════ العمود الجانبي ══════════ -->
+    <aside class="lpf-side">
+
+        <section class="lpf-card">
+            <h2>القالب</h2>
+            <p class="lpf-hint">يبدّل شكل الصفحة كامل. المحتوى يبقى هو هو.</p>
+
+            <div class="lpf-choices">
+                {% for code, name, desc in LandingPage_THEMES %}
+                <label class="lpf-choice">
+                    <input type="radio" name="template" value="{{ code }}" {{ 'checked' if cur_theme == code }}>
+                    <span class="lpf-choice-body">
+                        <span class="tpl-mock tpl-{{ code }}" aria-hidden="true">
+                            <i class="tm-hero"></i><i class="tm-line"></i><i class="tm-line short"></i><i class="tm-btn"></i>
+                        </span>
+                        <b>{{ name }}</b>
+                        <small>{{ desc }}</small>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+            {% if page %}
+            <a class="lpf-preview-link" id="lpfPreviewTheme" target="_blank" rel="noopener"
+               href="{{ url_for('landing.view', slug=page.slug) }}?theme={{ cur_theme }}&fit={{ cur_fit }}&layout={{ cur_layout }}">
+                👁 معاينة بالقالب المختار (بلا حفظ)
+            </a>
+            {% else %}
+            <p class="lpf-hint">احفظ الصفحة أولاً باش تظهرلك المعاينة الكاملة.</p>
+            {% endif %}
+        </section>
+
+        <section class="lpf-card">
+            <h2>عرض الصور</h2>
+            <p class="lpf-hint">كيفاش تبان صورة المنتج فالإطار (المعاينة بصورة المنتج المختار).</p>
+
+            <div class="lpf-choices lpf-fits">
+                {% for code, name, desc in LandingPage_FITS %}
+                <label class="lpf-choice">
+                    <input type="radio" name="image_fit" value="{{ code }}" {{ 'checked' if cur_fit == code }}>
+                    <span class="lpf-choice-body">
+                        <span class="fit-frame fit-{{ code }}" aria-hidden="true">
+                            <img alt="" class="fit-img" hidden>
+                        </span>
+                        <b>{{ name }}</b>
+                        <small>{{ desc }}</small>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+            <p class="lpf-hint" id="lpfNoImg" hidden>اختر منتجًا فيه صورة باش تظهر المعاينة.</p>
+        </section>
+
+        <section class="lpf-card">
+            <h2>تخطيط الحاسوب</h2>
+            <p class="lpf-hint">الموبايل ما يتبدّلش — هذا فالشاشات الكبيرة برك.</p>
+
+            <div class="lpf-choices">
+                {% for code, name, desc in LandingPage_LAYOUTS %}
+                <label class="lpf-choice">
+                    <input type="radio" name="layout" value="{{ code }}" {{ 'checked' if cur_layout == code }}>
+                    <span class="lpf-choice-body">
+                        <span class="lay-mock lay-{{ code }}" aria-hidden="true">
+                            <i class="lm-img"></i><i class="lm-info"></i><i class="lm-form"></i><i class="lm-row"></i>
+                        </span>
+                        <b>{{ name }}</b>
+                        <small>{{ desc }}</small>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="lpf-card">
+            <h2>الباقة والموديلات</h2>
+
+            <label class="admin-field">
+                <span>منتج ثابت فالباقة <em>(اختياري)</em></span>
+                <select name="bundle_product_id" id="lpfBundle">
+                    <option value="">بلا باقة — منتج واحد</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}" {{ 'selected' if cur_bundle == p.id }}>
+                        {{ p.name }} — {{ "{:,}".format(p.price) }} دج
+                    </option>
+                    {% endfor %}
+                </select>
+                <small>مثلاً الغلاف الخارجي: يبان دايمًا فالصفحة ويتباع مع المنتج الأساسي. «سعر الحملة» يولّي سعر الباقة كاملة.</small>
+            </label>
+
+            <label class="lpf-switch">
+                <input type="checkbox" name="show_variant_picker" id="lpfPicker" {{ checked('show_variant_picker') }}>
+                <span>الزبون يختار الموديل (من تنويعات المنتج الأساسي)</span>
+            </label>
+            <p class="lpf-hint" id="lpfVariantCount" hidden></p>
+        </section>
+    </aside>
+    </div>
+
+    <div class="lpf-actions">
+        <button type="submit" class="btn-admin">{{ 'حفظ التعديلات' if page else 'إنشاء الصفحة' }}</button>
+        <a href="{{ url_for('admin.landing_list') }}" class="btn-admin btn-ghost">إلغاء</a>
+    </div>
+</form>
+
+<script>
+(function () {
+    var product = document.getElementById('lpfProduct');
+    var picker = document.getElementById('lpfPicker');
+    var count = document.getElementById('lpfVariantCount');
+    var noImg = document.getElementById('lpfNoImg');
+    var frames = document.querySelectorAll('.fit-frame');
+
+    // معاينة عرض الصورة: نفس صورة المنتج المختار فالخيارات الثلاثة
+    function refreshProduct() {
+        var opt = product.options[product.selectedIndex];
+        var img = opt ? opt.getAttribute('data-img') : '';
+        var variants = opt ? parseInt(opt.getAttribute('data-variants') || '0', 10) : 0;
+
+        frames.forEach(function (f) {
+            var el = f.querySelector('.fit-img');
+            if (img) {
+                el.src = img; el.hidden = false;
+                f.style.setProperty('--img', "url('" + img + "')");
+            } else {
+                el.hidden = true;
+                f.style.removeProperty('--img');
+            }
+        });
+        noImg.hidden = !!img;
+
+        if (opt && opt.value) {
+            count.hidden = false;
+            count.textContent = variants
+                ? 'المنتج عندو ' + variants + ' موديل متوفر — كل موديل بصورتو تتزامن مع السلايد.'
+                : '⚠️ المنتج هذا ما عندوش موديلات، اختيار الموديل ما يخدمش.';
+        } else {
+            count.hidden = true;
+        }
+    }
+    product.addEventListener('change', refreshProduct);
+    refreshProduct();
+
+    // حقل «مدة العدّاد بالساعات» يخدم برك إذا العدّاد مفعّل وماكانش تاريخ
+    var offerDate = document.getElementById('lpfOfferDate');
+    var cdSwitch = document.getElementById('lpfCountdown');
+    var hoursField = document.getElementById('lpfHoursField');
+    function refreshCountdown() {
+        hoursField.hidden = !cdSwitch.checked || !!offerDate.value;
+    }
+    offerDate.addEventListener('input', refreshCountdown);
+    cdSwitch.addEventListener('change', refreshCountdown);
+    refreshCountdown();
+
+    // رابط المعاينة يتبع الاختيار الحالي
+    var link = document.getElementById('lpfPreviewTheme');
+    if (link) {
+        var base = link.href.split('?')[0];
+        function updateLink() {
+            var t = document.querySelector('input[name=template]:checked');
+            var f = document.querySelector('input[name=image_fit]:checked');
+            var l = document.querySelector('input[name=layout]:checked');
+            link.href = base + '?theme=' + (t ? t.value : '') + '&fit=' + (f ? f.value : '')
+                + '&layout=' + (l ? l.value : '');
+        }
+        document.querySelectorAll('input[name=template],input[name=image_fit],input[name=layout]')
+            .forEach(function (r) { r.addEventListener('change', updateLink); });
+    }
+})();
+</script>
+
+{% endblock %}

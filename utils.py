@@ -1,0 +1,165 @@
+"""
+أدوات مساعدة عامة للمشروع.
+"""
+
+import html
+import re
+from html.parser import HTMLParser
+
+
+class _HTMLToTextParser(HTMLParser):
+    """
+    يحول HTML لنص عادي مقروء، ويحافظ على فقرات وقوائم منظمة
+    (بلا ما يحتاج مكتبة خارجية كيما BeautifulSoup).
+    """
+
+    BLOCK_TAGS = {"p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "br", "li"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.list_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "li":
+            self.parts.append("\n• ")
+        elif tag == "br":
+            self.parts.append("\n")
+        elif tag in ("p", "div", "h1", "h2", "h3", "h4", "h5", "h6"):
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in ("p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol"):
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+    def get_text(self):
+        raw = "".join(self.parts)
+        # نبدلو المسافات المتتالية بمسافة وحدة، ونحافظو على الأسطر الجديدة
+        lines = [line.strip() for line in raw.split("\n")]
+        lines = [re.sub(r"\s+", " ", line) for line in lines if line.strip()]
+        return "\n".join(lines).strip()
+
+
+def html_to_text(raw_html):
+    """
+    يحول نص HTML (وصف منتج مثلاً) لنص عادي واضح ومنظم بفقرات وقوائم.
+    يرجع سلسلة فارغة إذا الإدخال فارغ.
+    """
+    if not raw_html:
+        return ""
+
+    # أحيانًا الوصف يجي مُرمّز مرتين (HTML entities) — نفك الترميز أولاً
+    decoded = html.unescape(raw_html)
+
+    parser = _HTMLToTextParser()
+    try:
+        parser.feed(decoded)
+    except Exception:
+        # فحالة فشل التحليل، نرجعو غير تنظيف بسيط بالـregex كحل احتياطي
+        text = re.sub(r"<[^>]+>", " ", decoded)
+        return re.sub(r"\s+", " ", text).strip()
+
+    return parser.get_text()
+
+
+def slugify(text, fallback="item"):
+    """
+    يحول نص لرابط صالح (slug).
+
+    ⚠️ ملاحظة مهمة للعربية: الحروف العربية ما تتحولش لحروف لاتينية هنا، وregex
+    العادي \\w يقبلهم فوضع Unicode — فالنتيجة تبقى عربية (مثلاً "أشرطة-المرايا").
+    هذا مقبول تمامًا فالروابط الحديثة (المتصفح يرمّزهم تلقائيًا)، لكن إذا حبيت
+    روابط لاتينية فقط، حدد الـslug يدويًا من لوحة التحكم.
+    """
+    if not text:
+        return fallback
+
+    cleaned = re.sub(r"[^\w\s-]", "", str(text), flags=re.UNICODE).strip().lower()
+    cleaned = re.sub(r"[\s_-]+", "-", cleaned)
+    cleaned = cleaned.strip("-")
+
+    return cleaned or fallback
+
+
+# ══════════════════════════════════════════════════════════════
+# أرقام الهاتف الجزائرية
+# ══════════════════════════════════════════════════════════════
+
+def normalize_algerian_phone(raw):
+    """
+    يوحّد رقم هاتف جزائري لصيغة محلية واحدة: 0XXXXXXXXX.
+
+    يقبل: «0666255200» · «0666 25 52 00» · «+213666255200» · «00213666255200»
+    يرجّع: الرقم الموحّد، أو None إذا ماشي رقمًا جزائريًا صحيحًا.
+
+    ⚠️ علاش دالة وحدة؟
+    كان هاد المنطق مكتوبًا فـroutes/landing.py برك، وباقي المشروع
+    يقارن الأرقام كنصوص خام. النتيجة: نفس الزبون يبان شخصين
+    مختلفين إذا كتب رقمو بصيغتين — والسلة المتروكة تتكرّر وما تتنحّاش.
+    """
+    digits = "".join(c for c in (raw or "") if c.isdigit())
+    if not digits:
+        return None
+
+    # الصيغة الدولية → محلية
+    if digits.startswith("00213"):
+        digits = "0" + digits[5:]
+    elif digits.startswith("213"):
+        digits = "0" + digits[3:]
+
+    # جوال: 10 أرقام تبدا بـ05/06/07 · ثابت: 9 أرقام تبدا بـ02/03/04
+    is_mobile = len(digits) == 10 and digits[:2] in ("05", "06", "07")
+    is_landline = len(digits) == 9 and digits[:2] in ("02", "03", "04")
+
+    return digits if (is_mobile or is_landline) else None
+
+
+# ══════════════════════════════════════════════════════════════
+# حروف لاتينية من اسم الزبون (لتوليد أكواد الكوبونات)
+# ══════════════════════════════════════════════════════════════
+
+# جدول تحويل مبسّط للحروف العربية. ما يهمّناش النطق الدقيق — نحتاجو
+# بداية مفهومة تبيّن الاسم (كمال → KM، شيماء → SH، ميساء → MY).
+_AR_TO_LATIN = {
+    "ا": "A", "أ": "A", "إ": "I", "آ": "A", "ء": "", "ئ": "Y", "ؤ": "W",
+    "ب": "B", "ت": "T", "ث": "TH", "ج": "J", "ح": "H", "خ": "KH",
+    "د": "D", "ذ": "DH", "ر": "R", "ز": "Z", "س": "S", "ش": "SH",
+    "ص": "S", "ض": "D", "ط": "T", "ظ": "Z", "ع": "A", "غ": "GH",
+    "ف": "F", "ق": "Q", "ك": "K", "ل": "L", "م": "M", "ن": "N",
+    "ه": "H", "ة": "A", "و": "W", "ي": "Y", "ى": "A", "پ": "B",
+    "چ": "CH", "ڤ": "V", "گ": "G",
+}
+
+
+def latin_initials(name, length=2, fallback="BD"):
+    """
+    أول `length` حروف لاتينية من اسم الزبون — عربي ولا لاتيني.
+
+    «Rania allem» → RA · «كمال» → KM · «Éric» → ER · «ميساء ص» → MY
+    إذا الاسم فارغ ولا ما فيهش حروف يتحوّلو (أرقام، رموز) → `fallback`.
+
+    ⚠️ نشيلو التشكيل والتطويل، ونتجاهلو الفراغات والرموز، باش الكود
+    يخرج دايمًا حروف كبيرة A-Z برك — سهل الكتابة فالسلة.
+    """
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", str(name or ""))
+    letters = []
+    for ch in text:
+        if unicodedata.combining(ch) or ch == "\u0640":   # تشكيل / تطويل
+            continue
+        if ch in _AR_TO_LATIN:
+            letters.extend(_AR_TO_LATIN[ch])
+        elif "a" <= ch.lower() <= "z" and ch.isascii():
+            letters.append(ch.upper())
+        # أي حاجة أخرى (فراغ، رقم، رمز) نتجاهلوها
+        if len(letters) >= length:
+            break
+
+    result = "".join(letters)[:length]
+    if len(result) < length:
+        result = (result + fallback * length)[:length]
+    return result

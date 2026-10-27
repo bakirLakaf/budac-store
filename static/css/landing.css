@@ -1,0 +1,901 @@
+/* ═══════════════════════════════════════════════════════
+   صفحة الهبوط — BUDAC  (v180)
+
+   ⚠️ ملف مستقل، ما يستوردش style.css: الصفحة تتحمّل من إعلان
+   والسرعة أولوية.
+
+   القوالب: كل قالب = مجموعة متغيّرات على <body class="lp-theme-X">
+   (gold · clean · story · fun · soft · craft).
+   التخطيط (فالحاسوب): lp-layout-split | lp-layout-stack. :root = قالب gold، وصفحة الشكر
+   تستعملو بلا كلاس.
+   عرض الصورة: lp-fit-contain | lp-fit-blur | lp-fit-cover
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+    --ink: #221C2B;
+    --ink-soft: #5C5468;
+    --primary: #2E1A47;
+    --primary-light: #4A2F6B;
+    --accent: #C9A227;
+    --accent-hover: #D9B03A;
+    --accent-ink: #2E1A47;
+    --gold: var(--accent);            /* توافق مع صفحة الشكر */
+    --gold-soft: #E8D9A8;
+    --bg: #FBF6EE;
+    --surface: #FFFFFF;
+    --border: #E7DFCF;
+    --danger: #B4453E;
+    --success: #4E7C59;
+
+    --hero-bg: linear-gradient(180deg, #2E1A47 0%, #402660 100%);
+    --hero-ink: #FFFFFF;
+    --hero-soft: #CBBFDD;
+    --hero-price: #E8C547;
+    --hero-line: rgba(255, 255, 255, 0.16);
+
+    --radius: 14px;
+    --radius-lg: 20px;
+    --shadow: 0 8px 24px -12px rgba(46, 26, 71, 0.25);
+    --font-head: "Tajawal", system-ui, sans-serif;
+}
+
+/* ───────── قالب: نظيف ───────── */
+.lp-theme-clean {
+    --accent: #2E1A47;
+    --accent-hover: #4A2F6B;
+    --accent-ink: #FFFFFF;
+    --bg: #F7F7F5;
+    --border: #E6E4DF;
+    --hero-bg: #FFFFFF;
+    --hero-ink: #221C2B;
+    --hero-soft: #6B6478;
+    --hero-price: #2E1A47;
+    --hero-line: #ECEAE5;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 10px 30px -18px rgba(0, 0, 0, 0.25);
+}
+
+/* ───────── قالب: قصة ───────── */
+.lp-theme-story {
+    --ink: #14302C;
+    --ink-soft: #4B625E;
+    --primary: #0F4C45;
+    --primary-light: #166A60;
+    --accent: #D9822B;
+    --accent-hover: #E8933D;
+    --accent-ink: #1B1208;
+    --gold-soft: #F3D9B5;
+    --bg: #EDF3F1;
+    --surface: #FFFFFF;
+    --border: #D3E0DC;
+    --hero-bg: #EDF3F1;
+    --hero-ink: #14302C;
+    --hero-soft: #4B625E;
+    --hero-price: #0F4C45;
+    --hero-line: #D3E0DC;
+    --radius: 6px;
+    --radius-lg: 10px;
+    --shadow: none;
+    --font-head: "Amiri", "Tajawal", serif;
+}
+
+/* ───────── قالب: مرح ───────── */
+.lp-theme-fun {
+    --ink: #1B1B3A;
+    --ink-soft: #4A4A6A;
+    --primary: #1B1B3A;
+    --primary-light: #2B2B5C;
+    --accent: #FF4D8D;
+    --accent-hover: #FF6AA0;
+    --accent-ink: #FFFFFF;
+    --gold-soft: #FFD166;
+    --bg: #FFF1B8;
+    --surface: #FFFFFF;
+    --border: #1B1B3A;
+    --success: #1F8F5F;
+    --hero-bg: #3A86FF;
+    --hero-ink: #FFFFFF;
+    --hero-soft: #E3EEFF;
+    --hero-price: #FFD166;
+    --hero-line: rgba(255, 255, 255, 0.35);
+    --radius: 16px;
+    --radius-lg: 22px;
+    --shadow: 4px 4px 0 #1B1B3A;
+    --font-head: "Changa", "Tajawal", sans-serif;
+}
+
+/* ───────── قالب: عصري (v180) ───────── */
+.lp-theme-soft {
+    --ink: #241B3D;
+    --ink-soft: #645C7E;
+    --primary: #3B2A86;
+    --primary-light: #5B45C9;
+    --accent: #6C4CF1;
+    --accent-hover: #7D60FF;
+    --accent-ink: #FFFFFF;
+    --gold-soft: #DCD3FF;
+    --bg: #F5F2FF;
+    --surface: #FFFFFF;
+    --border: #E4DEFA;
+    --hero-bg: linear-gradient(180deg, #E9E2FF 0%, #F5F2FF 100%);
+    --hero-ink: #241B3D;
+    --hero-soft: #645C7E;
+    --hero-price: #5B3FE0;
+    --hero-line: transparent;
+    --radius: 16px;
+    --radius-lg: 26px;
+    --shadow: 0 18px 40px -22px rgba(76, 52, 190, 0.45);
+    --page-bg:
+        radial-gradient(820px 480px at 90% -6%, rgba(140, 110, 255, 0.24), transparent 62%),
+        radial-gradient(720px 440px at 4% 38%, rgba(90, 200, 250, 0.17), transparent 62%),
+        #F7F5FF;
+}
+
+/* ───────── قالب: حِرفي (v180) ───────── */
+.lp-theme-craft {
+    --ink: #3A2619;
+    --ink-soft: #7A6250;
+    --primary: #4A2C1D;
+    --primary-light: #6B4230;
+    --accent: #B5472B;
+    --accent-hover: #C65A3C;
+    --accent-ink: #FFFFFF;
+    --gold-soft: #F0D9B8;
+    --bg: #F5ECDF;
+    --surface: #FFFBF4;
+    --border: #E3D2BB;
+    --hero-bg: #F0E2CC;
+    --hero-ink: #3A2619;
+    --hero-soft: #7A6250;
+    --hero-price: #B5472B;
+    --hero-line: #E3D2BB;
+    --radius: 8px;
+    --radius-lg: 14px;
+    --shadow: 0 1px 0 rgba(74, 44, 29, 0.06), 0 14px 30px -20px rgba(74, 44, 29, 0.45);
+    --font-head: "Amiri", "Tajawal", serif;
+    --page-bg: radial-gradient(rgba(74, 44, 29, 0.06) 1px, transparent 1.6px) 0 0 / 18px 18px, #F5ECDF;
+}
+
+/* متغيّرات «خلفية الصفحة» (فالحاسوب الصفحة كاملة سطح واحد) والعدّاد.
+   ⚠️ معرّفة على body (ماشي :root) باش تتبع متغيّرات القالب. */
+body {
+    --page-bg: var(--hero-bg);
+    --page-ink: var(--hero-ink);
+    --page-soft: var(--hero-soft);
+    --cd-bg: rgba(255, 255, 255, 0.09);
+    --cd-ink: #FFFFFF;
+    --cd-unit: rgba(255, 255, 255, 0.13);
+    --cd-label: var(--gold-soft);
+}
+.lp-theme-gold {
+    --page-bg:
+        radial-gradient(900px 520px at 88% -8%, rgba(201, 162, 39, 0.20), transparent 62%),
+        radial-gradient(760px 520px at 0% 32%, rgba(122, 76, 170, 0.38), transparent 62%),
+        linear-gradient(180deg, #2E1A47 0%, #35204F 50%, #2A1740 100%);
+}
+.lp-theme-clean { --page-bg: var(--bg); --cd-bg: var(--primary); }
+.lp-theme-story { --cd-bg: var(--primary); }
+.lp-theme-fun   { --cd-bg: var(--ink); }
+.lp-theme-craft { --cd-bg: var(--primary); }
+.lp-theme-soft {
+    --cd-bg: #FFFFFF; --cd-ink: #3B2A86; --cd-unit: #EFEAFF; --cd-label: #645C7E;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+    margin: 0;
+    font-family: "Tajawal", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 16px;
+    line-height: 1.65;
+    /* مساحة للزر الثابت فالموبايل */
+    padding-bottom: 76px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation: none !important; transition: none !important; }
+}
+
+main { max-width: 620px; margin: 0 auto; padding: 0 16px; display: flex; flex-direction: column; }
+
+/* ---------- الشريط العلوي ---------- */
+.lp-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--primary);
+}
+.lp-bar img { height: 34px; width: auto; }
+.lp-bar-note {
+    color: var(--gold-soft);
+    font-size: 13px; font-weight: 500;
+    white-space: nowrap;
+}
+
+/* شريط المعاينة — يبان للأدمن فقط */
+.lp-preview {
+    padding: 8px 16px;
+    background: #FFE08A; color: #3A2B00;
+    font-size: 13.5px; font-weight: 700; text-align: center;
+}
+
+/* ---------- الواجهة ---------- */
+.lp-hero-wrap {
+    background: var(--hero-bg);
+    color: var(--hero-ink);
+    border-bottom: 1px solid var(--hero-line);
+    /* حافة مدوّرة تنعّم الانتقال بين الواجهة وباقي الصفحة */
+    border-radius: 0 0 28px 28px;
+}
+.lp-hero {
+    max-width: 620px; margin: 0 auto;
+    padding: 20px 16px 24px;
+}
+
+/* ---------- معرض الصور (سلايد) ---------- */
+.lp-gallery { position: relative; }
+.lp-gallery-in { position: relative; }
+
+.lp-track {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+.lp-track::-webkit-scrollbar { display: none; }
+.lp-theme-fun .lp-track { border: 2.5px solid var(--ink); }
+
+.lp-slide {
+    position: relative;
+    flex: 0 0 100%;
+    aspect-ratio: 1 / 1;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+    overflow: hidden;
+    background: var(--surface);
+}
+.lp-slide img {
+    position: relative; z-index: 1;
+    display: block; width: 100%; height: 100%;
+}
+
+/* عرض الصورة — 3 خيارات */
+.lp-fit-contain .lp-slide img { object-fit: contain; }
+.lp-fit-cover   .lp-slide img { object-fit: cover; }
+.lp-fit-blur    .lp-slide img { object-fit: contain; }
+.lp-fit-blur .lp-slide::before {
+    content: "";
+    position: absolute; inset: -24px;
+    background: var(--img) center / cover no-repeat;
+    filter: blur(24px) saturate(1.15);
+    opacity: 0.85;
+}
+
+.lp-dots {
+    display: flex; justify-content: center; gap: 7px;
+    margin-top: 12px;
+}
+.lp-dot {
+    width: 8px; height: 8px; padding: 0;
+    border: 0; border-radius: 999px;
+    background: currentColor; opacity: 0.28;
+    cursor: pointer;
+    transition: width 0.15s ease, opacity 0.15s ease;
+}
+.lp-dot.is-active { width: 22px; opacity: 0.9; }
+.lp-dot:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+
+.lp-badge {
+    position: absolute; z-index: 2;
+    top: 12px; inset-inline-start: 12px;
+    background: var(--danger); color: #fff;
+    font-weight: 800; font-size: 15px;
+    padding: 5px 12px; border-radius: 999px;
+}
+.lp-theme-fun .lp-badge {
+    background: #FFD166; color: var(--ink);
+    border: 2.5px solid var(--ink);
+    transform: rotate(-6deg);
+    font-size: 17px;
+}
+
+/* ---------- نص الواجهة ---------- */
+.lp-hero-text { padding-top: 18px; }
+
+.lp-hero-text h1 {
+    margin: 0 0 8px;
+    font-family: var(--font-head);
+    font-size: clamp(25px, 6.4vw, 34px);
+    font-weight: 800;
+    line-height: 1.3;
+    color: var(--hero-ink);
+}
+.lp-sub {
+    margin: 0 0 16px;
+    font-size: 16px;
+    color: var(--hero-soft);
+}
+
+.lp-price {
+    display: flex; align-items: baseline; gap: 10px;
+    margin: 0 0 12px;
+}
+.lp-price strong {
+    font-family: var(--font-head);
+    font-size: 34px; font-weight: 800;
+    color: var(--hero-price);
+}
+.lp-price s {
+    font-size: 17px;
+    color: var(--hero-soft);
+    opacity: 0.8;
+}
+
+.lp-stock {
+    margin: 0 0 12px;
+    font-size: 14.5px; font-weight: 700;
+    color: var(--hero-price);
+}
+.lp-theme-clean .lp-stock,
+.lp-theme-story .lp-stock,
+.lp-theme-soft .lp-stock,
+.lp-theme-craft .lp-stock { color: var(--danger); }
+
+/* شارة تاريخ العرض */
+.lp-offer {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin: 0 0 12px; padding: 6px 14px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--hero-price) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--hero-price) 38%, transparent);
+    color: var(--hero-price);
+    font-size: 14px; font-weight: 700;
+}
+.lp-offer b { font-weight: 800; }
+.lp-offer.is-ended { background: #FDECEA; border-color: #F3C9C4; color: var(--danger); }
+
+/* العدّاد: يوم / ساعة / دقيقة / ثانية */
+.lp-countdown {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px 14px;
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    background: var(--cd-bg);
+    border-radius: var(--radius);
+}
+.lp-theme-soft .lp-countdown { border: 1px solid var(--border); }
+.lp-theme-fun .lp-countdown { border: 2.5px solid var(--ink); }
+.lp-countdown-label { color: var(--cd-label); font-size: 14px; font-weight: 500; }
+.lp-cd { display: flex; gap: 8px; direction: ltr; }
+.lp-cd-u {
+    min-width: 54px; padding: 7px 6px 6px;
+    background: var(--cd-unit);
+    border-radius: 10px;
+    text-align: center; line-height: 1.1;
+}
+.lp-cd-u[hidden] { display: none; }
+.lp-cd-u b {
+    display: block;
+    color: var(--cd-ink);
+    font-size: 22px; font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+.lp-cd-u small { display: block; margin-top: 3px; color: var(--cd-label); font-size: 11px; }
+
+/* ---------- مكوّنات الباقة ---------- */
+.lp-bundle {
+    display: flex; align-items: stretch; gap: 8px;
+    margin: 0 0 16px;
+}
+.lp-bundle-item {
+    flex: 1 1 0; min-width: 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+}
+.lp-theme-gold .lp-bundle-item { border-color: transparent; }
+.lp-bundle-item img {
+    flex: 0 0 52px; width: 52px; height: 52px;
+    object-fit: contain;
+    background: #F4F1EA; border-radius: 8px;
+}
+.lp-bundle-item b {
+    display: block; font-size: 13.5px; font-weight: 800; line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis;
+}
+.lp-bundle-item small { display: block; font-size: 12px; color: var(--ink-soft); }
+.lp-bundle-plus {
+    align-self: center;
+    font-size: 22px; font-weight: 800;
+    color: var(--hero-price);
+}
+
+/* ---------- اختيار الموديل ---------- */
+.lp-variants { margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
+.lp-variants legend {
+    padding: 0; margin-bottom: 8px;
+    font-size: 14.5px; font-weight: 800;
+    color: var(--hero-ink);
+}
+.lp-variant-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+}
+.lp-variant { position: relative; display: block; cursor: pointer; }
+.lp-variant input {
+    position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%;
+    margin: 0; cursor: pointer;
+}
+.lp-variant-card {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 6px 6px 8px;
+    background: var(--surface); color: var(--ink);
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    text-align: center;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.lp-variant-card img {
+    width: 100%; aspect-ratio: 1 / 1;
+    object-fit: contain; background: #F4F1EA; border-radius: 8px;
+}
+.lp-variant-card span { font-size: 12.5px; font-weight: 700; line-height: 1.3; }
+.lp-variant input:checked + .lp-variant-card {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.lp-variant input:focus-visible + .lp-variant-card { outline: 3px solid var(--hero-ink); outline-offset: 2px; }
+.lp-theme-clean .lp-variant-card,
+.lp-theme-story .lp-variant-card,
+.lp-theme-soft .lp-variant-card,
+.lp-theme-craft .lp-variant-card { border-color: var(--border); }
+.lp-theme-clean .lp-variant input:checked + .lp-variant-card,
+.lp-theme-story .lp-variant input:checked + .lp-variant-card,
+.lp-theme-soft .lp-variant input:checked + .lp-variant-card,
+.lp-theme-craft .lp-variant input:checked + .lp-variant-card { border-color: var(--accent); }
+.lp-theme-fun .lp-variant-card { border: 2.5px solid var(--ink); }
+.lp-theme-fun .lp-variant input:checked + .lp-variant-card { background: #FFD166; box-shadow: 3px 3px 0 var(--ink); }
+
+/* ---------- الأزرار ---------- */
+.lp-cta {
+    display: block; width: 100%;
+    padding: 16px 20px;
+    border: none; border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-family: var(--font-head); font-size: 19px; font-weight: 800;
+    text-align: center; text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.12s ease, background 0.12s ease;
+}
+.lp-cta:hover { background: var(--accent-hover); }
+.lp-cta:active { transform: scale(0.985); }
+.lp-cta:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.lp-cta:disabled { opacity: 0.6; cursor: not-allowed; }
+.lp-theme-gold .lp-hero .lp-cta:focus-visible { outline-color: #fff; }
+.lp-theme-fun .lp-cta {
+    border: 2.5px solid var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+}
+.lp-theme-fun .lp-cta:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+
+.lp-cta-hero { margin-bottom: 6px; }
+
+/* ---------- المميزات ---------- */
+.lp-benefits { padding: 22px 0 8px; order: 1; }
+.lp-benefits ul {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; gap: 10px;
+}
+.lp-benefits li {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 15px; font-weight: 500;
+}
+.lp-benefits li::before {
+    content: "✓";
+    flex: 0 0 22px;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--gold-soft);
+    color: var(--primary);
+    border-radius: 50%;
+    font-weight: 800; font-size: 13px;
+}
+.lp-theme-fun .lp-benefits li { border: 2.5px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); font-weight: 700; }
+
+/* قالب قصة: المميزات كسطور بسيطة، بلا بطاقات */
+.lp-theme-story .lp-benefits li {
+    background: transparent; border: 0; border-radius: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 2px; font-size: 16px;
+}
+.lp-theme-story .lp-benefits li::before { background: var(--primary); color: #fff; }
+
+/* ---------- الوصف ---------- */
+.lp-body { padding: 8px 0 20px; order: 2; }
+.lp-body p { margin: 0 0 14px; font-size: 15.5px; }
+
+/* قالب قصة: النص قبل المميزات، بخط أكبر */
+.lp-theme-story .lp-body { order: 0; padding: 26px 0 6px; }
+.lp-theme-story .lp-body p {
+    font-family: var(--font-head);
+    font-size: 20px; line-height: 1.9; color: var(--ink);
+}
+.lp-theme-story .lp-hero-text { text-align: center; }
+.lp-theme-story .lp-price { justify-content: center; }
+
+/* ---------- الفورم ---------- */
+.lp-order {
+    padding: 24px 18px;
+    margin: 8px 0 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    /* هامش باش الزر الثابت ما يغطّيش آخر الفورم */
+    scroll-margin-top: 12px;
+}
+.lp-order h2 {
+    margin: 0 0 4px;
+    font-family: var(--font-head);
+    font-size: 22px; font-weight: 800;
+    color: var(--primary);
+}
+.lp-order-note {
+    margin: 0 0 18px;
+    font-size: 14.5px;
+    color: var(--success); font-weight: 600;
+}
+
+.lp-field { display: block; margin-bottom: 14px; }
+.lp-field[hidden] { display: none !important; }
+
+.lp-field > span {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px; font-weight: 700;
+    color: var(--primary);
+}
+.lp-field > span em {
+    font-style: normal; font-weight: 500;
+    color: var(--ink-soft);
+}
+
+.lp-field input,
+.lp-field select {
+    width: 100%;
+    padding: 13px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 11px;
+    background: #fff;
+    font-family: inherit;
+    /* 16px إجباري: أقل منو، سفاري فالآيفون يزوّم عند التركيز */
+    font-size: 16px;
+    color: var(--ink);
+}
+.lp-field input:focus,
+.lp-field select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(46, 26, 71, 0.1);
+}
+
+/* ---------- الملخّص ---------- */
+.lp-summary {
+    margin: 18px 0;
+    padding: 14px 16px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    font-size: 15px;
+}
+.lp-summary > div {
+    display: flex; justify-content: space-between;
+    padding: 5px 0;
+}
+.lp-summary-total {
+    margin-top: 6px; padding-top: 10px !important;
+    border-top: 1.5px solid var(--border);
+    font-size: 18px; font-weight: 800;
+    color: var(--primary);
+}
+
+/* ---------- الأخطاء ---------- */
+.lp-errors {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: #FDECEA;
+    border: 1px solid #F3C9C4;
+    border-radius: var(--radius);
+    color: var(--danger);
+}
+.lp-errors ul { margin: 0; padding-inline-start: 18px; }
+.lp-errors li { font-size: 14.5px; font-weight: 600; }
+
+/* ---------- الثقة ---------- */
+.lp-trust {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 0 0 28px;
+    text-align: center;
+}
+.lp-trust > div {
+    padding: 14px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+.lp-trust strong {
+    display: block;
+    font-size: 13.5px; font-weight: 800;
+    color: var(--primary);
+}
+.lp-trust span {
+    display: block; margin-top: 2px;
+    font-size: 12px; color: var(--ink-soft);
+}
+
+/* ---------- التذييل ---------- */
+.lp-foot {
+    padding: 22px 16px 28px;
+    background: var(--primary);
+    color: var(--gold-soft);
+    text-align: center;
+    font-size: 14px;
+}
+.lp-foot p { margin: 3px 0; }
+.lp-foot a { color: #fff; text-decoration: none; font-weight: 700; }
+
+
+.lp-order { order: 3; }
+.lp-trust { order: 4; }
+
+.lp-theme-fun .lp-order { border: 2.5px solid var(--ink); }
+.lp-theme-fun .lp-field input,
+.lp-theme-fun .lp-field select { border: 2px solid var(--ink); }
+.lp-theme-fun .lp-trust > div { border: 2.5px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); }
+.lp-theme-fun .lp-foot { background: var(--ink); }
+.lp-theme-story .lp-order { border-color: var(--primary); }
+
+/* ---------- الزر الثابت ---------- */
+.lp-sticky {
+    position: fixed;
+    bottom: 12px; inset-inline: 12px;
+    z-index: 50;
+    padding: 15px 20px;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 16.5px; font-weight: 800;
+    text-align: center; text-decoration: none;
+    box-shadow: 0 8px 26px -8px rgba(20, 10, 40, 0.55);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.lp-theme-fun .lp-sticky { border: 2.5px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); }
+.lp-sticky.is-hidden {
+    opacity: 0;
+    transform: translateY(90px);
+    pointer-events: none;
+}
+
+
+/* ---------- v180: عناصر إضافية ---------- */
+.lp-cta.is-disabled { opacity: 0.55; pointer-events: none; }
+
+.lp-fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.lp-fieldset:disabled { opacity: 0.55; }
+
+.lp-ended-note {
+    margin-bottom: 16px; padding: 12px 16px;
+    background: #FDECEA; border: 1px solid #F3C9C4;
+    border-radius: var(--radius);
+    color: var(--danger); font-weight: 700; font-size: 14.5px;
+}
+.lp-ended-note a { color: var(--danger); margin-inline-start: 6px; }
+
+/* عناوين الأقسام: تبان فالحاسوب برك */
+.lp-sec-title { display: none; }
+
+.lp-theme-soft .lp-cta {
+    background: linear-gradient(135deg, #6C4CF1, #8A63FF);
+    box-shadow: 0 12px 26px -12px rgba(108, 76, 241, 0.7);
+}
+.lp-theme-soft .lp-cta:hover { background: linear-gradient(135deg, #7D60FF, #9A78FF); }
+.lp-theme-soft .lp-benefits li { box-shadow: 0 10px 24px -18px rgba(76, 52, 190, 0.5); }
+.lp-theme-soft .lp-order,
+.lp-theme-soft .lp-trust > div { border-color: var(--border); }
+.lp-theme-craft .lp-order { border-color: var(--border); border-top: 4px solid var(--accent); }
+.lp-theme-craft .lp-benefits li::before { background: var(--primary); color: var(--gold-soft); }
+.lp-theme-craft .lp-foot { background: var(--primary); }
+.lp-theme-soft .lp-foot { background: var(--primary); }
+.lp-theme-craft .lp-hero-text h1,
+.lp-theme-craft .lp-order h2 { font-family: var(--font-head); }
+
+/* ---------- الشاشات الكبيرة ---------- */
+@media (min-width: 760px) {
+    body { padding-bottom: 0; }
+
+    main { max-width: 900px; }
+
+    .lp-hero {
+        max-width: 900px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 34px;
+        align-items: center;
+        padding: 36px 16px 40px;
+    }
+    .lp-hero-text { padding-top: 0; }
+
+    .lp-benefits ul { grid-template-columns: 1fr 1fr; }
+    .lp-theme-story .lp-body { max-width: 620px; margin-inline: auto; }
+
+    .lp-order { padding: 30px; }
+
+    /* الزر الثابت للموبايل فقط — فالديسكتوب الفورم بان */
+    .lp-sticky { display: none; }
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   v180 — الحاسوب (≥ 960px): الصفحة كاملة سطح واحد
+   ─────────────────────────────────────────────────────
+   المشكل القديم: الواجهة شريط ملوّن بعرض الشاشة، وتحتها صفحة بلون آخر
+   وعرض آخر → يبانو جزئين منفصلين.
+   الحل: الصفحة كاملة خلفية وحدة (--page-bg)، وكل شي فوقها بطاقات
+   بنفس العرض والمحاذاة. الغلافات (hero-wrap / hero / main) تولّي
+   display: contents باش عناصرها يدخلو فنفس الشبكة.
+   ═══════════════════════════════════════════════════════ */
+@media (min-width: 960px) {
+    body { background: var(--page-bg); }
+
+    .lp-bar {
+        padding-inline: max(20px, calc((100% - 1180px) / 2 + 28px));
+        padding-block: 12px;
+    }
+    .lp-bar img { height: 40px; }
+
+    .lp-shell {
+        max-width: 1180px; margin: 0 auto;
+        padding: 40px 28px 72px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr);
+        column-gap: 48px; row-gap: 30px;
+        align-items: start;
+    }
+    .lp-hero-wrap, .lp-hero, main { display: contents; }
+
+    /* ⚠️ الغلاف الخارجي يتمدد بطول خانة الـgrid (الواجهة + الفورم) والغلاف الداخلي هو اللي يلتصق.
+       هكا الصورة تتوقف فآخر الخانة وما تدخلش على المميزات والنصوص اللي تحتها.
+       (sticky مباشرة على عنصر الـgrid ما يتقيّدش بالخانة فبعض المتصفحات.) */
+    .lp-gallery   { grid-area: gallery; align-self: stretch; }
+    .lp-gallery-in { position: sticky; top: 24px; }
+    .lp-hero-text { grid-area: info; padding: 0; color: var(--page-ink); }
+    .lp-benefits  { grid-area: benefits; padding: 0; order: 0; }
+    .lp-body      { grid-area: body; order: 0; }
+    .lp-order     { grid-area: order; order: 0; margin: 0; }
+    .lp-trust     { grid-area: trust; order: 0; padding: 0; }
+
+    /* الصورة الكبيرة: بطاقة بحدود ناعمة */
+    .lp-track { border-radius: 28px; }
+    .lp-theme-gold .lp-track { box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.6); }
+    .lp-dots { color: var(--page-ink); margin-top: 16px; }
+
+    /* نص الواجهة: أكبر وأريح */
+    .lp-hero-text h1 { font-size: clamp(32px, 3.1vw, 44px); line-height: 1.22; letter-spacing: -0.2px; }
+    .lp-sub { font-size: 17.5px; color: var(--page-soft); }
+    .lp-price strong { font-size: 44px; }
+
+    /* ── تخطيط split: الفورم بجانب المنتج ── */
+    .lp-layout-split .lp-shell {
+        grid-template-areas:
+            "gallery info"
+            "gallery order"
+            "benefits benefits"
+            "body body"
+            "trust trust";
+    }
+    /* الفورم قدّام الزائر: زر الواجهة ما بقى عندو فايدة */
+    .lp-layout-split .lp-cta-hero { display: none; }
+    .lp-layout-split .lp-order { border-top: 4px solid var(--accent); }
+
+    /* ── تخطيط stack: الفورم تحت ── */
+    .lp-layout-stack .lp-shell {
+        grid-template-areas:
+            "gallery info"
+            "benefits benefits"
+            "body body"
+            "order order"
+            "trust trust";
+    }
+    .lp-layout-stack .lp-hero-text { align-self: center; }
+    .lp-layout-stack .lp-gallery-in { position: relative; top: auto; }
+    .lp-layout-stack .lp-order { width: 100%; max-width: 700px; justify-self: center; }
+
+    /* ── المميزات: 3 أعمدة ── */
+    .lp-benefits ul { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .lp-benefits li { padding: 16px 18px; font-size: 15.5px; }
+    .lp-theme-story .lp-benefits li { padding: 14px 4px; }
+    .lp-theme-story .lp-benefits ul { grid-template-columns: repeat(2, 1fr); gap: 0 40px; }
+
+    /* ── الوصف: بطاقة ── */
+    .lp-body {
+        padding: 30px 36px 18px;
+        background: var(--surface); color: var(--ink);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow);
+    }
+    .lp-body p { max-width: 80ch; font-size: 16px; }
+    .lp-theme-fun .lp-body { border: 2.5px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); }
+    .lp-theme-story .lp-body { max-width: none; margin-inline: 0; padding: 32px 40px 20px; }
+    .lp-theme-story .lp-hero-text { text-align: start; }
+    .lp-theme-story .lp-price { justify-content: flex-start; }
+
+    /* عناوين الأقسام */
+    .lp-sec-title {
+        display: block;
+        grid-column: 1 / -1;
+        margin: 0 0 14px;
+        font-family: var(--font-head);
+        font-size: 24px; font-weight: 800;
+        color: var(--page-ink);
+    }
+    .lp-benefits .lp-sec-title, .lp-body .lp-sec-title { grid-column: auto; }
+    .lp-body .lp-sec-title { color: var(--primary); }
+
+    /* الثقة: 3 بطاقات أكبر */
+    .lp-trust { gap: 16px; }
+    .lp-trust > div { padding: 22px 12px; }
+    .lp-trust strong { font-size: 16px; }
+    .lp-trust span { font-size: 13.5px; }
+
+    .lp-order { padding: 30px 32px; }
+    .lp-order h2 { font-size: 26px; }
+
+    .lp-foot { background: transparent; border-top: 1px solid var(--hero-line); color: var(--page-soft); }
+    .lp-theme-gold .lp-foot { border-top-color: rgba(255, 255, 255, 0.14); }
+    .lp-theme-gold .lp-foot a { color: #fff; }
+    .lp-theme-clean .lp-foot a, .lp-theme-story .lp-foot a,
+    .lp-theme-soft .lp-foot a, .lp-theme-craft .lp-foot a { color: var(--primary); }
+    .lp-theme-fun .lp-foot { background: var(--ink); color: var(--gold-soft); }
+    .lp-theme-fun .lp-foot a { color: #fff; }
+    .lp-theme-soft .lp-foot, .lp-theme-craft .lp-foot { background: var(--primary); color: var(--gold-soft); }
+    .lp-theme-soft .lp-foot a, .lp-theme-craft .lp-foot a { color: #fff; }
+
+    /* المميزات: عدد الأعمدة يتبع عدد العناصر (4 = 2×2، 2 = عمودين) */
+    .lp-benefits ul:has(li:nth-child(4):last-child),
+    .lp-benefits ul:has(li:nth-child(2):last-child) { grid-template-columns: repeat(2, 1fr); }
+    .lp-benefits ul:has(li:nth-child(1):last-child) { grid-template-columns: 1fr; }
+
+    .lp-hero-wrap { border-radius: 0; border-bottom: 0; }
+}
+
+/* شاشات أكبر: نوسّعو شوية */
+@media (min-width: 1360px) {
+    .lp-shell { max-width: 1260px; }
+    .lp-bar { padding-inline: max(20px, calc((100% - 1260px) / 2 + 28px)); }
+}
+
+/* العدّاد فالموبايل: العنوان فوق، والمربعات بعرض كامل */
+@media (max-width: 520px) {
+    .lp-countdown { flex-direction: column; align-items: stretch; text-align: center; }
+    .lp-cd { width: 100%; }
+    .lp-cd-u { flex: 1 1 0; min-width: 0; }
+}

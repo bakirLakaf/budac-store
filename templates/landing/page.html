@@ -1,0 +1,353 @@
+{% import "partials/fb_pixel.html" as fb %}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ page.headline }}</title>
+{% include "partials/favicon.html" %}
+<meta name="description" content="{{ page.subheadline or page.headline }}">
+
+{# صفحة الحملة ما تدخلش فنتائج البحث — الزائر يجي من الإعلان فقط #}
+<meta name="robots" content="noindex, follow">
+
+<meta property="og:title" content="{{ page.headline }}">
+<meta property="og:description" content="{{ page.subheadline or '' }}">
+{% if page.image_filename %}
+<meta property="og:image" content="{{ url_for('static', filename='img/products/' + page.image_filename, _external=True) }}">
+{% endif %}
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+{# خط العناوين يتحمّل فقط للقوالب اللي تحتاجو — السرعة أولوية #}
+{% set extra_font = {'story': '&family=Amiri:wght@400;700', 'craft': '&family=Amiri:wght@400;700', 'fun': '&family=Changa:wght@600;800'}.get(theme, '') %}
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800{{ extra_font | safe }}&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+
+{% call fb.pixel(fb_pixel_id) %}
+fbq('track', 'ViewContent', {
+    content_name: {{ product.name | tojson }},
+    content_ids: [{{ product.id }}],
+    content_type: 'product',
+    value: {{ page.unit_price }},
+    currency: 'DZD'
+});
+{% endcall %}
+</head>
+
+<body class="lp-theme-{{ theme }} lp-fit-{{ fit }} lp-layout-{{ layout }}">
+
+<header class="lp-bar">
+    <img src="{{ url_for('static', filename='img/brand/logo.png') }}"
+         alt="{{ store_name }}" width="445" height="217">
+    <span class="lp-bar-note">🚚 الدفع عند الاستلام</span>
+</header>
+
+{% if is_preview %}
+<div class="lp-preview">👁 معاينة (ما تتحفظش) — القالب: {{ theme }} · عرض الصورة: {{ fit }} · التخطيط: {{ layout }}</div>
+{% endif %}
+
+{% set gallery = page.gallery %}
+{% set variants = page.pickable_variants %}
+{% set selected_id = (form.get('variant_id') or (variants[0].id if variants else none)) %}
+
+<div class="lp-shell">
+
+<!-- ═══════════ الواجهة ═══════════ -->
+<section class="lp-hero-wrap">
+<div class="lp-hero">
+    <div class="lp-gallery" id="lpGallery">
+      <div class="lp-gallery-in">
+        <div class="lp-track" id="lpTrack" tabindex="0" aria-label="صور المنتج">
+            {% for g in gallery %}
+            {% set src = url_for('static', filename='img/products/' + g.file) %}
+            <div class="lp-slide" data-index="{{ loop.index0 }}"
+                 {% if g.variant_id %}data-variant="{{ g.variant_id }}"{% endif %}
+                 style="--img: url('{{ src }}')">
+                <img src="{{ src }}" alt="{{ product.name }}"
+                     width="800" height="800"
+                     {% if loop.first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}>
+            </div>
+            {% endfor %}
+        </div>
+        {% if page.has_discount %}
+        <span class="lp-badge">-{{ page.discount_percent }}%</span>
+        {% endif %}
+        {% if gallery | length > 1 %}
+        <div class="lp-dots" id="lpDots">
+            {% for g in gallery %}
+            <button type="button" class="lp-dot{{ ' is-active' if loop.first }}"
+                    data-go="{{ loop.index0 }}" aria-label="الصورة {{ loop.index }}"></button>
+            {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="lp-hero-text">
+        {% if expired %}
+        <p class="lp-offer is-ended">⛔ انتهى العرض</p>
+        {% elif page.offer_ends_on %}
+        <p class="lp-offer">🗓 العرض ساري حتى <b>{{ page.offer_ends_label }}</b></p>
+        {% endif %}
+
+        <h1>{{ page.headline }}</h1>
+        {% if page.subheadline %}<p class="lp-sub">{{ page.subheadline }}</p>{% endif %}
+
+        {# السعر: رقم واحد عادي. المشطوب يبان فقط إذا الأدمن حطو #}
+        <p class="lp-price">
+            <strong>{{ '{:,}'.format(page.unit_price) }} دج</strong>
+            {% if page.has_discount %}
+            <s>{{ '{:,}'.format(page.compare_at_price) }} دج</s>
+            {% endif %}
+        </p>
+
+        {% if page.stock_line and not expired %}
+        <p class="lp-stock">⚡ {{ page.stock_line }}</p>
+        {% endif %}
+
+        {% if page.show_countdown and not expired %}
+        <div class="lp-countdown" id="lpCountdown"
+             data-hours="{{ page.countdown_hours }}"
+             {% if page.offer_ends_on %}data-deadline="{{ page.offer_deadline_iso }}"{% endif %}>
+            <span class="lp-countdown-label">{{ 'العرض يخلص بعد' if page.offer_ends_on else 'العرض يخلص في' }}</span>
+            <div class="lp-cd" dir="ltr">
+                <div class="lp-cd-u" data-u="d"><b>--</b><small>يوم</small></div>
+                <div class="lp-cd-u" data-u="h"><b>--</b><small>ساعة</small></div>
+                <div class="lp-cd-u" data-u="m"><b>--</b><small>دقيقة</small></div>
+                <div class="lp-cd-u" data-u="s"><b>--</b><small>ثانية</small></div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if page.has_bundle %}
+        <div class="lp-bundle" aria-label="مكوّنات الباقة">
+            <div class="lp-bundle-item">
+                {% if page.bundle_product.image_filename %}
+                <img src="{{ url_for('static', filename='img/products/' + page.bundle_product.image_filename) }}"
+                     alt="" width="52" height="52">
+                {% endif %}
+                <div><b>{{ page.bundle_product.name }}</b><small>داخل الباقة</small></div>
+            </div>
+            <span class="lp-bundle-plus" aria-hidden="true">+</span>
+            <div class="lp-bundle-item">
+                {% if page.image_filename %}
+                <img id="lpBundleMainImg"
+                     src="{{ url_for('static', filename='img/products/' + page.image_filename) }}"
+                     alt="" width="52" height="52">
+                {% endif %}
+                <div><b>{{ product.name }}</b><small>{{ 'اختار الشكل تحت' if variants else 'داخل الباقة' }}</small></div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if variants %}
+        <fieldset class="lp-variants">
+            <legend>اختار الشكل اللي يعجبك</legend>
+            <div class="lp-variant-grid">
+                {% for v in variants %}
+                <label class="lp-variant">
+                    <input type="radio" name="variant_id" value="{{ v.id }}" form="lpForm"
+                           data-image="{{ url_for('static', filename='img/products/' + v.image_filename) if v.image_filename else '' }}"
+                           {{ 'checked' if v.id == selected_id }}>
+                    <span class="lp-variant-card">
+                        {% if v.image_filename %}
+                        <img src="{{ url_for('static', filename='img/products/' + v.image_filename) }}"
+                             alt="" width="96" height="96" loading="lazy">
+                        {% endif %}
+                        <span>{{ v.label }}</span>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+        </fieldset>
+        {% endif %}
+
+        {% if expired %}
+        <span class="lp-cta lp-cta-hero is-disabled" aria-disabled="true">انتهى العرض</span>
+        {% else %}
+        <a href="#order" class="lp-cta lp-cta-hero">{{ page.cta_text }}</a>
+        {% endif %}
+    </div>
+</div>
+</section>
+
+<main>
+
+<!-- ═══════════ المميزات ═══════════ -->
+{% if page.benefit_lines %}
+<section class="lp-benefits">
+    <h2 class="lp-sec-title">علاه تختارو؟</h2>
+    <ul>
+        {% for benefit in page.benefit_lines %}
+        <li>{{ benefit }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<!-- ═══════════ الوصف ═══════════ -->
+{% if page.body_paragraphs %}
+<section class="lp-body">
+    <h2 class="lp-sec-title">تفاصيل المنتج</h2>
+    {% for paragraph in page.body_paragraphs %}
+    <p>{{ paragraph }}</p>
+    {% endfor %}
+</section>
+{% endif %}
+
+<!-- ═══════════ الفورم ═══════════ -->
+<section class="lp-order" id="order">
+    <h2>عمّر معلوماتك ونوصّلولك</h2>
+    <p class="lp-order-note">ما تخلّصش حتى توصلك الطلبية 👌</p>
+
+    {% if errors %}
+    <div class="lp-errors">
+        <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    {% if expired %}
+    <div class="lp-ended-note">
+        ⛔ انتهى هذا العرض. إذا حاب تطلب، تواصل معنا ونشوفو معاك.
+        {% if settings.store_phone %}<a href="tel:{{ settings.store_phone }}">{{ settings.store_phone }}</a>{% endif %}
+    </div>
+    {% endif %}
+
+    <form method="post" id="lpForm" novalidate>
+      <fieldset class="lp-fieldset"{{ ' disabled' if expired }}>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="utm_source" value="{{ request.args.get('utm_source', '') }}">
+        <input type="hidden" name="utm_campaign" value="{{ request.args.get('utm_campaign', '') }}">
+
+        <label class="lp-field">
+            <span>الاسم واللقب</span>
+            <input type="text" name="name" value="{{ form.get('name', '') }}"
+                   required autocomplete="name" placeholder="مثلاً: محمد بن علي">
+        </label>
+
+        <label class="lp-field">
+            <span>رقم الهاتف</span>
+            <input type="tel" name="phone" value="{{ form.get('phone', '') }}"
+                   required autocomplete="tel" inputmode="numeric"
+                   placeholder="0X XX XX XX XX">
+        </label>
+
+        <label class="lp-field">
+            <span>الكمية</span>
+            <input type="number" name="quantity" id="qtyInput"
+                   value="{{ form.get('quantity', 1) }}"
+                   min="1" max="{{ page.max_quantity }}" inputmode="numeric">
+        </label>
+
+        <label class="lp-field">
+            <span>شركة التوصيل</span>
+            <select name="carrier_code" id="carrierSelect" required>
+                <option value="">اختر الشركة</option>
+                {% for c in carriers %}
+                <option value="{{ c.code }}" {{ 'selected' if form.get('carrier_code') == c.code }}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label class="lp-field">
+            <span>الولاية</span>
+            <select name="wilaya_code" id="wilayaSelect" required>
+                <option value="">اختر الولاية</option>
+                {% for w in wilayas %}
+                <option value="{{ w.code }}" {{ 'selected' if form.get('wilaya_code') == w.code }}>{{ w.code }} ~ {{ w.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label class="lp-field">
+            <span>نوع التوصيل</span>
+            <select name="delivery_type" id="deliveryTypeSelect" required>
+                <option value="">اختر نوع التوصيل</option>
+                <option value="home" {{ 'selected' if form.get('delivery_type') == 'home' }}>التوصيل للمنزل</option>
+                <option value="office" {{ 'selected' if form.get('delivery_type') == 'office' }}>التوصيل لمكتب الشركة</option>
+            </select>
+        </label>
+
+        <label class="lp-field" id="communeField" hidden>
+            <span>البلدية</span>
+            <select name="commune" id="communeSelect">
+                <option value="">اختر الولاية أولاً</option>
+            </select>
+            <input type="hidden" name="commune_id" id="communeIdInput">
+        </label>
+
+        <label class="lp-field" id="pickupField" hidden>
+            <span>مكتب الاستلام</span>
+            <select name="pickup_point_name" id="pickupSelect">
+                <option value="">اختر الولاية أولاً</option>
+            </select>
+            <input type="hidden" name="pickup_point_id" id="pickupIdInput">
+        </label>
+
+        <label class="lp-field">
+            <span>عنوان دقيق <em>(اختياري)</em></span>
+            <input type="text" name="address_note" value="{{ form.get('address_note', '') }}"
+                   placeholder="قرب مسجد X، عمارة رقم Y">
+        </label>
+
+        <!-- ملخّص الحساب -->
+        <div class="lp-summary">
+            <div><span>المنتج</span><span id="sumProduct">{{ '{:,}'.format(page.unit_price) }} دج</span></div>
+            <div><span>التوصيل</span><span id="sumShipping">اختر الولاية</span></div>
+            <div class="lp-summary-total"><span>المجموع</span><span id="sumTotal">—</span></div>
+        </div>
+
+        {% include "partials/save_info.html" %}
+        <button type="submit" class="lp-cta lp-cta-submit" id="lpSubmit">
+            {{ 'انتهى العرض' if expired else page.cta_text }}
+        </button>
+      </fieldset>
+    </form>
+</section>
+
+<!-- ═══════════ الثقة ═══════════ -->
+<section class="lp-trust">
+    <div><strong>الدفع عند الاستلام</strong><span>تخلّص كي توصلك</span></div>
+    <div><strong>توصيل 58 ولاية</strong><span>لكل الجزائر</span></div>
+    <div><strong>24/48 ساعة</strong><span>توصيل سريع</span></div>
+</section>
+
+</main>
+
+</div><!-- /lp-shell -->
+
+<footer class="lp-foot">
+    <p>{{ store_name }} — للديكور و الأكسسوارات</p>
+    {% if settings.store_phone %}<p><a href="tel:{{ settings.store_phone }}">{{ settings.store_phone }}</a></p>{% endif %}
+</footer>
+
+<!-- زر ثابت فالموبايل — يبان بعد ما يتجاوز الزائر الواجهة -->
+{% if not expired %}
+<a href="#order" class="lp-sticky" id="stickyCta">
+    {{ page.cta_text }} · {{ '{:,}'.format(page.unit_price) }} دج
+</a>
+{% endif %}
+
+<script>
+    window.LP_CONFIG = {
+        unitPrice: {{ page.unit_price }},
+        freeShipping: {{ 'true' if page.free_shipping else 'false' }},
+        productName: {{ product.name | tojson }},
+        productId: {{ product.id }},
+        urls: {
+            communes: "{{ url_for('cart.api_communes') }}",
+            pickupPoints: "{{ url_for('cart.api_pickup_points') }}",
+            shipping: "{{ url_for('cart.api_shipping_price') }}"
+        },
+        saved: {
+            wilaya: {{ form.get('wilaya_code', '') | tojson }},
+            commune: {{ form.get('commune', '') | tojson }},
+            pickup: {{ form.get('pickup_point_name', '') | tojson }}
+        }
+    };
+</script>
+<script src="{{ url_for('static', filename='js/landing.js') }}" defer></script>
+
+</body>
+</html>

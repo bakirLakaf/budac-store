@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>بوردرو — {{ orders|length }} طلبية</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* ⚠️ A6 (105×148مم): الحجم المعتاد لبوردرو الطرود. كل طلبية = ورقة. */
+        @page { size: 105mm 148mm; margin: 0; }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #e9e6e0; color: #000;
+               font-family: "IBM Plex Sans Arabic", Tahoma, Arial, sans-serif; }
+
+        .toolbar { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px;
+                   align-items: center; padding: 10px 16px; background: #2a1840; color: #fff; }
+        .toolbar button, .toolbar a { font: inherit; font-weight: 600; cursor: pointer;
+               padding: 8px 16px; border-radius: 8px; border: 0; background: #f0b429;
+               color: #2a1840; text-decoration: none; }
+        .toolbar a.ghost { background: transparent; color: #fff; border: 1px solid #ffffff55; }
+
+        .label { width: 105mm; height: 148mm; margin: 14px auto; padding: 4.5mm;
+                 background: #fff; border: 1.5px solid #000; display: flex;
+                 flex-direction: column; gap: 2mm; page-break-after: always;
+                 break-after: page; overflow: hidden; }
+        .label:last-child { page-break-after: auto; break-after: auto; }
+
+        .l-head { display: flex; justify-content: space-between; align-items: center;
+                  border-bottom: 1.5px solid #000; padding-bottom: 2mm; }
+        .l-head img { height: 9mm; }
+        .l-head .meta { text-align: left; font-size: 8.5pt; line-height: 1.35; direction: ltr; }
+        .l-head .brand-txt { font-weight: 700; font-size: 13pt; }
+
+        .l-code { text-align: center; }
+        .barcode-svg { width: 90mm; height: 13mm; display: block; margin: 0 auto; }
+        .l-code .num { direction: ltr; font-family: Consolas, monospace; font-size: 11pt;
+                       letter-spacing: 1px; font-weight: 700; margin-top: 1mm; }
+        .l-code .sub { font-size: 8.5pt; }
+
+        .box { border: 1.2px solid #000; border-radius: 2mm; padding: 2.2mm 3mm; }
+        .box h4 { margin: 0 0 1mm; font-size: 8pt; font-weight: 600; opacity: .7; }
+        .name { font-size: 15pt; font-weight: 700; line-height: 1.25; }
+        .phone { direction: ltr; text-align: right; font-size: 17pt; font-weight: 700;
+                 letter-spacing: .5px; }
+        .place { font-size: 12pt; font-weight: 700; }
+        .addr { font-size: 10pt; margin-top: 1mm; line-height: 1.4; }
+        .type { display: inline-block; margin-top: 1.5mm; padding: .5mm 2.5mm;
+                border: 1.2px solid #000; border-radius: 99px; font-size: 9pt; font-weight: 600; }
+
+        .cod { display: flex; justify-content: space-between; align-items: center;
+               border: 2px solid #000; border-radius: 2mm; padding: 2.5mm 3mm; }
+        .cod .lbl { font-size: 9.5pt; font-weight: 600; line-height: 1.3; }
+        .cod .amt { font-size: 20pt; font-weight: 700; }
+
+        .items { font-size: 8.5pt; line-height: 1.45; flex: 1; min-height: 0; overflow: hidden; }
+        .items li { margin: 0; }
+        .items ul { margin: 0; padding: 0 4mm 0 0; }
+        .note { font-size: 8.5pt; margin-top: 1mm; }
+
+        .l-foot { display: flex; justify-content: space-between; font-size: 8pt;
+                  border-top: 1px dashed #000; padding-top: 1.5mm; }
+
+        @media print {
+            body { background: #fff; }
+            .toolbar { display: none; }
+            .label { margin: 0; border: 1.5px solid #000; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="toolbar">
+    <button type="button" onclick="window.print()">🖨️ اطبع / احفظ PDF</button>
+    <a class="ghost" href="javascript:history.back()">← رجوع</a>
+    <span>{{ orders|length }} بوردرو · الحجم A6 · من نافذة الطباعة اختار «حفظ كـPDF» إذا حبيت ملف</span>
+</div>
+
+{% for o in orders %}
+{% set code = o.tracking_number or o.order_number %}
+<section class="label">
+    <div class="l-head">
+        <div>
+            <img src="{{ url_for('static', filename='img/brand/logo.png') }}" alt="BUDAC"
+                 onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'brand-txt',textContent:'BUDAC'}))">
+        </div>
+        <div class="meta">
+            {{ o.created_at.strftime('%Y-%m-%d') }}<br>
+            {% if sender_phone %}+{{ sender_phone }}{% endif %}
+        </div>
+    </div>
+
+    <div class="l-code">
+        {{ barcodes[o.id]|safe }}
+        <div class="num">{{ code }}</div>
+        <div class="sub">
+            {% if o.tracking_number %}الطلبية {{ o.order_number }}{% else %}ما تبعثتش لشركة التوصيل بعد{% endif %}
+            {% if o.carrier_name %} · {{ o.carrier_name }}{% endif %}
+        </div>
+    </div>
+
+    <div class="box">
+        <h4>المستلم</h4>
+        <div class="name">{{ o.customer_name }}</div>
+        <div class="phone">{{ o.customer_phone }}</div>
+    </div>
+
+    <div class="box">
+        <h4>العنوان</h4>
+        <div class="place">{{ o.wilaya_code }} {{ o.wilaya_name }}{% if o.commune %} — {{ o.commune }}{% endif %}</div>
+        {% if o.delivery_type == 'office' and o.pickup_point_name %}
+        <div class="addr">📍 {{ o.pickup_point_name }}</div>
+        {% endif %}
+        {% if o.address_note %}<div class="addr">{{ o.address_note }}</div>{% endif %}
+        <span class="type">{{ o.delivery_type_label }}</span>
+    </div>
+
+    <div class="cod">
+        <div class="lbl">المبلغ لي يتحصّل<br>من الزبون</div>
+        <div class="amt">{{ '{:,}'.format(o.total) }} دج</div>
+    </div>
+
+    <div class="items">
+        <ul>
+            {% for it in o.items[:5] %}
+            <li>{{ it.quantity }}× {{ it.item_name }}{% if it.variant_label %} ({{ it.variant_label }}){% endif %}</li>
+            {% endfor %}
+            {% if o.items|length > 5 %}<li>… و{{ o.items|length - 5 }} أصناف أخرى</li>{% endif %}
+        </ul>
+        {% if o.customer_note %}<div class="note">📝 {{ o.customer_note[:90] }}</div>{% endif %}
+    </div>
+
+    <div class="l-foot">
+        <span>{{ o.item_count }} قطعة</span>
+        <span>{{ o.order_number }}</span>
+    </div>
+</section>
+{% endfor %}
+
+</body>
+</html>

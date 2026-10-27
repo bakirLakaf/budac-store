@@ -1,0 +1,77 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<h1 class="page-title">واتساب التلقائي</h1>
+
+<p class="hint">
+    رسائل تتبعث للزبون وحدها: تأكيد بعد الطلب، وتحديثات كي تتبدّل حالة الطلبية
+    (حتى كي تتبدّل وحدها من شركة التوصيل). هذا يخدم عبر <strong>WhatsApp Cloud API الرسمي</strong>
+    — الإعداد خطوة بخطوة فملف <code>WHATSAPP_SETUP.md</code>.
+</p>
+
+<section class="wa-card">
+    <header class="wa-card-head"><h2>حالة الربط</h2></header>
+    <ul class="wa-status-list">
+        <li>{{ '✓' if configured else '✗' }} واتساب Cloud API
+            {% if configured %}<span class="wa-tag">مضبوط</span>
+            {% else %}<span class="wa-tag">غير مضبوط — الأزرار اليدوية تبقى تخدم</span>{% endif %}</li>
+        <li>{{ '✓' if webhook_ready else '✗' }} استقبال ردود الزبون (زر «تأكيد»/«إلغاء»)
+            {% if not webhook_ready %}<span class="wa-tag">يحتاج WA_VERIFY_TOKEN و WA_APP_SECRET</span>{% endif %}</li>
+        <li>✓ مزامنة حالة الطلبيات من شركات التوصيل: كل {{ sync_minutes }} دقيقة تلقائيًا</li>
+    </ul>
+</section>
+
+<form method="post" class="wa-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <header class="wa-card-head"><h2>الرسائل التلقائية</h2></header>
+
+    <label class="lpf-switch">
+        <input type="checkbox" name="master" {{ 'checked' if master }}>
+        <span><strong>تفعيل الإرسال التلقائي</strong> (مفتاح عام — طفّيه يوقف كلش)</span>
+    </label>
+    {% for k in kinds %}
+    <label class="lpf-switch">
+        <input type="checkbox" name="kind_{{ k.key }}" {{ 'checked' if k.enabled }}>
+        <span>{{ k.label }}</span>
+    </label>
+    {% endfor %}
+    <p class="hint">كل رسالة تتبعث <strong>مرة وحدة</strong> لكل طلبية، مهما تعاودت الحالة.</p>
+    <button type="submit" class="btn-primary">حفظ</button>
+</form>
+
+<section class="wa-card">
+    <header class="wa-card-head">
+        <h2>آخر الرسائل
+            {% for st, n in counts.items() %}<span class="count-pill">{{ st }}: {{ n }}</span> {% endfor %}
+        </h2>
+    </header>
+    {% if not rows %}
+    <p class="hint">ما كاين حتى رسالة بعد.</p>
+    {% else %}
+    <div class="table-wrap">
+    <table class="admin-table">
+        <thead><tr><th>الطلبية</th><th>النوع</th><th>الحالة</th><th>الوقت</th><th></th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+        <tr>
+            <td><a href="{{ url_for('admin.order_detail', order_id=r.order_id) }}">{{ r.order.order_number if r.order else r.order_id }}</a></td>
+            <td>{{ r.kind }}</td>
+            <td>{{ r.status }}{% if r.error %}<br><small class="muted-cell">{{ r.error }}</small>{% endif %}</td>
+            <td>{{ (r.sent_at or r.created_at).strftime('%m-%d %H:%M') }}</td>
+            <td>
+                {% if r.status == 'failed' %}
+                <form method="post" action="{{ url_for('admin.wa_auto_retry', row_id=r.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn-small" type="submit">إعادة</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% endif %}
+</section>
+
+{% endblock %}

@@ -1,0 +1,38 @@
+/* الدارك مود — لوحة التحكم (يُفعَّل بـ <html data-theme="dark">)
+   الجزء الأول يدوي: متغيرات الألوان. الجزء الثاني مولَّد من admin.css. */
+:root { --a-surface-2: #FAF8F5; --a-accent-text: var(--a-primary); }
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+    --a-bg: #130F1A;
+    --a-surface: #1D1728;
+    --a-surface-2: #261F34;
+    --a-border: #3B3350;
+    --a-text: #ECE8F4;
+    --a-text-soft: #A9A0BC;
+    --a-danger: #F0776A;
+    --a-ok: #5CC38C;
+    --a-warning: #E0B24A;
+    --a-accent-text: #D9CCF5;
+}
+html[data-theme="dark"] body { background: var(--a-bg); color: var(--a-text); }
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+    background-color: var(--a-surface-2);
+    color: var(--a-text);
+    border-color: var(--a-border);
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder { color: var(--a-text-soft); opacity: .8; }
+html[data-theme="dark"] a { color: inherit; }
+html[data-theme="dark"] img { filter: none; }
+html[data-theme="dark"] hr { border-color: var(--a-border); }
+
+/* زر تبديل المظهر فالشريط الجانبي */
+.theme-toggle {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    background: transparent; color: #D5CEE4; border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13px; cursor: pointer; margin-bottom: 10px;
+}
+.theme-toggle:hover { background: rgba(255,255,255,0.08); color: #fff; }

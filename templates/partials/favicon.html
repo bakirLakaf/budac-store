@@ -1,0 +1,6 @@
+{# أيقونة الموقع (favicon) — نفس اللي فـbase.html. صفحات الهبوط ما ترثش base.html،
+   علاه لازم تدخلها بيدها وإلا يبان رمز عام فتبويب المتصفح. #}
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
+<link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='img/brand/icon-192.png') }}">
+<link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='img/brand/icon-512.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='img/brand/apple-touch-icon.png') }}">

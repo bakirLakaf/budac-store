@@ -1,0 +1,28 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}الإعدادات{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1>إعدادات المتجر</h1>
+</div>
+
+<form method="post" class="card settings-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <h2 class="settings-section-title">صفحة السلة</h2>
+
+    <label class="checkbox-field">
+        <input type="checkbox" name="show_coupon_field" {{ 'checked' if show_coupon_field }}>
+        <span>إظهار خانة كود الخصم</span>
+    </label>
+    <small class="hint">
+        إذا ماكانش عندك كوبونات فعّالة، طفّيها — خانة فارغة تشوّش الزبون
+        وتخليه يحس بلي راه يخلّص أكثر من اللازم.
+        <br>
+        ⚠️ إذا زبون طبّق كوبون من قبل، الخانة تبان ليه باش يقدر يحيّدو.
+    </small>
+
+    <button type="submit" class="btn-primary">احفظ</button>
+</form>
+{% endblock %}

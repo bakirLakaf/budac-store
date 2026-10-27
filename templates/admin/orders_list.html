@@ -1,0 +1,215 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<div class="page-head-row">
+    <h1 class="page-title">الطلبيات</h1>
+    <form method="post" action="{{ url_for('admin.orders_refresh_all_tracking') }}"
+          onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = '⏳ جاري التحديث... ما تغلقش الصفحة';">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-admin btn-sm">🔄 تحديث كل الطلبيات الممكنة</button>
+    </form>
+</div>
+
+<div class="status-tabs">
+    <a href="{{ url_for('admin.orders_list') }}" class="status-tab {{ 'is-active' if not current_status }}">
+        الكل <span class="tab-count">{{ all_count }}</span>
+    </a>
+    {% for code, label in status_labels.items() %}
+    <a href="{{ url_for('admin.orders_list', status=code) }}"
+       class="status-tab status-tab-{{ code }} {{ 'is-active' if current_status == code }}">
+        {{ label }} <span class="tab-count">{{ counts.get(code, 0) }}</span>
+    </a>
+    {% endfor %}
+</div>
+
+<form method="get" class="filter-bar">
+    {% if current_status %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+    <input type="search" name="q" value="{{ search }}" placeholder="رقم الطلبية / الهاتف / الاسم...">
+    <button type="submit" class="btn-admin btn-sm">بحث</button>
+    {% if search %}<a href="{{ url_for('admin.orders_list', status=current_status) }}" class="btn-admin btn-ghost btn-sm">مسح</a>{% endif %}
+</form>
+
+{% if orders %}
+{# الفورم يغلّف الجدول باش checkbox كل سطر يتبعث مع الحذف الجماعي #}
+<form method="post" action="{{ url_for('admin.orders_bulk_delete') }}" id="bulkForm">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+<div class="bulk-bar" id="bulkBar" hidden>
+    <span><strong id="bulkCount">0</strong> طلبية مختارة</span>
+
+    {# 🎁 كوبون مكافأة لكل زبون مختار — يستعمل نفس checkbox، ويتبعث للصفحة
+       الخاصة بيه (formaction). ماشي required: الحذف يستعمل نفس الفورم. #}
+    <span class="bulk-reward">
+        <input type="number" name="percent" min="1" max="100" placeholder="% خصم"
+               aria-label="نسبة الخصم">
+        <input type="number" name="days" min="1" max="365" value="30"
+               placeholder="أيام" aria-label="مدة الصلاحية بالأيام">
+        <input type="number" name="min_amount" min="0" max="1000000"
+               placeholder="للطلبية &gt; دج" aria-label="الحد الأدنى للطلبية بالدينار">
+        <button type="submit" class="btn-admin btn-sm"
+                formaction="{{ url_for('admin.orders_bulk_reward') }}"
+                onclick="var p=this.form.elements['percent'].value; if(!p){alert('اكتب نسبة الخصم'); return false;} return confirm('تصنع كوبون مكافأة لكل زبون مختار (اللي طلبيتو «تم التسليم» برك)؟ الحد الأدنى الفارغ = بلا شرط.')">
+            🎁 كوبون مكافأة للمختارة
+        </button>
+    </span>
+    {# 🖨️ بوردرو ZR الرسمي (PDF واحد) — للطلبيات اللي تبعثت لـZR برك #}
+    <button type="submit" class="btn-admin btn-sm"
+            formaction="{{ url_for('admin.orders_bulk_zr_labels') }}" formtarget="_blank">
+        🖨️ بوردرو ZR للمختارة
+    </button>
+    {# بوردرو بسيط يصنعو الموقع: يخدم حتى للطلبيات اللي ما تبعثتش لـZR #}
+    <button type="submit" class="btn-admin btn-sm btn-ghost"
+            formaction="{{ url_for('admin.orders_bulk_bordereau') }}" formtarget="_blank">
+        🖨️ بوردرو بسيط
+    </button>
+    <button type="submit" class="btn-admin btn-sm btn-danger"
+            onclick="return confirm('تحذف الطلبيات المختارة نهائيًا؟ ما ترجعش.')">
+        🗑️ احذف المختارة
+    </button>
+</div>
+
+{# ═══════ بطاقات الموبايل ═══════
+   ⚠️ الجدول عندو 12 عمود — فشاشة 400px يتقصّ ويولّي الأدمن يزحلق
+   يمينًا ويسارًا. البطاقات توري نفس المعلومات فسطرين واضحين.
+   الاثنين موجودين، وCSS يخفي واحد حسب عرض الشاشة. #}
+<div class="order-cards">
+    {% for o in orders %}
+    <div class="order-card">
+        <div class="order-card-top">
+            <label class="order-card-pick">
+                <input type="checkbox" name="order_ids" value="{{ o.id }}"
+                       class="bulk-check" aria-label="اختر {{ o.order_number }}">
+            </label>
+            <a href="{{ url_for('admin.order_detail', order_id=o.id) }}"
+               class="order-card-num">{{ o.order_number }}</a>
+            <span class="status-pill status-{{ o.status }}">{{ o.status_label }}</span>
+        </div>
+
+        <div class="order-card-name">{{ o.customer_name }}</div>
+
+        <div class="order-card-meta">
+            <span>📍 {{ o.wilaya_name }}</span>
+            <span>📦 {{ o.item_count }} قطعة</span>
+            <span class="order-card-date">{{ o.created_at.strftime('%m-%d %H:%M') }}</span>
+        </div>
+
+        {% if o.carrier_name or o.tracking_number %}
+        <div class="order-card-meta">
+            {% if o.carrier_name %}<span>🚚 {{ o.carrier_name }}</span>{% endif %}
+            {% if o.tracking_number %}<span dir="ltr" class="tracking-cell">{{ o.tracking_number }}</span>{% endif %}
+        </div>
+        {% endif %}
+
+        <div class="order-card-foot">
+            <strong class="order-card-total">{{ o.total_display }}</strong>
+
+            <div class="order-card-actions">
+                {% if o.whatsapp_phone %}
+                <a href="https://wa.me/{{ o.whatsapp_phone }}"
+                   target="_blank" rel="noopener"
+                   class="btn-admin btn-sm btn-ghost">💬 واتساب</a>
+                {% endif %}
+                <a href="tel:{{ o.customer_phone }}"
+                   class="btn-admin btn-sm btn-ghost" dir="ltr">📞 {{ o.customer_phone }}</a>
+                <a href="{{ url_for('admin.order_detail', order_id=o.id) }}"
+                   class="btn-admin btn-sm">فتح</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<table class="admin-table orders-table">
+    <thead>
+        <tr>
+        <th style="width:34px"><input type="checkbox" id="bulkAll" aria-label="اختر الكل"></th>
+        <th>الرقم</th><th>الزبون</th><th>الهاتف</th><th>الولاية</th>
+        <th>قطع</th><th>المجموع</th><th>الحالة</th><th>شركة التوصيل</th><th>رقم التتبع</th><th>التاريخ</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for o in orders %}
+        <tr>
+            <td><input type="checkbox" name="order_ids" value="{{ o.id }}"
+                       class="bulk-check" aria-label="اختر {{ o.order_number }}"></td>
+            <td><a href="{{ url_for('admin.order_detail', order_id=o.id) }}" class="row-link">{{ o.order_number }}</a></td>
+            <td>{{ o.customer_name }}</td>
+            <td dir="ltr">
+                {# ⚠️ الزر يفتح المحادثة برك، بلا رسالة جاهزة —
+                   القوالب الكاملة فصفحة تفاصيل الطلبية. #}
+                {% if o.whatsapp_phone %}
+                <a href="https://wa.me/{{ o.whatsapp_phone }}"
+                   target="_blank" rel="noopener" class="wa-quick"
+                   title="واتساب مع {{ o.customer_name }}">💬</a>
+                {% endif %}
+                {{ o.customer_phone }}
+            </td>
+            <td>{{ o.wilaya_name }}</td>
+            <td>{{ o.item_count }}</td>
+            <td><strong>{{ o.total_display }}</strong></td>
+            <td><span class="status-pill status-{{ o.status }}">{{ o.status_label }}</span></td>
+            <td>{{ o.carrier_name or '—' }}</td>
+            <td dir="ltr" class="tracking-cell">{{ o.tracking_number or '—' }}</td>
+            <td class="muted-cell">{{ o.created_at.strftime('%m-%d %H:%M') }}</td>
+            <td><a href="{{ url_for('admin.order_detail', order_id=o.id) }}" class="btn-admin btn-sm btn-ghost">فتح</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</form>
+
+<script>
+/**
+ * تحديد جماعي للطلبيات (حذف + كوبونات مكافأة).
+ *
+ * ⚠️ كل طلبية عندها checkbox مرتين: وحدة فالجدول (كمبيوتر) ووحدة فالبطاقة
+ * (موبايل)، والـCSS يخفي واحدة. كنا نعدّو الاثنين (17 طلبية = «34»).
+ * دروك: نعدّو القيم المختلفة برك (id الطلبية)، ونزامنو الاثنين باش
+ * يبقاو متطابقين كي تبدّل من أي واحدة.
+ */
+(function () {
+    var all = document.getElementById('bulkAll');
+    var bar = document.getElementById('bulkBar');
+    var count = document.getElementById('bulkCount');
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('.bulk-check'));
+
+    function uniqueValues(onlyChecked) {
+        var seen = {};
+        boxes.forEach(function (b) {
+            if (!onlyChecked || b.checked) { seen[b.value] = true; }
+        });
+        return Object.keys(seen).length;
+    }
+
+    function refresh() {
+        var n = uniqueValues(true);
+        var total = uniqueValues(false);
+        count.textContent = n;
+        bar.hidden = n === 0;
+
+        // ⚠️ حالة وسطية كي البعض مختار برك — أوضح من مربّع فارغ
+        all.indeterminate = n > 0 && n < total;
+        all.checked = n === total && n > 0;
+    }
+
+    function setValue(value, checked) {
+        boxes.forEach(function (b) { if (b.value === value) { b.checked = checked; } });
+    }
+
+    all.addEventListener('change', function () {
+        boxes.forEach(function (b) { b.checked = all.checked; });
+        refresh();
+    });
+
+    boxes.forEach(function (b) {
+        b.addEventListener('change', function () {
+            setValue(b.value, b.checked);   // نزامنو توأمها (جدول ↔ بطاقة)
+            refresh();
+        });
+    });
+})();
+</script>
+{% else %}
+<div class="empty-box"><p>ماكاين حتى طلبية مطابقة.</p></div>
+{% endif %}
+
+{% endblock %}
