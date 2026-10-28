@@ -171,6 +171,15 @@ def create_app():
     from services.images import thumb_name
     app.jinja_env.filters["thumb"] = thumb_name
 
+    def offer_url(offer):
+        """رابط العرض: صفحة الهبوط إذا مربوطة، وإلا صفحة العرض العادية."""
+        from flask import url_for
+        if offer.landing_slug:
+            return url_for("landing.view", slug=offer.landing_slug)
+        return url_for("shop.offer_detail", slug=offer.slug)
+
+    app.jinja_env.globals["offer_url"] = offer_url
+
     def _store_settings():
         """
         إعدادات المتجر لكل القوالب.

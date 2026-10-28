@@ -135,3 +135,70 @@ def test_admin_saves_placements(logged_in_admin, app):
         "title": "عرض", "bundle_price": "900", "product_ids": [pid], "show_in_hero": "on"})
     o = db.session.get(Offer, o.id)
     assert o.show_in_hero is True and o.show_in_grid is False
+
+
+# ───────────── v184: ربط العرض بصفحة هبوط ─────────────
+
+def _landing(offer, **kw):
+    from models import LandingPage
+    lp = LandingPage(slug="ac", internal_name="أغطية", headline="غطاء",
+                     product_id=Product.query.first().id, **kw)
+    db.session.add(lp)
+    db.session.flush()
+    offer.landing_page_id = lp.id
+    db.session.commit()
+    return lp
+
+
+def test_linked_offer_buttons_go_to_landing_everywhere(client, app):
+    o = _offer(spotlight_position="bottom")
+    _landing(o)
+    html = _html(client)
+    assert "/lp/ac" in html and f"/offer/{o.slug}" not in html
+
+
+def test_unlinked_offer_keeps_regular_offer_page(client, app):
+    o = _offer(spotlight_position="bottom")
+    assert f"/offer/{o.slug}" in _html(client)
+
+
+def test_offer_detail_redirects_to_landing_when_linked(client, app):
+    o = _offer()
+    _landing(o)
+    r = client.get(f"/offer/{o.slug}")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/lp/ac")
+
+
+def test_inactive_landing_falls_back_to_offer_page(client, app):
+    o = _offer()
+    _landing(o, is_active=False)
+    assert client.get(f"/offer/{o.slug}").status_code == 200
+    assert "/lp/ac" not in _html(client)
+
+
+def test_expired_landing_falls_back_to_offer_page(client, app):
+    from datetime import timedelta
+    from models import LandingPage
+    o = _offer()
+    _landing(o, offer_ends_on=LandingPage._today_dz() - timedelta(days=1))
+    assert o.landing_slug is None
+
+
+def test_admin_links_offer_to_landing_and_rejects_bad_id(logged_in_admin, app):
+    o = _offer()
+    lp = _landing(o)
+    o.landing_page_id = None
+    db.session.commit()
+    pid = str(Product.query.first().id)
+    base = {"title": "عرض", "bundle_price": "900", "product_ids": [pid]}
+    logged_in_admin.post(f"/admin/offers/{o.id}/edit", data={**base, "landing_page_id": str(lp.id)})
+    assert db.session.get(Offer, o.id).landing_page_id == lp.id
+    logged_in_admin.post(f"/admin/offers/{o.id}/edit", data={**base, "landing_page_id": "99999"})
+    assert db.session.get(Offer, o.id).landing_page_id is None
+
+
+def test_admin_form_lists_landing_pages(logged_in_admin, app):
+    o = _offer()
+    _landing(o)
+    html = logged_in_admin.get("/admin/offers/new").get_data(as_text=True)
+    assert 'name="landing_page_id"' in html and "صفحة الهبوط: أغطية" in html

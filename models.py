@@ -633,6 +633,21 @@ class Offer(db.Model):
     # ---------- v182: تصميم العرض فسلايدر الصفحة الرئيسية ----------
     # ⚠️ nullable: العروض القديمة تبقى NULL = «gold» + «split» (نفس المظهر القديم
     # لكن بصورة كاملة وزر واضح).
+    # ---------- v184: ربط العرض بصفحة هبوط ----------
+    # إذا مربوط ← كل أزرار «اطلب الآن» (سلايدر، بطاقات، القسم الكبير) تروح لصفحة
+    # الهبوط بدل صفحة العرض العادية. SET NULL: مسح صفحة الهبوط ما يمسحش العرض.
+    landing_page_id = db.Column(db.Integer, db.ForeignKey("landing_pages.id", ondelete="SET NULL"),
+                                nullable=True)
+    landing_page = db.relationship("LandingPage", foreign_keys=[landing_page_id])
+
+    @property
+    def landing_slug(self):
+        """slug صفحة الهبوط إذا مربوطة وتخدم (مفعّلة، منتجها مفعّل، العرض ما خلصش)."""
+        lp = self.landing_page
+        if lp and lp.is_active and lp.product and lp.product.is_active and not lp.offer_expired:
+            return lp.slug
+        return None
+
     # أماكن الظهور فالصفحة الرئيسية: NULL = يبان (العروض القديمة تبقى كيما كانت)
     show_in_hero = db.Column(db.Boolean, nullable=True, default=True)   # سلايدر أول الصفحة
     show_in_grid = db.Column(db.Boolean, nullable=True, default=True)   # بطاقات «عروض خاصة»

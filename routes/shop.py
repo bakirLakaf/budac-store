@@ -533,6 +533,9 @@ def offer_detail(slug):
     )
     if offer is None or not offer.is_running:
         abort(404)
+    # عرض مربوط بصفحة هبوط ← نوجّهو لها (روابط قديمة/سلة/محركات بحث)
+    if offer.landing_slug:
+        return redirect(url_for("landing.view", slug=offer.landing_slug))
     return render_template("shop/offer.html", offer=offer)
 
 

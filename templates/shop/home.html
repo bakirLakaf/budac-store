@@ -64,7 +64,7 @@
                             {% endif %}
                         </p>
 
-                        <a href="{{ url_for('shop.offer_detail', slug=offer.slug) }}" class="btn-primary btn-hero">
+                        <a href="{{ offer_url(offer) }}" class="btn-primary btn-hero">
                             اطلب الآن
                         </a>
                     </div>
@@ -145,7 +145,7 @@
 
         <div class="offers-grid">
             {% for offer in grid_offers %}
-            <a href="{{ url_for('shop.offer_detail', slug=offer.slug) }}" class="offer-card">
+            <a href="{{ offer_url(offer) }}" class="offer-card">
                 <div class="offer-card-banner">
                     {% if offer.banner_filename %}
                         <img src="{{ url_for('static', filename='img/offers/' + offer.banner_filename) }}" alt="{{ offer.title }}" loading="lazy">

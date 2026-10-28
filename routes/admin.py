@@ -1511,6 +1511,7 @@ def offer_form(offer_id=None):
             return render_template(
                 "admin/offer_form.html", offer=offer, all_products=all_products,
                 Offer_HERO_STYLES=Offer.HERO_STYLES, Offer_HERO_LAYOUTS=Offer.HERO_LAYOUTS,
+                landing_pages=LandingPage.query.order_by(LandingPage.internal_name).all(),
             )
 
         slug = (request.form.get("slug") or "").strip() or slugify(title)
@@ -1523,6 +1524,7 @@ def offer_form(offer_id=None):
             return render_template(
                 "admin/offer_form.html", offer=offer, all_products=all_products,
                 Offer_HERO_STYLES=Offer.HERO_STYLES, Offer_HERO_LAYOUTS=Offer.HERO_LAYOUTS,
+                landing_pages=LandingPage.query.order_by(LandingPage.internal_name).all(),
             )
 
         if offer is None:
@@ -1541,6 +1543,10 @@ def offer_form(offer_id=None):
         position = request.form.get("spotlight_position", "none")
         offer.spotlight_position = position if position in ("none", "top", "bottom") else "none"
         offer.spotlight_text = (request.form.get("spotlight_text") or "").strip() or None
+
+        # ربط العرض بصفحة هبوط (v184) — فارغ = صفحة العرض العادية
+        lp_id = request.form.get("landing_page_id", type=int)
+        offer.landing_page_id = lp_id if lp_id and db.session.get(LandingPage, lp_id) else None
 
         # أماكن الظهور (v183): checkbox غير معلّم = ما يبانش هناك
         offer.show_in_hero = bool(request.form.get("show_in_hero"))
@@ -1595,6 +1601,7 @@ def offer_form(offer_id=None):
     return render_template(
         "admin/offer_form.html", offer=offer, all_products=all_products,
                 Offer_HERO_STYLES=Offer.HERO_STYLES, Offer_HERO_LAYOUTS=Offer.HERO_LAYOUTS,
+                landing_pages=LandingPage.query.order_by(LandingPage.internal_name).all(),
     )
 
 

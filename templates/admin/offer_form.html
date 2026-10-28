@@ -72,6 +72,26 @@
                 <span>مفعّل</span>
             </label>
 
+            {# ═══ وين تروح أزرار «اطلب الآن»؟ (v184) ═══ #}
+            <fieldset class="spotlight-settings">
+                <legend>صفحة الهبوط لهاد العرض</legend>
+                <label class="field">
+                    <span>أزرار «اطلب الآن» تروح لـ</span>
+                    <select name="landing_page_id">
+                        <option value="">صفحة العرض العادية</option>
+                        {% for lp in landing_pages %}
+                        <option value="{{ lp.id }}" {{ 'selected' if offer and offer.landing_page_id == lp.id }}>
+                            صفحة الهبوط: {{ lp.internal_name }}{{ '' if lp.is_active else ' (مطفية)' }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small class="hint">
+                        إذا اخترت صفحة هبوط، الأزرار فالسلايدر والبطاقات والقسم الكبير تروح لها بدل صفحة العرض،
+                        وصفحة العرض القديمة توجّه لها وحدها. إذا الصفحة مطفية ولا خلص عرضها، يرجع للصفحة العادية.
+                    </small>
+                </label>
+            </fieldset>
+
             {# ═══ أماكن ظهور العرض (v183): كل الاختيارات ممكنة، حتى كلهم أو حتى واحد ═══ #}
             <fieldset class="spotlight-settings">
                 <legend>وين يبان هاد العرض؟</legend>
