@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% from "shop/_spotlight.html" import spotlight_section %}
 
+{# لون الحافة المسنّنة تحت الهيدر = خلفية أول حاجة تبان (قسم «عرض خاص» فوق، وإلا أول شريحة).
+   بلاه تبان شريطة بيضاء بين الهيدر والعرض. #}
+{% if spotlight and spotlight.spotlight_position == "top" %}
+    {% set scallop_color = "#2E1A47" %}
+{% elif offers %}
+    {% set scallop_color = offers[0].style_edge_color %}
+{% endif %}
+
 {% block content %}
 
 {% if spotlight and spotlight.spotlight_position == "top" %}
@@ -11,9 +19,10 @@
 <section class="hero-slider" id="heroSlider" aria-roledescription="carousel" aria-label="العروض الخاصة">
     <div class="hero-track" id="heroTrack">
         {% for offer in offers[:4] %}
-        <article class="hero-slide" data-index="{{ loop.index0 }}">
+        {% set banner_mode = offer.layout == "banner" and offer.banner_filename %}
+        <article class="hero-slide hs-{{ offer.style }}{{ ' is-banner' if banner_mode }}" data-index="{{ loop.index0 }}">
             <div class="container hero-slide-inner">
-                <div class="hero-slide-media">
+                <div class="hero-slide-media {{ 'has-banner' if offer.banner_filename else '' }}">
                     {% if offer.banner_filename %}
                         <img src="{{ url_for('static', filename='img/offers/' + offer.banner_filename) }}"
                              alt="{{ offer.title }}" {% if not loop.first %}loading="lazy"{% endif %}>
@@ -33,6 +42,9 @@
                 </div>
 
                 <div class="hero-slide-text">
+                    {% if banner_mode %}
+                    <h2 class="hs-sr">{{ offer.title }}</h2>
+                    {% else %}
                     <p class="hero-eyebrow">عرض خاص</p>
                     <h2 class="hero-title">{{ offer.title }}</h2>
                     {% if offer.subtitle %}<p class="hero-subtitle">{{ offer.subtitle }}</p>{% endif %}
@@ -42,17 +54,20 @@
                         <li>{{ item.product.name }}{% if item.quantity > 1 %} ×{{ item.quantity }}{% endif %}</li>
                         {% endfor %}
                     </ul>
+                    {% endif %}
 
-                    <p class="hero-price">
-                        <span class="hero-price-now">{{ offer.bundle_price_display }}</span>
-                        {% if offer.savings > 0 %}
-                        <span class="hero-price-was">{{ offer.original_total_display }}</span>
-                        {% endif %}
-                    </p>
+                    <div class="hero-buy">
+                        <p class="hero-price">
+                            <span class="hero-price-now">{{ offer.bundle_price_display }}</span>
+                            {% if offer.savings > 0 %}
+                            <span class="hero-price-was">{{ offer.original_total_display }}</span>
+                            {% endif %}
+                        </p>
 
-                    <a href="{{ url_for('shop.offer_detail', slug=offer.slug) }}" class="btn-primary btn-hero">
-                        اطلب العرض
-                    </a>
+                        <a href="{{ url_for('shop.offer_detail', slug=offer.slug) }}" class="btn-primary btn-hero">
+                            اطلب العرض
+                        </a>
+                    </div>
                 </div>
             </div>
         </article>

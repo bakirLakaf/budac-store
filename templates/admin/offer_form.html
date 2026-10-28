@@ -72,6 +72,44 @@
                 <span>مفعّل</span>
             </label>
 
+            {# ═══ تصميم الشريحة فالصفحة الرئيسية (v182) ═══ #}
+            {% set cur_style = offer.style if offer else 'gold' %}
+            {% set cur_layout = offer.layout if offer else 'split' %}
+            <fieldset class="spotlight-settings">
+                <legend>تصميم العرض فالصفحة الرئيسية</legend>
+                <p class="hint">كيفاش تبان شريحة هاد العرض فسلايدر أول الصفحة. الصورة تبان <strong>كاملة</strong> دايمًا (بلا قص).</p>
+
+                <span class="lpf-sub">الألوان</span>
+                <div class="lpf-choices">
+                    {% for code, name, desc, _edge in Offer_HERO_STYLES %}
+                    <label class="lpf-choice">
+                        <input type="radio" name="hero_style" value="{{ code }}" {{ 'checked' if cur_style == code }}>
+                        <span class="lpf-choice-body">
+                            <span class="tpl-mock tpl-{{ code }}" aria-hidden="true">
+                                <i class="tm-hero"></i><i class="tm-line"></i><i class="tm-btn"></i>
+                            </span>
+                            <b>{{ name }}</b><small>{{ desc }}</small>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+
+                <span class="lpf-sub">التخطيط</span>
+                <div class="lpf-choices">
+                    {% for code, name, desc in Offer_HERO_LAYOUTS %}
+                    <label class="lpf-choice">
+                        <input type="radio" name="hero_layout" value="{{ code }}" {{ 'checked' if cur_layout == code }}>
+                        <span class="lpf-choice-body">
+                            <span class="lay-mock hl-{{ code }}" aria-hidden="true">
+                                <i class="lm-img"></i><i class="lm-info"></i><i class="lm-form"></i>
+                            </span>
+                            <b>{{ name }}</b><small>{{ desc }}</small>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+
             <fieldset class="spotlight-settings">
                 <legend>قسم «عرض خاص» بالصورة الكبيرة</legend>
                 <p class="hint">

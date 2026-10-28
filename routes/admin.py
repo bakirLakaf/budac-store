@@ -1509,7 +1509,8 @@ def offer_form(offer_id=None):
         if not title:
             flash("عنوان العرض مطلوب", "error")
             return render_template(
-                "admin/offer_form.html", offer=offer, all_products=all_products
+                "admin/offer_form.html", offer=offer, all_products=all_products,
+                Offer_HERO_STYLES=Offer.HERO_STYLES, Offer_HERO_LAYOUTS=Offer.HERO_LAYOUTS,
             )
 
         slug = (request.form.get("slug") or "").strip() or slugify(title)
@@ -1520,7 +1521,8 @@ def offer_form(offer_id=None):
         if clash.first():
             flash(f"الرابط '{slug}' مستعمل عند عرض آخر", "error")
             return render_template(
-                "admin/offer_form.html", offer=offer, all_products=all_products
+                "admin/offer_form.html", offer=offer, all_products=all_products,
+                Offer_HERO_STYLES=Offer.HERO_STYLES, Offer_HERO_LAYOUTS=Offer.HERO_LAYOUTS,
             )
 
         if offer is None:
@@ -1539,6 +1541,12 @@ def offer_form(offer_id=None):
         position = request.form.get("spotlight_position", "none")
         offer.spotlight_position = position if position in ("none", "top", "bottom") else "none"
         offer.spotlight_text = (request.form.get("spotlight_text") or "").strip() or None
+
+        # تصميم الشريحة فالصفحة الرئيسية (v182) — قيم مضبوطة بالقائمة
+        style = request.form.get("hero_style", "gold")
+        offer.hero_style = style if style in {s[0] for s in Offer.HERO_STYLES} else "gold"
+        layout = request.form.get("hero_layout", "split")
+        offer.hero_layout = layout if layout in {l[0] for l in Offer.HERO_LAYOUTS} else "split"
 
         # التواريخ اختيارية
         offer.starts_at = _parse_date(request.form.get("starts_at"))
@@ -1581,7 +1589,8 @@ def offer_form(offer_id=None):
         return redirect(url_for("admin.offer_form", offer_id=offer.id))
 
     return render_template(
-        "admin/offer_form.html", offer=offer, all_products=all_products
+        "admin/offer_form.html", offer=offer, all_products=all_products,
+                Offer_HERO_STYLES=Offer.HERO_STYLES, Offer_HERO_LAYOUTS=Offer.HERO_LAYOUTS,
     )
 
 

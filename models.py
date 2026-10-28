@@ -629,6 +629,41 @@ class Offer(db.Model):
 
     starts_at = db.Column(db.DateTime, nullable=True)  # اختياري: بداية العرض
     ends_at = db.Column(db.DateTime, nullable=True)    # اختياري: نهاية العرض
+
+    # ---------- v182: تصميم العرض فسلايدر الصفحة الرئيسية ----------
+    # ⚠️ nullable: العروض القديمة تبقى NULL = «gold» + «split» (نفس المظهر القديم
+    # لكن بصورة كاملة وزر واضح).
+    hero_style = db.Column(db.String(10), nullable=True, default="gold")
+    hero_layout = db.Column(db.String(10), nullable=True, default="split")
+
+    # style → (الاسم، الوصف، لون حافة الهيدر المسنّنة ليتّصل بخلفية الشريحة)
+    HERO_STYLES = (
+        ("gold", "ذهبي", "بنفسجي غامق وذهبي — هوية BUDAC", "#2E1A47"),
+        ("clean", "نظيف", "أبيض بسيط وأنيق", "#FFFFFF"),
+        ("story", "دافئ", "كريمي وبني — إحساس تقليدي", "#F6EFE4"),
+        ("fun", "مرح", "أزرق وأصفر ساطع — للمواسم", "#3A86FF"),
+        ("soft", "عصري", "بنفسجي ناعم وبطاقات زجاجية", "#E9E2FF"),
+        ("craft", "حِرفي", "ألوان ترابية — للمواد الحرفية", "#F0E2CC"),
+    )
+    HERO_LAYOUTS = (
+        ("split", "صورة + نص", "الصورة جنب العنوان والسعر والزر"),
+        ("banner", "بانر كامل", "الصورة كبيرة بعرض الصفحة، وتحتها السعر والزر (مناسب للبانر اللي فيه النص)"),
+    )
+
+    @property
+    def style(self):
+        valid = {s[0] for s in self.HERO_STYLES}
+        return self.hero_style if self.hero_style in valid else "gold"
+
+    @property
+    def layout(self):
+        valid = {l[0] for l in self.HERO_LAYOUTS}
+        return self.hero_layout if self.hero_layout in valid else "split"
+
+    @property
+    def style_edge_color(self):
+        """لون الحافة المسنّنة تحت الهيدر — نفس خلفية الشريحة، بلا شريط أبيض."""
+        return next((s[3] for s in self.HERO_STYLES if s[0] == self.style), "#2E1A47")
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     items = db.relationship(

@@ -109,7 +109,7 @@ a { color: inherit; text-decoration: none; }
 /* البصمة المميزة: حافة مسننة — تحاكي حافة قماش/ديكور منزلي */
 .scallop-divider {
     height: 18px;
-    background-image: radial-gradient(circle at 9px 0, transparent 9px, var(--color-bg) 9.5px);
+    background-image: radial-gradient(circle at 9px 0, transparent 9px, var(--scallop-bg, var(--color-bg)) 9.5px);
     background-size: 18px 18px;
     background-repeat: repeat-x;
     background-color: var(--color-primary);
@@ -3879,3 +3879,116 @@ button.pager-num.is-disabled {
 .rv-pick-hint { margin: 6px 0 0; font-size: 13px; color: #6b6258; min-height: 20px; }
 .rv-pick-hint strong { color: var(--color-gold-dark, #b8862b); }
 .rv-pick-hint.is-low { color: #b3402a; }
+
+/* ═══════════════════════════════════════════════════════
+   v182 — سلايدر العروض: ألوان (مثل صفحات الهبوط) + بانر كامل
+   ─────────────────────────────────────────────────────
+   المشاكل اللي صلّحناها:
+   1) الصورة كانت تتقصّ (aspect-ratio 4/3 + object-fit: cover على بانر 16:9)
+      ← دركا تبان كاملة بنسبتها الأصلية.
+   2) الزر لونو = لون الخلفية (btn-primary بنفسجي فوق خلفية بنفسجية)
+      ← زر بلون «accent» تاع كل ستايل.
+   3) شريطة بيضاء بين الهيدر والعرض ← الحافة المسنّنة تاخذ لون الشريحة.
+   كل ستايل = متغيّرات على .hs-<style> (نفس فكرة قوالب صفحة الهبوط).
+   ═══════════════════════════════════════════════════════ */
+.hero-slide {
+    --hs-bg: #2E1A47; --hs-ink: #fff; --hs-soft: rgba(255, 255, 255, 0.78);
+    --hs-accent: #C9A227; --hs-accent-ink: #2E1A47; --hs-price: #C9A227;
+    --hs-card: rgba(255, 255, 255, 0.06);
+    background: var(--hs-bg);
+    color: var(--hs-ink);
+}
+.hs-clean {
+    --hs-bg: #FFFFFF; --hs-ink: #221C2B; --hs-soft: #5C5468;
+    --hs-accent: #2E1A47; --hs-accent-ink: #FFFFFF; --hs-price: #2E1A47;
+    --hs-card: #F4F1EA;
+}
+.hs-story {
+    --hs-bg: #F6EFE4; --hs-ink: #2B2118; --hs-soft: #6B5A48;
+    --hs-accent: #7A4B2A; --hs-accent-ink: #FFFFFF; --hs-price: #7A4B2A;
+    --hs-card: #EADFCB;
+}
+.hs-fun {
+    --hs-bg: #3A86FF; --hs-ink: #FFFFFF; --hs-soft: rgba(255, 255, 255, 0.9);
+    --hs-accent: #FFD23F; --hs-accent-ink: #1B1B3A; --hs-price: #FFD23F;
+    --hs-card: rgba(255, 255, 255, 0.16);
+}
+.hs-soft {
+    --hs-bg: linear-gradient(180deg, #E9E2FF 0%, #F5F2FF 100%);
+    --hs-ink: #241B3D; --hs-soft: #645C7E;
+    --hs-accent: #6C4CF1; --hs-accent-ink: #FFFFFF; --hs-price: #5B3FE0;
+    --hs-card: #FFFFFF;
+}
+.hs-craft {
+    --hs-bg: #F0E2CC; --hs-ink: #3A2619; --hs-soft: #7A6250;
+    --hs-accent: #B5472B; --hs-accent-ink: #FFFFFF; --hs-price: #B5472B;
+    --hs-card: #E6D2B4;
+}
+
+.hero-slider { background: transparent; }
+.hero-slide-text { color: var(--hs-ink); }
+.hero-slide-text .hero-eyebrow { color: var(--hs-price); }
+.hero-slide-text .hero-title { color: var(--hs-ink); }
+.hero-slide-text .hero-subtitle { color: var(--hs-soft); }
+.hero-includes li { color: var(--hs-soft); }
+.hero-includes li::before { color: var(--hs-accent); }
+.hs-clean .hero-includes li::before, .hs-gold .hero-includes li::before { color: var(--hs-price); }
+.hero-price-now { color: var(--hs-price); }
+.hero-price-was { color: var(--hs-soft); opacity: 0.75; }
+.hero-save { background: var(--hs-accent); color: var(--hs-accent-ink); }
+.hero-slide-media { background: var(--hs-card); }
+
+/* 2) الزر: لون واضح فوق أي خلفية */
+.btn-hero, .hero-slide .btn-hero {
+    background: var(--hs-accent);
+    color: var(--hs-accent-ink);
+    font-weight: 800;
+    box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.55);
+}
+.hero-slide .btn-hero:hover:not(:disabled) { background: var(--hs-accent); filter: brightness(1.1); }
+.hs-soft .btn-hero { background: linear-gradient(135deg, #6C4CF1, #8A63FF); }
+.hs-fun .btn-hero { border: 2.5px solid #1B1B3A; box-shadow: 3px 3px 0 #1B1B3A; }
+
+/* 1) الصورة كاملة بنسبتها الأصلية */
+.hero-slide-media.has-banner { aspect-ratio: auto; background: transparent; }
+.hero-slide-media.has-banner > img {
+    width: 100%; height: auto; display: block;
+    object-fit: contain;
+    border-radius: 20px;
+    box-shadow: 0 24px 50px -24px rgba(0, 0, 0, 0.55);
+}
+
+.hero-buy { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 28px; }
+.hero-buy .hero-price { margin: 0; }
+.hs-sr {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* السهمين والنقاط: فوق الشريحة، بخلفية غامقة شفافة تبان على أي لون */
+.hero-controls {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    padding: 5px 12px; gap: 10px;
+    background: rgba(20, 12, 34, 0.5); border-radius: 999px;
+    backdrop-filter: blur(6px);
+}
+.hero-arrow { width: 30px; height: 30px; font-size: 20px; }
+.hero-slide-inner { padding-bottom: 72px; }
+
+/* ── تخطيط «بانر كامل»: الصورة بعرض الصفحة، تحتها السعر والزر ── */
+.hero-slide.is-banner .hero-slide-inner {
+    grid-template-columns: 1fr; gap: 22px;
+    max-width: 960px; padding-top: 28px;
+}
+.hero-slide.is-banner .hero-slide-text { text-align: center; }
+.hero-slide.is-banner .hero-buy { justify-content: center; }
+
+@media (max-width: 980px) {
+    .hero-slide-media.has-banner { aspect-ratio: auto; }
+    .hero-slide-inner { padding-bottom: 68px; }
+    .hero-buy { justify-content: space-between; }
+}
+
+/* الشرائح تتقاسم نفس الارتفاع (الأطول): نوسّطو المحتوى عموديًا بلا فراغ مائل لتحت */
+.hero-slide { display: flex; align-items: center; }
+.hero-slide-inner { width: 100%; }

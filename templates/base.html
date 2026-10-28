@@ -139,7 +139,7 @@
     </script>
     {% endif %}
 </head>
-<body>
+<body{% if scallop_color %} style="--scallop-bg: {{ scallop_color }}"{% endif %}>
 
     <header class="site-header">
         <div class="container header-inner">
