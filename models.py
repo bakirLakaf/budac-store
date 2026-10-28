@@ -633,6 +633,9 @@ class Offer(db.Model):
     # ---------- v182: تصميم العرض فسلايدر الصفحة الرئيسية ----------
     # ⚠️ nullable: العروض القديمة تبقى NULL = «gold» + «split» (نفس المظهر القديم
     # لكن بصورة كاملة وزر واضح).
+    # أماكن الظهور فالصفحة الرئيسية: NULL = يبان (العروض القديمة تبقى كيما كانت)
+    show_in_hero = db.Column(db.Boolean, nullable=True, default=True)   # سلايدر أول الصفحة
+    show_in_grid = db.Column(db.Boolean, nullable=True, default=True)   # بطاقات «عروض خاصة»
     hero_style = db.Column(db.String(10), nullable=True, default="gold")
     hero_layout = db.Column(db.String(10), nullable=True, default="split")
 
@@ -649,6 +652,14 @@ class Offer(db.Model):
         ("split", "صورة + نص", "الصورة جنب العنوان والسعر والزر"),
         ("banner", "بانر كامل", "الصورة كبيرة بعرض الصفحة، وتحتها السعر والزر (مناسب للبانر اللي فيه النص)"),
     )
+
+    @property
+    def in_hero(self):
+        return self.show_in_hero is not False
+
+    @property
+    def in_grid(self):
+        return self.show_in_grid is not False
 
     @property
     def style(self):

@@ -5,8 +5,8 @@
    بلاه تبان شريطة بيضاء بين الهيدر والعرض. #}
 {% if spotlight and spotlight.spotlight_position == "top" %}
     {% set scallop_color = "#2E1A47" %}
-{% elif offers %}
-    {% set scallop_color = offers[0].style_edge_color %}
+{% elif hero_offers %}
+    {% set scallop_color = hero_offers[0].style_edge_color %}
 {% endif %}
 
 {% block content %}
@@ -15,10 +15,10 @@
 {{ spotlight_section(spotlight) }}
 {% endif %}
 
-{% if offers %}
+{% if hero_offers %}
 <section class="hero-slider" id="heroSlider" aria-roledescription="carousel" aria-label="العروض الخاصة">
     <div class="hero-track" id="heroTrack">
-        {% for offer in offers[:4] %}
+        {% for offer in hero_offers[:4] %}
         {% set banner_mode = offer.layout == "banner" and offer.banner_filename %}
         <article class="hero-slide hs-{{ offer.style }}{{ ' is-banner' if banner_mode }}" data-index="{{ loop.index0 }}">
             <div class="container hero-slide-inner">
@@ -65,7 +65,7 @@
                         </p>
 
                         <a href="{{ url_for('shop.offer_detail', slug=offer.slug) }}" class="btn-primary btn-hero">
-                            اطلب العرض
+                            اطلب الآن
                         </a>
                     </div>
                 </div>
@@ -74,11 +74,11 @@
         {% endfor %}
     </div>
 
-    {% if offers|length > 1 %}
+    {% if hero_offers|length > 1 %}
     <div class="hero-controls">
         <button type="button" class="hero-arrow" data-dir="-1" aria-label="السابق">‹</button>
         <div class="hero-dots" id="heroDots">
-            {% for offer in offers[:4] %}
+            {% for offer in hero_offers[:4] %}
             <button type="button" class="hero-dot {{ 'is-active' if loop.first }}"
                     data-index="{{ loop.index0 }}" aria-label="عرض {{ loop.index }}"></button>
             {% endfor %}
@@ -135,7 +135,7 @@
 </section>
 {% endif %}
 
-{% if offers %}
+{% if grid_offers %}
 <section class="offers-section">
     <div class="container">
         <div class="section-head">
@@ -144,7 +144,7 @@
         </div>
 
         <div class="offers-grid">
-            {% for offer in offers %}
+            {% for offer in grid_offers %}
             <a href="{{ url_for('shop.offer_detail', slug=offer.slug) }}" class="offer-card">
                 <div class="offer-card-banner">
                     {% if offer.banner_filename %}

@@ -1542,6 +1542,10 @@ def offer_form(offer_id=None):
         offer.spotlight_position = position if position in ("none", "top", "bottom") else "none"
         offer.spotlight_text = (request.form.get("spotlight_text") or "").strip() or None
 
+        # أماكن الظهور (v183): checkbox غير معلّم = ما يبانش هناك
+        offer.show_in_hero = bool(request.form.get("show_in_hero"))
+        offer.show_in_grid = bool(request.form.get("show_in_grid"))
+
         # تصميم الشريحة فالصفحة الرئيسية (v182) — قيم مضبوطة بالقائمة
         style = request.form.get("hero_style", "gold")
         offer.hero_style = style if style in {s[0] for s in Offer.HERO_STYLES} else "gold"

@@ -317,6 +317,8 @@ def _add_missing_columns(db):
         ("offers", "spotlight_position", "VARCHAR(10) NOT NULL DEFAULT 'none'"),
         ("offers", "spotlight_text", "TEXT"),
         ("offers", "hero_style", "VARCHAR(10)"),
+        ("offers", "show_in_hero", "BOOLEAN DEFAULT TRUE"),
+        ("offers", "show_in_grid", "BOOLEAN DEFAULT TRUE"),
         ("offers", "hero_layout", "VARCHAR(10)"),
         ("shipping_rates", "carrier_territory_id", "VARCHAR(60)"),
         ("orders", "commune_external_id", "VARCHAR(80)"),

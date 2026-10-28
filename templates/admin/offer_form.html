@@ -72,6 +72,23 @@
                 <span>مفعّل</span>
             </label>
 
+            {# ═══ أماكن ظهور العرض (v183): كل الاختيارات ممكنة، حتى كلهم أو حتى واحد ═══ #}
+            <fieldset class="spotlight-settings">
+                <legend>وين يبان هاد العرض؟</legend>
+                <p class="hint">علّم الأماكن اللي تحب العرض يبان فيها. تقدر تختار واحد، ولا جوج، ولا كلهم.</p>
+                <label class="lpf-switch">
+                    <input type="checkbox" name="show_in_hero" {{ 'checked' if (not offer or offer.in_hero) }}>
+                    <span><strong>فوق</strong> — سلايدر أول الصفحة (تحت الهيدر)</span>
+                </label>
+                <label class="lpf-switch">
+                    <input type="checkbox" name="show_in_grid" {{ 'checked' if (not offer or offer.in_grid) }}>
+                    <span><strong>وسط</strong> — قسم «عروض خاصة» (بطاقات)</span>
+                </label>
+                <p class="hint">
+                    <strong>القسم الكبير بالصورة</strong> (فوق ولا تحت الصفحة) تلقاه فالخيار الجاي «مكان الظهور».
+                </p>
+            </fieldset>
+
             {# ═══ تصميم الشريحة فالصفحة الرئيسية (v182) ═══ #}
             {% set cur_style = offer.style if offer else 'gold' %}
             {% set cur_layout = offer.layout if offer else 'split' %}
@@ -111,7 +128,7 @@
             </fieldset>
 
             <fieldset class="spotlight-settings">
-                <legend>قسم «عرض خاص» بالصورة الكبيرة</legend>
+                <legend>القسم الكبير «عرض خاص» (تحت أو فوق الصفحة)</legend>
                 <p class="hint">
                     يعرض هاد العرض فبلوك كبير بالصورة والسعر والزر.
                     عرض واحد برك يبان — إذا فعّلت أكثر من واحد ياخذ الأول حسب ترتيب الظهور.

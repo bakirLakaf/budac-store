@@ -77,3 +77,61 @@ def test_admin_offer_form_lists_styles_and_layouts(logged_in_admin, app):
     for code in ("gold", "clean", "story", "fun", "soft", "craft"):
         assert f'name="hero_style" value="{code}"' in html
     assert 'name="hero_layout" value="banner"' in html
+
+
+# ───────────── v183: أماكن الظهور + نص الزر ─────────────
+
+def _html(client):
+    return client.get("/").get_data(as_text=True)
+
+
+def test_offer_shows_in_hero_and_cards_by_default(client, app):
+    _offer()
+    html = _html(client)
+    assert "hero-slide hs-" in html and 'class="offer-card"' in html
+
+
+def test_only_top_hides_cards(client, app):
+    _offer(show_in_grid=False)
+    html = _html(client)
+    assert "hero-slide hs-" in html and "offers-section" not in html
+
+
+def test_only_cards_hides_slider_and_scallop_color(client, app):
+    _offer(show_in_hero=False)
+    html = _html(client)
+    assert "hero-slide hs-" not in html and "--scallop-bg" not in html
+    assert 'class="offer-card"' in html
+
+
+def test_bottom_only_uses_spotlight_and_nothing_else(client, app):
+    _offer(show_in_hero=False, show_in_grid=False, spotlight_position="bottom")
+    html = _html(client)
+    assert "hero-slide hs-" not in html and "offers-section" not in html
+    assert "spotlight-section" in html
+
+
+def test_top_and_bottom_together(client, app):
+    _offer(show_in_grid=False, spotlight_position="bottom")
+    html = _html(client)
+    assert "hero-slide hs-" in html and "spotlight-section" in html and "offers-section" not in html
+
+
+def test_legacy_null_flags_mean_visible(app):
+    o = _offer(show_in_hero=None, show_in_grid=None)
+    assert o.in_hero and o.in_grid
+
+
+def test_buttons_say_order_now(client, app):
+    _offer(spotlight_position="bottom")
+    html = _html(client)
+    assert "اطلب العرض" not in html and html.count("اطلب الآن") >= 2
+
+
+def test_admin_saves_placements(logged_in_admin, app):
+    o = _offer()
+    pid = str(Product.query.first().id)
+    logged_in_admin.post(f"/admin/offers/{o.id}/edit", data={
+        "title": "عرض", "bundle_price": "900", "product_ids": [pid], "show_in_hero": "on"})
+    o = db.session.get(Offer, o.id)
+    assert o.show_in_hero is True and o.show_in_grid is False

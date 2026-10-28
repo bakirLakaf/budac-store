@@ -148,8 +148,14 @@ def home():
     # تقييمات الزبائن — تبان فوق التذييل
     testimonials = _find_testimonials() if is_landing_view else []
 
+    # أماكن الظهور: كل عرض يقرر وين يبان (سلايدر فوق / بطاقات / القسم الكبير)
+    hero_offers = [o for o in offers if o.in_hero]
+    grid_offers = [o for o in offers if o.in_grid]
+
     return render_template(
         "shop/home.html",
+        hero_offers=hero_offers,
+        grid_offers=grid_offers,
         testimonials=testimonials,
         products=products,
         pagination=pagination,
