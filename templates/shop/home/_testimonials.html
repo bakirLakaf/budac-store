@@ -1,0 +1,39 @@
+{% if testimonials %}
+{# ═══════════ تقييمات الزبائن ═══════════
+   سلايدر يمشي وحدو. الهدف: آخر شي يشوفو الزائر قبل ما ينزل
+   للتذييل هو كلام زبائن راضيين — أقوى دافع للشراء من أي نص نكتبوه احنا.
+#}
+<section class="testi" aria-label="تقييمات الزبائن">
+    <div class="container">
+        <h2 class="section-heading testi-heading">تقييمات الزبائن</h2>
+
+        <div class="testi-viewport" id="testiViewport">
+            <div class="testi-track" id="testiTrack">
+                {% for t in testimonials %}
+                <article class="testi-card">
+                    <div class="testi-stars" aria-label="{{ t.rating }} من 5">
+                        {% for i in range(5) %}<span
+                            class="{{ 'on' if i < t.rating else 'off' }}">★</span>{% endfor %}
+                    </div>
+
+                    <p class="testi-text">{{ t.comment }}</p>
+
+                    <footer class="testi-foot">
+                        <span class="testi-avatar" aria-hidden="true">{{ t.author_name[0] }}</span>
+                        <span class="testi-who">
+                            <strong>{{ t.author_name }}</strong>
+                            {% if t.product %}
+                            <a href="{{ url_for('shop.product_detail', slug=t.product.slug) }}">{{ t.product.name }}</a>
+                            {% endif %}
+                        </span>
+                    </footer>
+                </article>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# النقاط — تبان فقط إذا فيه أكثر من بطاقة وحدة تبان فالشاشة #}
+        <div class="testi-dots" id="testiDots" aria-hidden="true"></div>
+    </div>
+</section>
+{% endif %}

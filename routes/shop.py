@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy import func
 
 from models import db, Product, Category, Offer, OfferItem, OrderItem, Order, Review
+from services import homepage
 from services import ratelimit
 
 # ⚠️ نفس دالة التقريب اللي يستعملها الشراء — باش الجدول والفاتورة
@@ -114,6 +115,11 @@ def home():
     # هو راه يدور على منتج معيّن — ما نعرضوش عليه صفحة كاملة مرة أخرى.
     is_landing_view = not category_slug and page_number == 1
 
+    # ترتيب الأقسام + خياراتها من لوحة تحكم الصفحة الرئيسية (أدمن ← الصفحة الرئيسية)
+    home_sections = homepage.active_sections()
+    home_keys = {s["key"] for s in home_sections}
+    opts = {s["key"]: s["options"] for s in home_sections}
+
     offers = []
     if is_landing_view:
         # joinedload يجيب العروض ومنتجاتها وتنويعاتها فاستعلام واحد.
@@ -127,7 +133,7 @@ def home():
         offers = [o for o in candidates if o.is_running and o.items and o.is_available]
 
     newest, best_sellers = [], []
-    if is_landing_view:
+    if is_landing_view and ("newest" in home_keys or "best_sellers" in home_keys):
         # ⚠️ استعلام مستقل بحدّو: قبل كان ياخذ من `products`، واللي
         # ولّات درك 9 منتجات برك — فقسم «الجديد» كان يفرغ.
         newest = [
@@ -136,17 +142,18 @@ def home():
                 .options(joinedload(Product.category), joinedload(Product.variants))
                 .filter_by(is_active=True)
                 .order_by(Product.created_at.desc())
-                .limit(16).all()
+                .limit(30).all()
             )
             if p.is_in_stock
-        ][:8]
-        best_sellers = _find_best_sellers(limit=8)
+        ][:opts.get("newest", {}).get("count", 6)] if "newest" in home_keys else []
+        best_sellers = (_find_best_sellers(limit=opts["best_sellers"]["count"])
+                        if "best_sellers" in home_keys else [])
 
     # العرض المميّز (قسم الصورة الكبيرة) — واحد فقط، فوق أو تحت
     spotlight = _find_spotlight_offer()
 
     # تقييمات الزبائن — تبان فوق التذييل
-    testimonials = _find_testimonials() if is_landing_view else []
+    testimonials = _find_testimonials() if (is_landing_view and "testimonials" in home_keys) else []
 
     # أماكن الظهور: كل عرض يقرر وين يبان (سلايدر فوق / بطاقات / القسم الكبير)
     hero_offers = [o for o in offers if o.in_hero]
@@ -169,7 +176,8 @@ def home():
         newest=newest,
         best_sellers=best_sellers,
         spotlight=spotlight,
-        delivery_carriers=_delivery_carriers() if is_landing_view else [],
+        delivery_carriers=_delivery_carriers() if (is_landing_view and "carriers" in home_keys) else [],
+        home_sections=home_sections,
     )
 
 

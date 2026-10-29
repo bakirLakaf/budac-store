@@ -1,0 +1,39 @@
+{% if categories %}
+<section class="categories-section categories-mobile reveal" id="categories">
+    <div class="container">
+        <div class="section-head">
+            <h2 class="section-heading">تسوّق حسب التصنيف</h2>
+            <p class="section-sub">صيب اللي تحتاجو بسرعة</p>
+        </div>
+
+        <div class="categories-grid">
+            {# بطاقة "الكل" — تلغي الفلتر. البطاقات كلها تفلتر فورًا بلا
+               إعادة تحميل (شوف site.js). #}
+            <a href="{{ url_for('shop.home') }}" class="category-card category-card-all"
+               data-cat="all">
+                <div class="category-card-image">
+                    <span class="category-mono">✦</span>
+                </div>
+                <span class="category-card-name">كل المنتجات</span>
+                <span class="category-card-arrow" aria-hidden="true">‹</span>
+            </a>
+
+            {% for cat in categories %}
+            <a href="{{ url_for('shop.home', category=cat.slug) }}" class="category-card"
+               data-cat="{{ cat.slug }}">
+                <div class="category-card-image">
+                    {% if cat.image_filename %}
+                        <img src="{{ url_for('static', filename='img/categories/' + (cat.image_filename | thumb)) }}"
+                             alt="{{ cat.name }}" loading="lazy">
+                    {% else %}
+                        <span class="category-mono">{{ cat.name[0] }}</span>
+                    {% endif %}
+                </div>
+                <span class="category-card-name">{{ cat.name }}</span>
+                <span class="category-card-arrow" aria-hidden="true">‹</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}

@@ -1,0 +1,8 @@
+{% if best_sellers %}
+{% set strip_title = "الأكثر طلبًا" %}
+{% set strip_sub = "اللي الزبائن يحبّوه" %}
+{% set strip_products = best_sellers %}
+{% set strip_opts = s.options %}
+{% set strip_cls = "" %}
+{% include "shop/home/_strip.html" %}
+{% endif %}

@@ -1,0 +1,4 @@
+{% from "shop/_spotlight.html" import spotlight_section %}
+{% if spotlight and spotlight.spotlight_position == "bottom" %}
+{{ spotlight_section(spotlight) }}
+{% endif %}

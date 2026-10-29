@@ -1,0 +1,159 @@
+<section class="product-grid-section reveal" id="products">
+    <div class="container shop-layout">
+
+        {# ---------- الشريط الجانبي: يبان فالحاسوب فقط، ويبقى ملتصق عند التمرير ---------- #}
+        {% if categories %}
+        <aside class="shop-sidebar" aria-label="التصنيفات">
+            <div class="shop-sidebar-inner">
+                <h2 class="shop-sidebar-title">التصنيفات</h2>
+                <ul class="shop-sidebar-list">
+                    <li>
+                        <a href="{{ url_for('shop.home') }}"
+                           class="side-cat {{ 'is-active' if not active_category }}"
+                           data-cat="all">
+                            <span class="side-cat-name">كل المنتجات</span>
+                            <span class="side-cat-count">{{ products_total }}</span>
+                        </a>
+                    </li>
+                    {% for cat in categories %}
+                    {# ⚠️ العدد يجي من استعلام GROUP BY واحد، ماشي من عدّ الكتالوج كامل فالقالب #}
+                    {% set cat_count = category_counts.get(cat.slug, 0) %}
+                    <li>
+                        <a href="{{ url_for('shop.home', category=cat.slug) }}"
+                           class="side-cat {{ 'is-active' if active_category == cat.slug }}"
+                           data-cat="{{ cat.slug }}">
+                            <span class="side-cat-name">{{ cat.name }}</span>
+                            <span class="side-cat-count">{{ cat_count }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </aside>
+        {% endif %}
+
+        <div class="shop-main">
+
+            {# ⚠️ العدد يتطبع من السيرفر درك. JavaScript كان يحسبو من
+               البطاقات البانة — وهذا ما يخدمش مع الترقيم: الصفحة فيها
+               9 بطاقات بينما التصنيف فيه 45 منتج. #}
+            {% set shown_total = pagination.total if pagination else products|length %}
+            {% if shown_total %}
+            {# ⚠️ JavaScript يحدّث هاد الرقم عند الفلترة الفورية.
+               السيرفر يطبع القيمة الأولى باش تبان قبل ما يشتغل السكريبت. #}
+            <p class="shop-result-count" id="shopResultCount">
+                {{ shown_total }} منتج
+            </p>
+            {% endif %}
+
+            {% if products %}
+            <div class="product-grid" id="shopGrid"
+                 data-per-page="{{ per_page }}"
+                 data-client-paginated="{{ '1' if client_paginated else '0' }}">
+                {# ⚠️ الترقيم من السيرفر: هاد الشبكة فيها 9 منتجات برك،
+                   ماشي الكتالوج كامل. الفلترة بالتصنيف ولّات كذلك من
+                   السيرفر (روابط عادية) — الفلترة الفورية بـJavaScript
+                   ما تقدرش تخدم كي المنتجات ماشي كلها فالصفحة. #}
+                {% for product in products %}
+                <a href="{{ url_for('shop.product_detail', slug=product.slug) }}"
+                   class="product-card"
+                   data-cat="{{ product.category.slug if product.category else '' }}">
+                    <div class="product-card-image ph-{{ loop.index0 % 4 }}">
+                        {% if product.image_filename %}
+                            <img src="{{ url_for('static', filename='img/products/' + product.image_filename) }}" alt="{{ product.name }}" loading="lazy">
+                        {% else %}
+                            <span class="ph-monogram">{{ (product.name or "؟")[0] }}</span>
+                        {% endif %}
+                        {% if not product.is_in_stock %}
+                            <span class="badge-out">نفذت الكمية</span>
+                        {% elif product.has_discount %}
+                            <span class="badge-offer">-{{ product.discount_percent }}%</span>
+                        {% endif %}
+                    </div>
+                    <div class="product-card-body">
+                        {% if product.category %}
+                            <span class="product-card-cat">{{ product.category.name }}</span>
+                        {% endif %}
+                        <h3 class="product-card-name">{{ product.name }}</h3>
+                        <p class="product-card-price">
+                            {{ product.price_display }}
+                            {% if product.has_discount %}
+                                <span class="price-compare">{{ product.compare_at_price_display }}</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+
+            {# ---------- أرقام الصفحات ---------- #}
+            {#
+              ⚠️ حالتان:
+              1) الكتالوج صغير (الوضع العادي): السيرفر بعث كل المنتجات،
+                 وJavaScript يبني الترقيم ويبدّل الصفحات **فورًا** —
+                 بلا إعادة تحميل وبلا قفزة تمرير.
+              2) الكتالوج ضخم (فوق MAX_CLIENT_PAGINATION): السيرفر
+                 يرجع للترقيم تاعو، والروابط عادية.
+            #}
+            {% if client_paginated %}
+
+            {# يعمّرها JavaScript. تبقى فارغة إذا السكريبت ما حمّلش —
+               وساعتها كل المنتجات بانة، وهذا سلوك سليم ماشي صفحة مكسورة. #}
+            <nav class="pager" id="shopPager" aria-label="صفحات المنتجات" hidden></nav>
+            <p class="pager-info" id="shopPagerInfo" hidden></p>
+
+            {% elif pagination and pagination.pages > 1 %}
+            <nav class="pager" aria-label="صفحات المنتجات">
+                {% if pagination.has_prev %}
+                    <a class="pager-btn" rel="prev" aria-label="الصفحة السابقة"
+                       href="{{ url_for('shop.home', category=active_category, page=pagination.prev_num) }}#products">›</a>
+                {% else %}
+                    <span class="pager-btn is-disabled" aria-hidden="true">›</span>
+                {% endif %}
+
+                {% for num in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
+                    {% if num %}
+                        {% if num == pagination.page %}
+                            <span class="pager-num is-current" aria-current="page">{{ num }}</span>
+                        {% else %}
+                            <a class="pager-num"
+                               href="{{ url_for('shop.home', category=active_category, page=num) }}#products">{{ num }}</a>
+                        {% endif %}
+                    {% else %}
+                        <span class="pager-gap" aria-hidden="true">…</span>
+                    {% endif %}
+                {% endfor %}
+
+                {% if pagination.has_next %}
+                    <a class="pager-btn" rel="next" aria-label="الصفحة التالية"
+                       href="{{ url_for('shop.home', category=active_category, page=pagination.next_num) }}#products">‹</a>
+                {% else %}
+                    <span class="pager-btn is-disabled" aria-hidden="true">‹</span>
+                {% endif %}
+            </nav>
+
+            <p class="pager-info">
+                صفحة {{ pagination.page }} من {{ pagination.pages }} · {{ pagination.total }} منتج
+            </p>
+            {% endif %}
+
+            {# رسالة الفلتر الفارغ — JavaScript يبيّنها عند الحاجة #}
+            <p class="shop-empty-filter" id="shopEmptyFilter" hidden>
+                ماكاين حتى منتج فهاد التصنيف درك.
+            </p>
+
+            {% elif active_category %}
+            {# تصنيف فارغ ولا صفحة خارج المدى — ماشي متجر فارغ #}
+            <div class="empty-state">
+                <p>ماكاين حتى منتج فهاد التصنيف درك.</p>
+                <a href="{{ url_for('shop.home') }}" class="btn-primary">شوف كل المنتجات</a>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>ماكاين حتى منتج درك. زيد منتجات من لوحة التحكم.</p>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</section>

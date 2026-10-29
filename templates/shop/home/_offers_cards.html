@@ -1,0 +1,53 @@
+{% if grid_offers %}
+<section class="offers-section">
+    <div class="container">
+        <div class="section-head">
+            <h2 class="section-heading" id="offers">عروض خاصة</h2>
+            <p class="section-sub">باقات مختارة بسعر أقل من شرائهم وحدة بوحدة</p>
+        </div>
+
+        <div class="offers-grid">
+            {% for offer in grid_offers %}
+            <a href="{{ offer_url(offer) }}" class="offer-card">
+                <div class="offer-card-banner">
+                    {% if offer.banner_filename %}
+                        <img src="{{ url_for('static', filename='img/offers/' + offer.banner_filename) }}" alt="{{ offer.title }}" loading="lazy">
+                    {% else %}
+                        <div class="offer-banner-fallback">
+                            {% for item in offer.items[:3] %}
+                                {% if item.product.image_filename %}
+                                <img src="{{ url_for('static', filename='img/products/' + (item.product.image_filename | thumb)) }}" alt="" loading="lazy">
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    {% if offer.savings_percent > 0 %}
+                        <span class="offer-save-badge">وفّر {{ offer.savings_percent }}%</span>
+                    {% endif %}
+                </div>
+
+                <div class="offer-card-body">
+                    <h3 class="offer-card-title">{{ offer.title }}</h3>
+                    {% if offer.subtitle %}
+                        <p class="offer-card-sub">{{ offer.subtitle }}</p>
+                    {% endif %}
+
+                    <ul class="offer-card-items">
+                        {% for item in offer.items %}
+                        <li>{{ item.product.name }}{% if item.quantity > 1 %} <span class="qty-badge">×{{ item.quantity }}</span>{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+
+                    <p class="offer-card-price">
+                        <span class="offer-price-now">{{ offer.bundle_price_display }}</span>
+                        {% if offer.savings > 0 %}
+                            <span class="offer-price-was">{{ offer.original_total_display }}</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}

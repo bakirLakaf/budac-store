@@ -5330,3 +5330,31 @@ def wa_auto_retry(row_id):
     db.session.commit()
     flash("رجعت الرسالة للطابور، تتبعث فدقائق", "success")
     return redirect(url_for("admin.wa_auto_page"))
+
+
+# ══════════════════════════════════════════════════════════════
+# v185 — لوحة تحكم الصفحة الرئيسية (ترتيب/إظهار الأقسام + خيارات)
+# ══════════════════════════════════════════════════════════════
+
+@admin_bp.route("/homepage", methods=["GET", "POST"])
+@login_required
+def homepage_settings():
+    from services import homepage
+
+    if request.method == "POST":
+        if request.form.get("action") == "reset":
+            homepage.reset_layout()
+            audit.record(AdminAction.SETTINGS_CHANGE, "homepage", "settings", "إعادة ضبط الصفحة الرئيسية")
+            db.session.commit()
+            flash("رجعت الصفحة الرئيسية للترتيب الافتراضي", "success")
+        else:
+            homepage.save_layout_from_form(request.form)
+            audit.record(AdminAction.SETTINGS_CHANGE, "homepage", "settings", "تعديل ترتيب الصفحة الرئيسية")
+            db.session.commit()
+            flash("تحفظت الصفحة الرئيسية", "success")
+        return redirect(url_for("admin.homepage_settings"))
+
+    specs = {s["key"]: s for s in homepage.SECTIONS}
+    rows = [{**item, "spec": specs[item["key"]]} for item in homepage.get_layout()]
+    return render_template("admin/homepage.html", rows=rows,
+                           count_min=homepage.COUNT_MIN, count_max=homepage.COUNT_MAX)

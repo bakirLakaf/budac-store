@@ -1,0 +1,8 @@
+{% if newest %}
+{% set strip_title = "وصل حديثًا" %}
+{% set strip_sub = "آخر ما أضفناه للمتجر" %}
+{% set strip_products = newest %}
+{% set strip_opts = s.options %}
+{% set strip_cls = "strip-newest" %}
+{% include "shop/home/_strip.html" %}
+{% endif %}

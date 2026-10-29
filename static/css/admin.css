@@ -2495,3 +2495,6 @@ body.ie-open { overflow: hidden; }
 .hl-banner .lm-info { display: none; }
 .hl-banner .lm-form { grid-row: 2; width: 40%; justify-self: center; }
 .lpf-sub { display: block; margin: 12px 0 6px; font-size: 13px; font-weight: 700; }
+
+.hl-image { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.hl-image .lm-info, .hl-image .lm-form { display: none; }

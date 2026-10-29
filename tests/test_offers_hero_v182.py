@@ -202,3 +202,29 @@ def test_admin_form_lists_landing_pages(logged_in_admin, app):
     _landing(o)
     html = logged_in_admin.get("/admin/offers/new").get_data(as_text=True)
     assert 'name="landing_page_id"' in html and "صفحة الهبوط: أغطية" in html
+
+
+# ───────────── v186: الصورة رابط + تخطيط «صورة فقط» ─────────────
+
+def test_banner_image_is_a_link_to_the_offer(client, app):
+    o = _offer()
+    html = _html(client)
+    assert f'class="hs-media-link"' in html and f"/offer/{o.slug}" in html
+
+
+def test_image_only_layout_has_no_duplicate_price_or_button(client, app):
+    _offer(hero_layout="image", hero_style="gold")
+    slide = _html(client).split("hs-gold is-banner is-image")[1].split("</article>")[0]
+    assert "hs-media-link" in slide and 'class="hs-sr"' in slide
+    assert "hero-buy" not in slide and "btn-hero" not in slide and "hero-save" not in slide
+
+
+def test_image_layout_without_banner_falls_back_to_split(client, app):
+    _offer(hero_layout="image", banner_filename=None)
+    html = _html(client)
+    assert "is-image" not in html.split("hero-slide-inner")[0] and "btn-hero" in html
+
+
+def test_admin_offers_image_layout_option(logged_in_admin, app):
+    html = logged_in_admin.get("/admin/offers/new").get_data(as_text=True)
+    assert 'name="hero_layout" value="image"' in html

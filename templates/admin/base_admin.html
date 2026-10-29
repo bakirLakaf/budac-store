@@ -88,6 +88,9 @@
         <a href="{{ url_for('admin.wa_templates_page') }}" class="{{ 'is-active' if 'wa_template' in request.endpoint }}">
             رسائل واتساب
         </a>
+        <a href="{{ url_for('admin.homepage_settings') }}" class="{{ 'is-active' if 'homepage' in request.endpoint }}">
+            الصفحة الرئيسية
+        </a>
         <a href="{{ url_for('admin.wa_auto_page') }}" class="{{ 'is-active' if 'wa_auto' in request.endpoint }}">
             واتساب التلقائي
         </a>

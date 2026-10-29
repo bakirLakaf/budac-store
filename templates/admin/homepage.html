@@ -1,0 +1,113 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+
+<div class="page-head">
+    <h1 class="page-title">الصفحة الرئيسية</h1>
+    <a class="btn-small" href="{{ url_for('shop.home') }}" target="_blank" rel="noopener">شوف الصفحة ↗</a>
+</div>
+
+<p class="hint">
+    رتّب أقسام الصفحة الرئيسية بالأسهم ↑ ↓، وفعّل أو خبّي أي قسم، وبدّل خياراتو.
+    الأقسام الفارغة (مثلاً «وصل حديثًا» بلا منتجات) ما تبانش وحدها.
+</p>
+
+<form method="post" id="homeForm" class="hp-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <ol class="hp-list" id="hpList">
+        {% for r in rows %}
+        {% set spec = r.spec %}
+        <li class="hp-row {{ '' if r.enabled else 'is-off' }}" data-key="{{ r.key }}">
+            <input type="hidden" name="order" value="{{ r.key }}">
+
+            <div class="hp-move">
+                <button type="button" class="hp-btn" data-move="-1" aria-label="فوق">↑</button>
+                <span class="hp-num"></span>
+                <button type="button" class="hp-btn" data-move="1" aria-label="تحت">↓</button>
+            </div>
+
+            <div class="hp-main">
+                <label class="lpf-switch">
+                    <input type="checkbox" name="on_{{ r.key }}" {{ 'checked' if r.enabled }}
+                           {{ 'disabled' if not spec.can_hide }}>
+                    <span><strong>{{ spec.label }}</strong></span>
+                </label>
+                {# checkbox معطّل ما يتبعثش: القسم الإجباري نبعثو بحقل مخفي #}
+                {% if not spec.can_hide %}<input type="hidden" name="on_{{ r.key }}" value="1">{% endif %}
+                <p class="hint">{{ spec.hint }}</p>
+
+                {% if spec.options %}
+                <div class="hp-opts">
+                    <label class="hp-opt">
+                        <span>عدد المنتجات</span>
+                        <input type="number" name="count_{{ r.key }}" min="{{ count_min }}" max="{{ count_max }}"
+                               value="{{ r.options.count }}">
+                    </label>
+                    <label class="hp-opt">
+                        <span>العرض</span>
+                        <select name="mode_{{ r.key }}">
+                            <option value="slider" {{ 'selected' if r.options.mode == 'slider' }}>سلايدر (3 تبان، يروح ويجي)</option>
+                            <option value="grid" {{ 'selected' if r.options.mode == 'grid' }}>شبكة عادية (الكل يبان)</option>
+                        </select>
+                    </label>
+                    <label class="lpf-switch hp-opt">
+                        <input type="checkbox" name="autoplay_{{ r.key }}" {{ 'checked' if r.options.autoplay }}>
+                        <span>يتحرّك وحدو (السلايدر)</span>
+                    </label>
+                </div>
+                {% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ol>
+
+    <div class="hp-actions">
+        <button type="submit" class="btn-primary">حفظ</button>
+        <button type="submit" name="action" value="reset" class="btn-small"
+                onclick="return confirm('نرجّعو الصفحة للترتيب الافتراضي؟')">إعادة الضبط</button>
+    </div>
+</form>
+
+<style>
+    .hp-list { list-style: none; margin: 18px 0; padding: 0; display: grid; gap: 10px; }
+    .hp-row { display: flex; gap: 14px; padding: 14px 16px; border: 1px solid var(--a-border, #E4DEEF);
+              border-radius: 12px; background: var(--a-surface, #fff); }
+    .hp-row.is-off { opacity: 0.55; }
+    .hp-move { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
+    .hp-btn { width: 30px; height: 28px; border: 1px solid var(--a-border, #D8D1E6); border-radius: 8px;
+              background: transparent; color: inherit; cursor: pointer; font-size: 15px; }
+    .hp-btn:hover { background: rgba(201, 162, 39, 0.18); }
+    .hp-num { font-size: 12px; opacity: 0.6; }
+    .hp-main { flex: 1; min-width: 0; }
+    .hp-opts { display: flex; flex-wrap: wrap; gap: 12px 18px; margin-top: 10px; align-items: end; }
+    .hp-opt { display: grid; gap: 4px; font-size: 13px; }
+    .hp-opt input[type=number] { width: 90px; }
+    .hp-actions { display: flex; gap: 12px; align-items: center; }
+</style>
+
+<script>
+(function () {
+    var list = document.getElementById('hpList');
+    function renumber() {
+        Array.prototype.forEach.call(list.children, function (li, i) {
+            li.querySelector('.hp-num').textContent = i + 1;
+        });
+    }
+    list.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-move]');
+        if (!btn) return;
+        var li = btn.closest('.hp-row');
+        var d = parseInt(btn.getAttribute('data-move'), 10);
+        if (d < 0 && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling);
+        if (d > 0 && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li);
+        renumber();
+    });
+    list.addEventListener('change', function (e) {
+        if (e.target.matches('input[type=checkbox][name^=on_]'))
+            e.target.closest('.hp-row').classList.toggle('is-off', !e.target.checked);
+    });
+    renumber();
+})();
+</script>
+
+{% endblock %}

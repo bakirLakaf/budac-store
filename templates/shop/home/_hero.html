@@ -1,0 +1,91 @@
+{% if hero_offers %}
+<section class="hero-slider" id="heroSlider" aria-roledescription="carousel" aria-label="العروض الخاصة">
+    <div class="hero-track" id="heroTrack">
+        {% for offer in hero_offers[:4] %}
+        {# banner/image يحتاجو صورة بانر؛ بلاها يرجعو لـ«صورة + نص» #}
+        {% set banner_mode = offer.layout in ("banner", "image") and offer.banner_filename %}
+        {# «صورة فقط»: البانر فيه السعر والزر، فما نعاودوهمش بنص تحتو #}
+        {% set image_mode = offer.layout == "image" and offer.banner_filename %}
+        <article class="hero-slide hs-{{ offer.style }}{{ ' is-banner' if banner_mode }}{{ ' is-image' if image_mode }}" data-index="{{ loop.index0 }}">
+            <div class="container hero-slide-inner">
+                <div class="hero-slide-media {{ 'has-banner' if offer.banner_filename else '' }}">
+                    <a href="{{ offer_url(offer) }}" class="hs-media-link" aria-label="{{ offer.title }}">
+                    {% if offer.banner_filename %}
+                        <img src="{{ url_for('static', filename='img/offers/' + offer.banner_filename) }}"
+                             alt="{{ offer.title }}" {% if not loop.first %}loading="lazy"{% endif %}>
+                    {% else %}
+                        <div class="hero-media-collage">
+                            {% for item in offer.items[:3] %}
+                                {% if item.product.image_filename %}
+                                <img src="{{ url_for('static', filename='img/products/' + (item.product.image_filename | thumb)) }}"
+                                     alt="" loading="lazy">
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    </a>
+                    {% if offer.savings_percent > 0 and not image_mode %}
+                        <span class="hero-save">وفّر {{ offer.savings_percent }}%</span>
+                    {% endif %}
+                </div>
+
+                <div class="hero-slide-text">
+                    {% if banner_mode %}
+                    <h2 class="hs-sr">{{ offer.title }}</h2>
+                    {% else %}
+                    <p class="hero-eyebrow">عرض خاص</p>
+                    <h2 class="hero-title">{{ offer.title }}</h2>
+                    {% if offer.subtitle %}<p class="hero-subtitle">{{ offer.subtitle }}</p>{% endif %}
+
+                    <ul class="hero-includes">
+                        {% for item in offer.items[:4] %}
+                        <li>{{ item.product.name }}{% if item.quantity > 1 %} ×{{ item.quantity }}{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+
+                    {% if not image_mode %}
+                    <div class="hero-buy">
+                        <p class="hero-price">
+                            <span class="hero-price-now">{{ offer.bundle_price_display }}</span>
+                            {% if offer.savings > 0 %}
+                            <span class="hero-price-was">{{ offer.original_total_display }}</span>
+                            {% endif %}
+                        </p>
+
+                        <a href="{{ offer_url(offer) }}" class="btn-primary btn-hero">
+                            اطلب الآن
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+
+    {% if hero_offers|length > 1 %}
+    <div class="hero-controls">
+        <button type="button" class="hero-arrow" data-dir="-1" aria-label="السابق">‹</button>
+        <div class="hero-dots" id="heroDots">
+            {% for offer in hero_offers[:4] %}
+            <button type="button" class="hero-dot {{ 'is-active' if loop.first }}"
+                    data-index="{{ loop.index0 }}" aria-label="عرض {{ loop.index }}"></button>
+            {% endfor %}
+        </div>
+        <button type="button" class="hero-arrow" data-dir="1" aria-label="التالي">›</button>
+    </div>
+    {% endif %}
+</section>
+{% else %}
+<section class="hero">
+    <div class="container hero-inner">
+        <h1 class="hero-title">كل ما تحتاجه من ديكور<br>في مكان واحد</h1>
+        <p class="hero-subtitle">
+            أشرطة المرايا، الإكسسوارات، وكلش اللي تحتاجو للتزيين — بجودة مضمونة
+            وتوصيل لكل ولايات الجزائر
+        </p>
+        <a href="#products" class="btn-primary btn-hero">تصفّح المنتجات</a>
+    </div>
+</section>
+{% endif %}

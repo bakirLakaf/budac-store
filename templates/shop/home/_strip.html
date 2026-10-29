@@ -1,0 +1,34 @@
+{# شريط منتجات: سلايدر (3 تبان وكل مرة يمشي لـ3 الأخرين، يروح ويجي) أو شبكة عادية.
+   المتغيّرات: strip_title, strip_sub, strip_products, strip_opts (mode/autoplay), strip_cls #}
+{% set use_slider = strip_opts.mode == "slider" and strip_products|length > 3 %}
+<section class="strip-section {{ strip_cls }} reveal">
+    <div class="container">
+        <div class="section-head section-head-row">
+            <div>
+                <h2 class="section-heading">{{ strip_title }}</h2>
+                <p class="section-sub">{{ strip_sub }}</p>
+            </div>
+        </div>
+
+        {% if use_slider %}
+        <div class="ss" data-ss data-autoplay="{{ 1 if strip_opts.autoplay else 0 }}" aria-roledescription="carousel" aria-label="{{ strip_title }}">
+            <button type="button" class="ss-arrow ss-next" aria-label="التالي">‹</button>
+            <button type="button" class="ss-arrow ss-prev" aria-label="السابق">›</button>
+            <div class="ss-viewport">
+                <div class="ss-track">
+                    {% for p in strip_products %}
+                    {% include "shop/_product_card.html" %}
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="ss-dots" aria-hidden="true"></div>
+        </div>
+        {% else %}
+        <div class="product-grid">
+            {% for p in strip_products %}
+            {% include "shop/_product_card.html" %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</section>
