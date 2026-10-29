@@ -17,6 +17,14 @@ from .base import PlatformError
 NAME = "tiktok"
 API = "https://open.tiktokapis.com"
 CHUNK = 10 * 1024 * 1024
+SINGLE_MAX = 64 * 1024 * 1024  # تيك توك يقبل جزء واحد حتى 64MB
+
+
+def _plan(size):
+    """(حجم الجزء، عدد الأجزاء). لازم كل جزء >= 5MB ماعدا لو الفيديو كامل جزء واحد."""
+    if size <= SINGLE_MAX:
+        return size, 1
+    return CHUNK, size // CHUNK  # آخر جزء ياخذ الباقي
 
 
 def configured():
@@ -117,8 +125,7 @@ def _wait_status(publish_id, token):
 
 def _upload_chunks(upload_url, path, size):
     ctype = "video/quicktime" if path.lower().endswith(".mov") else "video/mp4"
-    chunk_size = size if size < 5 * 1024 * 1024 else CHUNK
-    total = max(1, size // chunk_size)
+    chunk_size, total = _plan(size)
     with open(path, "rb") as f:
         for i in range(total):
             start = i * chunk_size
@@ -143,9 +150,9 @@ def publish(post, media):
         if not v["local_path"] or not os.path.exists(v["local_path"]):
             raise PlatformError("ملف الفيديو ما بقاش موجود في السيرفر")
         size = os.path.getsize(v["local_path"])
-        chunk_size = size if size < 5 * 1024 * 1024 else CHUNK
+        chunk_size, total = _plan(size)
         body = {"source_info": {"source": "FILE_UPLOAD", "video_size": size,
-                                "chunk_size": chunk_size, "total_chunk_count": max(1, size // chunk_size)}}
+                                "chunk_size": chunk_size, "total_chunk_count": total}}
         if cfg.tt_mode == "direct":
             body["post_info"] = {"title": caption[:2200], "privacy_level": cfg.tt_privacy}
             path = "/v2/post/publish/video/init/"
