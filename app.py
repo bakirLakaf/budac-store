@@ -25,6 +25,10 @@ def create_app():
 
     db.init_app(app)
 
+    # v188: نحتفظو بآخر تحذيرات/أخطاء التطبيق فالذاكرة باش تدخل تقرير الفحص الشامل
+    from services import diagnostics
+    diagnostics.install_log_buffer()
+
     # ⚠️ Railway يخدم وراء بروكسي (reverse proxy). بلا هاذي، Flask يظن أن
     # الاتصال http وليس https، فالروابط المطلقة (og:image, canonical, redirects)
     # تتولّد بـhttp — وهذا يخلي المتصفح يشطب على https فشريط العنوان.

@@ -1,0 +1,132 @@
+{# ═════════ 💬 واتساب سريع: رقم + أي رسالة (بلا طلبية) ═════════
+   يبني رابط wa.me ويفتح واتساب برسالة جاهزة — الإرسال يدويًا من تطبيق واتساب. #}
+<style>
+  .waq { margin: 18px 0 8px; }
+  .waq-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .waq-head h2 { margin: 0; font-size: 18px; }
+  .waq-sub { margin: 0 0 14px; font-size: 13px; color: var(--a-text-soft); }
+  .waq-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(140px, 1fr); gap: 10px; margin-bottom: 10px; }
+  @media (max-width: 560px) { .waq-row { grid-template-columns: 1fr; } }
+  .waq input, .waq textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--a-border); border-radius: 10px; font: inherit; background: var(--a-surface-2, var(--a-surface)); color: var(--a-text); box-sizing: border-box; }
+  .waq textarea { min-height: 130px; resize: vertical; line-height: 1.8; }
+  .waq-ltr { direction: ltr; text-align: start; }
+  .waq-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .waq-chip { border: 1.5px solid var(--a-border); background: transparent; color: var(--a-text); border-radius: 99px; padding: 5px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .waq-chip:hover { border-color: var(--a-gold); }
+  .waq-chip.sym { padding: 4px 10px; font-size: 15px; }
+  .waq-label { font-size: 12px; color: var(--a-text-soft); margin: 10px 0 5px; display: block; }
+  .waq-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  .waq-count { margin-inline-start: auto; font-size: 12px; color: var(--a-text-soft); }
+  .waq-msg { margin-top: 10px; padding: 9px 12px; border-radius: 10px; font-size: 13.5px; border: 1px solid var(--a-border); display: none; }
+  .waq-msg.err { display: block; border-color: var(--a-danger, #c0392b); }
+  .waq-msg.ok { display: block; border-color: #1e8e4e; }
+  .waq-msg.warn { display: block; border-color: var(--a-warning, #d4a017); }
+</style>
+
+<section class="card waq" id="waq">
+  <div class="waq-head"><h2>💬 واتساب سريع</h2></div>
+  <p class="waq-sub">اكتب رقم وأي رسالة (بلا ما تكون مربوطة بطلبية) — يفتحلك واتساب برسالة جاهزة وأنت تضغط «إرسال».</p>
+
+  <div class="waq-row">
+    <div>
+      <label class="waq-label" for="waq-phone" style="margin-top:0">رقم الهاتف</label>
+      <input type="tel" id="waq-phone" class="waq-ltr" placeholder="0555 12 34 56  أو  +213555123456" autocomplete="off">
+    </div>
+    <div>
+      <label class="waq-label" for="waq-name" style="margin-top:0">الاسم (اختياري)</label>
+      <input type="text" id="waq-name" placeholder="باش نكتبو «سلام أمين،»" autocomplete="off">
+    </div>
+  </div>
+
+  <span class="waq-label">نوع الرسالة — اضغط يعمّر الخانة وتقدر تعدّل عليه:</span>
+  <div class="waq-chips" id="waq-presets">
+    {% for p in wa_quick.presets %}
+    <button type="button" class="waq-chip" data-key="{{ p.key }}">{{ p.label }}</button>
+    {% endfor %}
+    <button type="button" class="waq-chip" data-key="" style="border-style:dashed">✎ رسالة حرّة</button>
+  </div>
+
+  <textarea id="waq-text" maxlength="{{ wa_quick.max_len }}" placeholder="اكتب رسالتك هنا..."></textarea>
+
+  <span class="waq-label">رموز تدخلها فالرسالة (الإيموجي الملوّن ما يخدمش فواتساب-لينك):</span>
+  <div class="waq-chips" id="waq-symbols">
+    {% for s in wa_quick.symbols %}
+    <button type="button" class="waq-chip sym" data-char="{{ s.char }}" title="{{ s.label }}">{{ s.char }}</button>
+    {% endfor %}
+  </div>
+
+  <div class="waq-actions">
+    <button type="button" class="btn-admin btn-gold" id="waq-send">💬 افتح واتساب</button>
+    <button type="button" class="btn-admin btn-ghost" id="waq-copy">📋 انسخ النص</button>
+    <button type="button" class="btn-admin btn-ghost" id="waq-clear">مسح</button>
+    <span class="waq-count" id="waq-count">0 / {{ wa_quick.max_len }}</span>
+  </div>
+  <div class="waq-msg" id="waq-msg" role="status"></div>
+</section>
+
+<script>
+(function () {
+  const PRESETS = {{ wa_quick.presets|tojson }};
+  const HELLO_NAME = {{ wa_quick.hello_with_name|tojson }};
+  const HELLO_NONE = {{ wa_quick.hello_no_name|tojson }};
+  const ENDPOINT = {{ url_for('admin.wa_quick_link')|tojson }};
+  const CSRF = {{ csrf_token()|tojson }};
+  const MAX = {{ wa_quick.max_len }};
+  const $ = (id) => document.getElementById(id);
+  const phone = $('waq-phone'), nameEl = $('waq-name'), text = $('waq-text'), msg = $('waq-msg');
+  const ASTRAL = /[\u{10000}-\u{10FFFF}]/u;
+
+  function say(kind, html) { msg.className = 'waq-msg ' + kind; msg.innerHTML = html; }
+  function clearMsg() { msg.className = 'waq-msg'; msg.innerHTML = ''; }
+  function hello() { const n = nameEl.value.trim(); return n ? HELLO_NAME.replace('{name}', n) : HELLO_NONE; }
+
+  function counter() {
+    $('waq-count').textContent = text.value.length + ' / ' + MAX;
+    if (ASTRAL.test(text.value)) say('warn', '⚠️ فيها إيموجي ملوّن — واتساب-لينك يقطعو ويبان «◆». شيلو واستعمل الرموز اللي تحت (✓ ✿ ★ ...).');
+    else if (msg.classList.contains('warn')) clearMsg();
+  }
+
+  $('waq-presets').addEventListener('click', (e) => {
+    const b = e.target.closest('.waq-chip'); if (!b) return;
+    const p = PRESETS.find(x => x.key === b.dataset.key);
+    text.value = p ? p.text.replace('{hello}', hello()) : '';
+    text.focus(); counter();
+  });
+
+  $('waq-symbols').addEventListener('click', (e) => {
+    const b = e.target.closest('.waq-chip'); if (!b) return;
+    const s = text.selectionStart ?? text.value.length, t = text.selectionEnd ?? s;
+    text.setRangeText(b.dataset.char, s, t, 'end'); text.focus(); counter();
+  });
+
+  text.addEventListener('input', counter);
+
+  $('waq-clear').addEventListener('click', () => { text.value = ''; clearMsg(); counter(); text.focus(); });
+
+  $('waq-copy').addEventListener('click', async () => {
+    if (!text.value.trim()) { say('err', 'اكتب الرسالة قبل'); return; }
+    try { await navigator.clipboard.writeText(text.value); say('ok', '✓ تنسخ النص'); }
+    catch (e) { text.select(); say('warn', 'المتصفح منع النسخ التلقائي — النص تحدّد، اضغط Ctrl+C.'); }
+  });
+
+  $('waq-send').addEventListener('click', async () => {
+    const btn = $('waq-send'); clearMsg();
+    btn.disabled = true;
+    let js;
+    try {
+      const res = await fetch(ENDPOINT, {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+        body: JSON.stringify({phone: phone.value, name: nameEl.value, text: text.value}),
+      });
+      js = await res.json();
+    } catch (e) { js = {ok: false, error: 'ما قدرناش نوصلو للسيرفر'}; }
+    btn.disabled = false;
+    if (!js.ok) { say('err', '❌ ' + (js.error || 'خطأ')); return; }
+    const opened = window.open(js.url, '_blank', 'noopener');
+    say('ok', '✓ الرقم <b dir="ltr">' + js.phone_display + '</b> — ' +
+        (opened ? 'تحلّ واتساب.' : 'المتصفح منع النافذة، اضغط: ') +
+        ' <a href="' + js.url + '" target="_blank" rel="noopener">فتح واتساب ←</a>');
+  });
+})();
+</script>

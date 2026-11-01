@@ -20,6 +20,10 @@
         {{ label }} <span class="tab-count">{{ counts.get(code, 0) }}</span>
     </a>
     {% endfor %}
+    {# v187: كل طرود ZR · World · Yalidine (حتى اللي ماشي من المتجر) #}
+    <a href="{{ url_for('admin.orders_all_parcels') }}" class="status-tab" title="كل الطرود اللي فحساباتك عند شركات التوصيل مع حالتها">
+        🚚 كل طرود شركات التوصيل
+    </a>
 </div>
 
 <form method="get" class="filter-bar">

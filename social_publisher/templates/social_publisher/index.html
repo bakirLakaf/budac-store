@@ -149,6 +149,8 @@
     <button type="button" class="sp-tab is-active" data-tab="compose">✍️ منشور جديد</button>
     <button type="button" class="sp-tab" data-tab="posts">🗂️ المنشورات
       {% if posts %}<span class="sp-count">{{ posts|length }}</span>{% endif %}</button>
+    <button type="button" class="sp-tab" data-tab="inbox">📨 الرسائل
+      <span class="sp-count" hidden>0</span></button>
     <button type="button" class="sp-tab" data-tab="setup">🔗 الربط والإعداد
       {% if not all_connected %}<span class="sp-dot" title="فيه منصة ما تربطتش"></span>{% endif %}</button>
   </div>
@@ -287,6 +289,8 @@
     </div>
   </section>
 
+  {% include "social_publisher/_inbox.html" %}
+
   {# ═════════════ تبويب 3: الربط والإعداد ═════════════ #}
   <section class="sp-panel" data-panel="setup">
     <div class="sp-card">
@@ -352,6 +356,16 @@
         في وضع المسودة الفيديو يوصل لتطبيق تيك توك وإنت تكمل النشر بضغطة. النشر المباشر قبل موافقة (audit) تيك توك يخرج <b>خاص</b> برك.</div>
     </details>
 
+    <details class="sp-details">
+      <summary><span class="sp-ico facebook">✉</span> 4) تفعيل الرسائل (فيسبوك + انستغرام)</summary>
+      <ol>
+        <li>في Graph API Explorer ولّد توكن جديد للصفحة بهاد الصلاحيات: <code>pages_messaging</code> · <code>pages_manage_metadata</code> · <code>pages_read_engagement</code> · <code>instagram_manage_messages</code> · <code>instagram_basic</code>. التوكن القديم (اللي فيه صلاحيات النشر برك) <b>ما يقراش الرسائل</b>.</li>
+        <li>بدّل <code>FB_PAGE_TOKEN</code> فـ Railway بالتوكن الجديد (لازم long-lived page token باش ما ينتهيش بسرعة).</li>
+        <li>للانستغرام: من تطبيق انستغرام ← الإعدادات ← <b>الرسائل وردود القصص ← عناصر التحكم في الرسائل ← الأدوات المتصلة ← السماح بالوصول إلى الرسائل</b>. بلا هاد الخيار Meta ترجّع قائمة فارغة.</li>
+        <li>تيك توك: <b>ما يخدمش</b> — تيك توك ما يوفّرش API لقراءة الرسائل للتطبيقات العادية.</li>
+      </ol>
+    </details>
+
     <div class="sp-note">ℹ️ بما أنك أدمين على التطبيق والصفحة، غالبًا يخدم الربط في وضع Development بلا App Review. ولو Meta طلبت مراجعة (خاصة لـ <code>instagram_content_publish</code>)، تلقى الزر في لوحة التطبيق ← App Review. وأول تجربة دير منشور تجريبي.</div>
   </section>
 </div>
@@ -368,7 +382,7 @@
 
   // ───── تبويبات (محفوظة فـ hash) ─────
   function showTab(name) {
-    if (!['compose', 'posts', 'setup'].includes(name)) name = 'compose';
+    if (!['compose', 'posts', 'inbox', 'setup'].includes(name)) name = 'compose';
     document.querySelectorAll('.sp-tab').forEach(t => t.classList.toggle('is-active', t.dataset.tab === name));
     document.querySelectorAll('.sp-panel').forEach(p => p.classList.toggle('is-active', p.dataset.panel === name));
   }

@@ -1,0 +1,217 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+<style>
+  .cp-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .cp-chip { border: 1.5px solid var(--a-border); background: transparent; color: var(--a-text-soft); border-radius: 99px; padding: 6px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .cp-chip .n { opacity: .75; font-size: 11px; }
+  .cp-chip.is-active { background: var(--a-primary); border-color: var(--a-primary); color: #fff; }
+  .cp-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+  .cp-sel, .cp-search { padding: 8px 12px; border: 1px solid var(--a-border); border-radius: 10px; font: inherit; background: var(--a-surface-2, var(--a-surface)); color: var(--a-text); }
+  .cp-search { flex: 1 1 220px; min-width: 180px; }
+  .cp-status { display: grid; gap: 6px; margin-bottom: 14px; }
+  .cp-note { padding: 9px 12px; border: 1px solid var(--a-border); border-radius: 10px; font-size: 13px; background: var(--a-surface-2, var(--a-surface)); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .cp-note.err { border-color: var(--a-danger, #c0392b); }
+  .cp-note.warn { border-color: var(--a-warning, #d4a017); }
+  .cp-note a { margin-inline-start: auto; font-size: 12px; }
+  .cp-wrap { overflow-x: auto; border: 1px solid var(--a-border); border-radius: 14px; background: var(--a-surface); }
+  table.cp { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.cp th { text-align: start; padding: 10px 12px; font-size: 12px; color: var(--a-text-soft); border-bottom: 1px solid var(--a-border); white-space: nowrap; }
+  table.cp td { padding: 10px 12px; border-bottom: 1px solid var(--a-border); vertical-align: top; }
+  table.cp tr:last-child td { border-bottom: 0; }
+  .cp-tag { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 700; color: #fff; white-space: nowrap; }
+  .cp-cat { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 700; border: 1px solid var(--a-border); white-space: nowrap; }
+  .cp-cat.delivered { color: #1e8e4e; border-color: #1e8e4e; } .cp-cat.returned { color: #c0392b; border-color: #c0392b; }
+  .cp-cat.transit { color: #b8860b; border-color: #b8860b; } .cp-cat.cancelled { color: var(--a-text-soft); }
+  .cp-raw { font-size: 11.5px; color: var(--a-text-soft); margin-top: 3px; direction: ltr; text-align: start; }
+  .cp-ltr { direction: ltr; unicode-bidi: embed; display: inline-block; }
+  .cp-store { font-weight: 700; text-decoration: none; }
+  .cp-out { color: var(--a-text-soft); font-size: 12px; }
+  .cp-empty { padding: 34px 10px; text-align: center; color: var(--a-text-soft); }
+  .cp-more { margin: 14px auto 0; display: block; }
+  @media (max-width: 760px) {
+    .cp-wrap { border: 0; background: transparent; overflow: visible; }
+    table.cp, table.cp tbody, table.cp tr, table.cp td { display: block; width: 100%; }
+    table.cp thead { display: none; }
+    table.cp tr { border: 1px solid var(--a-border); border-radius: 12px; padding: 8px 4px; margin-bottom: 10px; background: var(--a-surface); }
+    table.cp td { border: 0; padding: 5px 12px; display: flex; justify-content: space-between; gap: 12px; text-align: end; }
+    table.cp td::before { content: attr(data-label); color: var(--a-text-soft); font-size: 12px; flex: none; text-align: start; }
+  }
+</style>
+
+<div class="page-head-row">
+    <h1 class="page-title">الطلبيات</h1>
+    <button type="button" class="btn-admin btn-sm" id="cp-refresh">🔄 تحديث من الشركات</button>
+</div>
+
+{# نفس شريط تبويبات الطلبيات: تبويب المتجر يرجّع للقائمة العادية #}
+<div class="status-tabs">
+    <a href="{{ url_for('admin.orders_list') }}" class="status-tab">🛍️ طلبيات المتجر</a>
+    <a href="{{ url_for('admin.orders_all_parcels') }}" class="status-tab is-active">🚚 كل طرود شركات التوصيل</a>
+</div>
+
+<p style="color:var(--a-text-soft);margin:-6px 0 14px;font-size:13.5px">
+    كل الطرود اللي فحساباتك عند ZR وWorld Express وYalidine — حتى اللي ما تبعثوش من المتجر — مع حالتها عند الشركة.
+    للقراءة برك: ما يبدّل حتى طلبية. المعطيات تتحفظ 5 دقايق، و«تحديث» يجبد من الشركات من جديد.
+</p>
+
+<div class="cp-bar" id="cp-carriers">
+    <button type="button" class="cp-chip is-active" data-c="all">الكل <span class="n" id="n-all">0</span></button>
+    {% for code, c in carriers.items() %}
+    <button type="button" class="cp-chip" data-c="{{ code }}">
+        <span class="cp-dot" style="background:{{ c.color }}"></span>{{ c.label }} <span class="n" id="n-{{ code }}">…</span>
+    </button>
+    {% endfor %}
+</div>
+
+<div class="cp-bar" id="cp-cats">
+    <button type="button" class="cp-chip is-active" data-k="all">كل الحالات</button>
+    {% for code, label in category_labels.items() %}
+    <button type="button" class="cp-chip" data-k="{{ code }}">{{ label }} <span class="n" id="k-{{ code }}">0</span></button>
+    {% endfor %}
+</div>
+
+<div class="cp-bar">
+    <input type="search" class="cp-search" id="cp-q" placeholder="رقم التتبّع / الاسم / الهاتف / الولاية...">
+    <select class="cp-sel" id="cp-origin" aria-label="المصدر">
+        <option value="all">كل المصادر</option>
+        <option value="store">من المتجر برك</option>
+        <option value="external">من خارج المتجر برك</option>
+    </select>
+</div>
+
+<div class="cp-status" id="cp-status"></div>
+
+<div class="cp-wrap">
+    <table class="cp">
+        <thead><tr>
+            <th>الشركة</th><th>رقم التتبّع</th><th>الزبون</th><th>الهاتف</th>
+            <th>الوجهة</th><th>المبلغ</th><th>الحالة</th><th>التاريخ</th><th>المتجر</th>
+        </tr></thead>
+        <tbody id="cp-body"><tr><td colspan="9" class="cp-empty">⏳ جاري الجلب من الشركات...</td></tr></tbody>
+    </table>
+</div>
+<button type="button" class="btn-admin btn-ghost btn-sm cp-more" id="cp-more" hidden></button>
+
+<script>
+(function () {
+  const CARRIERS = {{ carriers|tojson }};
+  const CATS = {{ category_labels|tojson }};
+  const DATA_URL = {{ url_for('admin.orders_all_parcels_data', carrier='__C__')|tojson }};
+  const ORDER_URL = {{ url_for('admin.order_detail', order_id=0)|tojson }};   // …/orders/0
+  const PAGE = 200;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  const results = {};                 // code -> payload
+  let fCarrier = 'all', fCat = 'all', fOrigin = 'all', q = '', shown = PAGE;
+
+  const norm = (s) => String(s || '').toLowerCase();
+  function rows() {
+    return Object.values(results).flatMap(r => r.rows || [])
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  }
+  function filtered(ignoreCat) {
+    const needle = norm(q).trim();
+    return rows().filter(r =>
+      (fCarrier === 'all' || r.carrier === fCarrier) &&
+      (ignoreCat || fCat === 'all' || r.category === fCat) &&
+      (fOrigin === 'all' || (fOrigin === 'store') === !!r.store_order_id) &&
+      (!needle || [r.tracking, r.ref, r.name, r.phone, r.wilaya, r.commune, r.store_order_number]
+          .some(v => norm(v).includes(needle))));
+  }
+
+  function renderCounts() {
+    for (const code of Object.keys(CARRIERS)) {
+      const r = results[code];
+      $('n-' + code).textContent = !r ? '…' : (r.ok ? r.rows.length : '⚠️');
+    }
+    $('n-all').textContent = rows().length;
+    const base = filtered(true);
+    for (const k of Object.keys(CATS)) $('k-' + k).textContent = base.filter(r => r.category === k).length;
+  }
+
+  function renderStatus() {
+    const out = [];
+    for (const [code, c] of Object.entries(CARRIERS)) {
+      const r = results[code];
+      const dbg = DATA_URL.replace('__C__', code) + '?debug=1&fresh=1';
+      if (!r) { out.push(`<div class="cp-note">⏳ ${esc(c.label)}: جاري الجلب...</div>`); continue; }
+      if (!r.ok) { out.push(`<div class="cp-note err"><b>${esc(c.label)}:</b> ${esc(r.error)} <a href="${dbg}" target="_blank" rel="noopener">🔍 تشخيص</a></div>`); continue; }
+      if (r.stale) out.push(`<div class="cp-note warn"><b>${esc(c.label)}:</b> ${esc(r.error)}</div>`);
+      if (r.truncated) out.push(`<div class="cp-note warn"><b>${esc(c.label)}:</b> وصلنا للحد الأقصى (${r.rows.length} طرد) — فيه طرود أقدم ما ظهرتش.</div>`);
+      else if (!r.rows.length) out.push(`<div class="cp-note warn"><b>${esc(c.label)}:</b> متصلة، بصح ما رجّعت حتى طرد. إذا تتوقع طرود، شوف <a href="${dbg}" target="_blank" rel="noopener" style="margin:0">التشخيص</a>.</div>`);
+    }
+    $('cp-status').innerHTML = out.join('');
+  }
+
+  function renderTable() {
+    const list = filtered(false);
+    const body = $('cp-body');
+    if (!list.length) {
+      const pending = Object.keys(CARRIERS).some(c => !results[c]);
+      body.innerHTML = `<tr><td colspan="9" class="cp-empty">${pending ? '⏳ جاري الجلب من الشركات...' : 'ما كاين حتى طرد بهاد الفلترة.'}</td></tr>`;
+      $('cp-more').hidden = true; return;
+    }
+    body.innerHTML = list.slice(0, shown).map(r => {
+      const c = CARRIERS[r.carrier];
+      const store = r.store_order_id
+        ? `<a class="cp-store" href="${esc(ORDER_URL.replace(/0$/, r.store_order_id))}">🛍️ ${esc(r.store_order_number)}</a>`
+        : '<span class="cp-out">خارج المتجر</span>';
+      const amount = r.amount == null ? '—' : Number(r.amount).toLocaleString('fr-DZ') + ' دج';
+      return `<tr>
+        <td data-label="الشركة"><span class="cp-tag" style="background:${esc(c.color)}">${esc(c.label)}</span></td>
+        <td data-label="التتبّع"><span class="cp-ltr">${esc(r.tracking)}</span>${r.ref ? `<div class="cp-raw">${esc(r.ref)}</div>` : ''}</td>
+        <td data-label="الزبون">${esc(r.name) || '—'}</td>
+        <td data-label="الهاتف"><span class="cp-ltr">${esc(r.phone) || '—'}</span></td>
+        <td data-label="الوجهة">${esc([r.wilaya, r.commune].filter(Boolean).join(' — ')) || '—'}</td>
+        <td data-label="المبلغ">${esc(amount)}</td>
+        <td data-label="الحالة"><span class="cp-cat ${esc(r.category)}">${esc(CATS[r.category])}</span><div class="cp-raw">${esc(r.state)}</div></td>
+        <td data-label="التاريخ"><span class="cp-ltr">${esc(r.date) || '—'}</span></td>
+        <td data-label="المتجر">${store}</td></tr>`;
+    }).join('');
+    const more = $('cp-more');
+    more.hidden = list.length <= shown;
+    more.textContent = `عرض ${Math.min(PAGE, list.length - shown)} زيادة (باقي ${list.length - shown})`;
+  }
+
+  function render() { renderCounts(); renderStatus(); renderTable(); }
+
+  async function loadOne(code, fresh) {
+    try {
+      const res = await fetch(DATA_URL.replace('__C__', code) + (fresh ? '?fresh=1' : ''), {credentials: 'same-origin'});
+      results[code] = res.ok ? await res.json()
+                             : {ok: false, error: `السيرفر رجّع خطأ ${res.status}`, rows: []};
+    } catch (e) {
+      results[code] = {ok: false, error: 'ما قدرناش نوصلو للسيرفر', rows: []};
+    }
+    render();
+  }
+
+  function loadAll(fresh) {
+    if (fresh) for (const c of Object.keys(CARRIERS)) delete results[c];
+    render();
+    return Promise.all(Object.keys(CARRIERS).map(c => loadOne(c, fresh)));   // بالتوازي، كل شركة مستقلة
+  }
+
+  document.querySelectorAll('#cp-carriers .cp-chip').forEach(b => b.addEventListener('click', () => {
+    fCarrier = b.dataset.c; shown = PAGE;
+    document.querySelectorAll('#cp-carriers .cp-chip').forEach(x => x.classList.toggle('is-active', x === b));
+    render();
+  }));
+  document.querySelectorAll('#cp-cats .cp-chip').forEach(b => b.addEventListener('click', () => {
+    fCat = b.dataset.k; shown = PAGE;
+    document.querySelectorAll('#cp-cats .cp-chip').forEach(x => x.classList.toggle('is-active', x === b));
+    render();
+  }));
+  $('cp-origin').addEventListener('change', (e) => { fOrigin = e.target.value; shown = PAGE; render(); });
+  let t; $('cp-q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { q = e.target.value; shown = PAGE; render(); }, 200); });
+  $('cp-more').addEventListener('click', () => { shown += PAGE; renderTable(); });
+  $('cp-refresh').addEventListener('click', async (e) => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = '⏳ جاري التحديث...';
+    await loadAll(true); b.disabled = false; b.textContent = '🔄 تحديث من الشركات';
+  });
+
+  loadAll(false);
+})();
+</script>
+{% endblock %}

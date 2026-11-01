@@ -309,8 +309,10 @@ def dashboard():
     ) or 0
     pending_reviews_count = Review.query.filter_by(is_approved=False).count()
 
+    from services import wa_quick, whatsapp_api
     return render_template(
         "admin/dashboard.html",
+        wa_quick=wa_quick.ui_context(link=whatsapp_api.site_url()),
         abandoned_new=abandoned_new,
         abandoned_value=abandoned_value,
         pending_reviews_count=pending_reviews_count,
@@ -1815,6 +1817,77 @@ def orders_list():
         all_count=sum(n for st, n in counts.items() if st not in HIDDEN_FROM_ALL),
         search=search, status_labels=Order.STATUS_LABELS,
     )
+
+
+# ═══════ v188: الفحص الشامل (زر فالإعدادات ← ملف تقرير) ═══════
+@admin_bp.route("/settings/diagnostics", methods=["POST"])
+@login_required
+def settings_diagnostics():
+    """يشغّل كل الفحوص (قراءة برك) ويرجّع تقرير Markdown للتنزيل — بلا مفاتيح وبلا بيانات زبائن."""
+    from flask import Response
+    from services import diagnostics
+
+    try:
+        report, counts = diagnostics.run(current_app._get_current_object())
+    except RuntimeError as e:      # فحص آخر راه يخدم
+        return jsonify(ok=False, error=str(e)), 409
+    audit.record_and_commit(AdminAction.SETTINGS_CHANGE, resource="diagnostics", details="فحص شامل")
+    filename = f"budac-diagnostic-{utcnow().strftime('%Y%m%d-%H%M')}.md"
+    resp = Response(report, mimetype="text/markdown")
+    resp.headers["Content-Type"] = "text/markdown; charset=utf-8"
+    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    resp.headers["X-Diag-Summary"] = ";".join(f"{k}={v}" for k, v in sorted(counts.items()))
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+# ═══════ v188: واتساب سريع (رقم + أي رسالة، بلا طلبية) ═══════
+@admin_bp.route("/whatsapp/quick", methods=["POST"])
+@login_required
+def wa_quick_link():
+    """يتحقّق من الرقم والنص ويرجّع رابط wa.me. الأدمن هو اللي يضغط «إرسال» فواتساب."""
+    from services import wa_quick, whatsapp_api
+    data = request.get_json(silent=True) or {}
+    ok, payload = wa_quick.prepare(
+        data.get("phone"), data.get("text"), data.get("name"), whatsapp_api.site_url())
+    if not ok:
+        return jsonify(ok=False, error=payload["error"]), 400
+    return jsonify(ok=True, **payload)
+
+
+# ═══════ v187: كل طرود شركات التوصيل (حتى اللي ماشي من المتجر) ═══════
+# (اسم الـendpoint فيه «orders» وبلا «carrier» — لأن الـsidebar يعتمد على الكلمتين)
+# قراءة برك: ما نبدّلو حتى طلبية ولا مخزون. الصفحة تتحمّل فارغة وكل شركة
+# تتجبد بطلب مستقل (AJAX) — باش شركة بطيئة ولا طايحة ما توقّف الباقي.
+@admin_bp.route("/orders/parcels")
+@login_required
+def orders_all_parcels():
+    from services import carrier_parcels as cp
+    return render_template(
+        "admin/carrier_parcels.html",
+        carriers=cp.CARRIERS, category_labels=cp.CATEGORY_LABELS,
+    )
+
+
+@admin_bp.route("/orders/parcels/data/<carrier>")
+@login_required
+def orders_all_parcels_data(carrier):
+    from services import carrier_parcels as cp
+    if carrier not in cp.CARRIERS:
+        abort(404)
+    payload = cp.get(carrier, force=request.args.get("fresh") == "1")
+    out = {
+        "ok": payload.get("ok", False), "error": payload.get("error", ""),
+        "stale": payload.get("stale", False), "fetched_at": payload.get("fetched_at", ""),
+        "total": payload.get("total"), "truncated": payload.get("truncated", False),
+        "rows": cp.annotate_store_orders(payload.get("rows", [])),
+    }
+    # تشخيص: أول طرد خام كيما رجّعتو الشركة (باش نصلّحو أسماء الحقول إذا ما بانوش)
+    if request.args.get("debug") == "1":
+        out["raw_sample"] = payload.get("raw_sample")
+    for row in out["rows"]:
+        row.pop("ts", None)
+    return jsonify(out)
 
 
 @admin_bp.route("/orders/<int:order_id>")

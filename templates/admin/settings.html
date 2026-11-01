@@ -25,4 +25,51 @@
 
     <button type="submit" class="btn-primary">احفظ</button>
 </form>
+
+{# ═════════ v188: فحص شامل ← ملف تقرير ═════════ #}
+<section class="card settings-form" id="diag-card" style="margin-top:18px">
+    <h2 class="settings-section-title">🩺 فحص شامل للنظام</h2>
+    <p style="margin:0 0 10px;color:var(--a-text-soft);font-size:14px;line-height:1.8">
+        يجرّب كلشي مرة وحدة: القاعدة والصور، شركات التوصيل (ZR · World · Yalidine) مع قائمة الطرود،
+        تيليغرام، واتساب API، فيسبوك/انستغرام والرسائل، وسلامة بيانات المتجر — ويهبطلك <b>ملف تقرير</b> تبعثو للدعم.
+    </p>
+    <ul style="margin:0 0 12px;padding-inline-start:20px;color:var(--a-text-soft);font-size:13px;line-height:1.9">
+        <li>قراءة برك: ما يبعث حتى رسالة، ما ينشئ طرد، ما يبدّل حتى طلبية.</li>
+        <li>الملف ما فيه <b>حتى مفتاح ولا توكن</b>، وأرقام الزبائن وأسماؤهم مقنّعة.</li>
+        <li>ياخذ من 10 ثواني لدقيقة (حسب بطء الشركات).</li>
+    </ul>
+    <button type="button" class="btn-primary" id="diag-run">🩺 شغّل الفحص ونزّل التقرير</button>
+    <div id="diag-msg" role="status" style="margin-top:12px;font-size:14px"></div>
+</section>
+
+<script>
+(function () {
+  const btn = document.getElementById('diag-run'), msg = document.getElementById('diag-msg');
+  const URL_RUN = {{ url_for('admin.settings_diagnostics')|tojson }};
+  const CSRF = {{ csrf_token()|tojson }};
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = '⏳ جاري الفحص... (لا تغلق الصفحة)'; msg.textContent = '';
+    try {
+      const res = await fetch(URL_RUN, {method: 'POST', credentials: 'same-origin', headers: {'X-CSRFToken': CSRF}});
+      if (!res.ok) {
+        let err = 'خطأ ' + res.status;
+        try { err = (await res.json()).error || err; } catch (e) {}
+        msg.textContent = '❌ ' + err; return;
+      }
+      const blob = await res.blob();
+      const name = (/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '') || [])[1] || 'budac-diagnostic.md';
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      const sum = Object.fromEntries((res.headers.get('X-Diag-Summary') || '').split(';').filter(Boolean).map(x => x.split('=')));
+      msg.innerHTML = '✓ تهبّط الملف <b>' + name + '</b> — ✅ ' + (sum.ok || 0) + ' · ⚠️ ' + (sum.warn || 0) +
+                      ' · ❌ ' + (sum.fail || 0) + ' · ⏭️ ' + (sum.skip || 0) + '. ابعثو لي وأنا نقراه.';
+    } catch (e) {
+      msg.textContent = '❌ ما قدرناش نوصلو للسيرفر (ولا الفحص طوّل بزاف). عاود.';
+    } finally {
+      btn.disabled = false; btn.textContent = '🩺 شغّل الفحص ونزّل التقرير';
+    }
+  });
+})();
+</script>
 {% endblock %}

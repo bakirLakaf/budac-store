@@ -1,0 +1,182 @@
+{# ═════════════ تبويب: الرسائل (فيسبوك + انستغرام) ═════════════
+   يتحمّل كسول (أول مرة تفتح التبويب) وما يخزّن والو فقاعدة البيانات. #}
+<style>
+  .sp-inbox { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .sp-inbox { grid-template-columns: 1fr; } }
+  .sp-ib-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .sp-chip { border: 1.5px solid var(--a-border); background: transparent; color: var(--a-text-soft); border-radius: 99px; padding: 6px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .sp-chip.is-active { background: var(--a-primary); border-color: var(--a-primary); color: #fff; }
+  .sp-chip .n { opacity: .75; font-size: 11px; margin-inline-start: 4px; }
+  .sp-ib-list { max-height: 560px; overflow: auto; display: grid; gap: 6px; }
+  .sp-conv { display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-border); border-radius: 12px; background: var(--sp-surface2); cursor: pointer; text-align: start; font: inherit; color: var(--a-text); width: 100%; }
+  .sp-conv:hover { border-color: var(--a-gold); }
+  .sp-conv.is-open { border-color: var(--a-gold); box-shadow: 0 0 0 1px var(--a-gold) inset; }
+  .sp-conv .ico { width: 36px; height: 36px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
+  .sp-conv .ico.facebook { background: #1877f2; } .sp-conv .ico.instagram { background: linear-gradient(135deg, #f58529, #dd2a7b 55%, #8134af); }
+  .sp-conv .body { min-width: 0; flex: 1; }
+  .sp-conv .nm { font-weight: 700; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+  .sp-conv .sn { font-size: 12px; color: var(--a-text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sp-conv .tm { font-size: 11px; color: var(--a-text-soft); flex: none; }
+  .sp-unread { background: var(--a-gold); color: #2E1A47; font-size: 11px; font-weight: 800; border-radius: 99px; padding: 0 7px; }
+  .sp-thread { display: flex; flex-direction: column; min-height: 420px; }
+  .sp-thread-head { font-weight: 700; margin-bottom: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .sp-msgs { flex: 1; max-height: 440px; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 2px 10px; }
+  .sp-msg { max-width: 82%; padding: 9px 13px; border-radius: 14px; line-height: 1.7; font-size: 14px; white-space: pre-wrap; word-break: break-word; background: var(--sp-surface2); border: 1px solid var(--a-border); align-self: flex-start; }
+  .sp-msg.mine { align-self: flex-end; background: var(--a-primary); border-color: var(--a-primary); color: #fff; }
+  .sp-msg .t { display: block; font-size: 10.5px; opacity: .65; margin-top: 3px; }
+  .sp-reply { display: flex; gap: 8px; align-items: flex-end; border-top: 1px solid var(--a-border); padding-top: 10px; }
+  .sp-reply textarea { min-height: 64px !important; flex: 1; }
+  .sp-ib-empty { color: var(--a-text-soft); padding: 26px 8px; text-align: center; font-size: 14px; }
+  .sp-ib-err { white-space: pre-line; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--a-border); background: var(--sp-surface2); font-size: 13px; margin-bottom: 8px; }
+  .sp-ib-err.warn { border-color: var(--a-warning); }
+</style>
+
+<section class="sp-panel" data-panel="inbox">
+  <div class="sp-ib-bar">
+    <button type="button" class="sp-chip is-active" data-f="all">الكل <span class="n" id="ib-n-all">0</span></button>
+    <button type="button" class="sp-chip" data-f="facebook">فيسبوك <span class="n" id="ib-n-facebook">0</span></button>
+    <button type="button" class="sp-chip" data-f="instagram">انستغرام <span class="n" id="ib-n-instagram">0</span></button>
+    <button type="button" class="sp-chip" data-f="tiktok" title="غير متاح">تيك توك ⛔</button>
+    <button type="button" class="sp-btn sm" id="ib-refresh" style="margin-inline-start:auto">🔄 تحديث</button>
+  </div>
+
+  <div id="ib-notes"></div>
+
+  <div class="sp-inbox">
+    <div class="sp-card" style="margin:0">
+      <div class="sp-ib-list" id="ib-list"><div class="sp-ib-empty">⏳ جاري التحميل...</div></div>
+    </div>
+
+    <div class="sp-card sp-thread" style="margin:0" id="ib-thread">
+      <div class="sp-ib-empty">اختار محادثة من القائمة باش تشوف الرسائل وتردّ.</div>
+    </div>
+  </div>
+  <p class="sp-small sp-hint">ℹ️ Meta تسمح بالرد خلال <b>24 ساعة</b> من آخر رسالة للزبون. التحديث التلقائي كل دقيقة وأنت فهاد التبويب.</p>
+</section>
+
+<script>
+(function () {
+  const PREFIX = {{ prefix|tojson }};
+  const CSRF = {{ csrf_token()|tojson }};
+  const ICON = {facebook: 'f', instagram: '◎'};
+  const LABEL = {facebook: 'فيسبوك', instagram: 'انستغرام', tiktok: 'تيك توك'};
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const panel = document.querySelector('[data-panel="inbox"]');
+  let data = null, filter = 'all', openConv = null, loaded = false, timer = null;
+
+  function fmt(iso) {
+    if (!iso) return '';
+    const d = new Date(iso); if (isNaN(d)) return '';
+    const now = new Date(), same = d.toDateString() === now.toDateString();
+    return same ? d.toLocaleTimeString('ar-DZ', {hour: '2-digit', minute: '2-digit'})
+                : d.toLocaleDateString('ar-DZ', {day: 'numeric', month: 'short'});
+  }
+
+  function allItems() {
+    if (!data) return [];
+    return ['facebook', 'instagram'].flatMap(p => (data[p] && data[p].items) || [])
+      .sort((a, b) => String(b.updated_time).localeCompare(String(a.updated_time)));
+  }
+
+  function renderNotes() {
+    const out = [];
+    for (const p of ['facebook', 'instagram', 'tiktok']) {
+      const r = data && data[p]; if (!r || r.ok) continue;
+      if (filter !== 'all' && filter !== p) continue;
+      out.push(`<div class="sp-ib-err ${r.unsupported || !r.configured ? 'warn' : ''}"><b>${LABEL[p]}:</b> ${esc(r.error)}</div>`);
+    }
+    $('ib-notes').innerHTML = out.join('');
+  }
+
+  function renderList() {
+    const items = allItems();
+    for (const p of ['facebook', 'instagram']) $('ib-n-' + p).textContent = items.filter(i => i.platform === p).length;
+    $('ib-n-all').textContent = items.length;
+    const unread = items.reduce((s, i) => s + (i.unread || 0), 0);
+    const tab = document.querySelector('.sp-tab[data-tab="inbox"] .sp-count');
+    if (tab) { tab.textContent = unread; tab.hidden = !unread; }
+    const shown = filter === 'all' ? items : items.filter(i => i.platform === filter);
+    $('ib-list').innerHTML = shown.length ? shown.map(i => `
+      <button type="button" class="sp-conv ${openConv && openConv.id === i.id ? 'is-open' : ''}" data-id="${esc(i.id)}">
+        <span class="ico ${i.platform}">${ICON[i.platform]}</span>
+        <span class="body"><span class="nm">${esc(i.name)}${i.unread ? `<span class="sp-unread">${i.unread}</span>` : ''}</span>
+          <span class="sn">${esc(i.snippet || '—')}</span></span>
+        <span class="tm">${fmt(i.updated_time)}</span>
+      </button>`).join('')
+      : `<div class="sp-ib-empty">${filter === 'tiktok' ? 'تيك توك غير متاح (شوف الملاحظة فوق).' : 'ما كاين حتى محادثة.'}</div>`;
+  }
+
+  async function load(fresh) {
+    try {
+      const r = await fetch(`${PREFIX}/api/inbox${fresh ? '?fresh=1' : ''}`, {credentials: 'same-origin'});
+      data = await r.json();
+    } catch (e) {
+      $('ib-list').innerHTML = '<div class="sp-ib-empty">ما قدرناش نوصلو للسيرفر. عاود.</div>'; return;
+    }
+    loaded = true; renderNotes(); renderList();
+  }
+
+  async function openThread(id) {
+    openConv = allItems().find(i => i.id === id); if (!openConv) return;
+    renderList();
+    const box = $('ib-thread');
+    box.innerHTML = '<div class="sp-ib-empty">⏳ جاري التحميل...</div>';
+    let js;
+    try {
+      js = await (await fetch(`${PREFIX}/api/inbox/messages?id=${encodeURIComponent(id)}`, {credentials: 'same-origin'})).json();
+    } catch (e) { js = {ok: false, error: 'ما قدرناش نوصلو للسيرفر'}; }
+    if (!js.ok) { box.innerHTML = `<div class="sp-ib-err">${esc(js.error)}</div>`; return; }
+    box.innerHTML = `
+      <div class="sp-thread-head"><span class="sp-conv"><span class="ico ${openConv.platform}" style="width:28px;height:28px">${ICON[openConv.platform]}</span></span>
+        ${esc(openConv.name)}${openConv.username ? ` <span class="sp-small">@${esc(openConv.username)}</span>` : ''}</div>
+      <div class="sp-msgs" id="ib-msgs">${js.messages.map(m => `
+        <div class="sp-msg ${m.mine ? 'mine' : ''}">${esc(m.text) || (m.has_attachment ? '📎 مرفق (صورة/ملف) — شوفو من التطبيق' : '—')}
+          <span class="t">${fmt(m.time)}</span></div>`).join('') || '<div class="sp-ib-empty">ما كاين رسائل.</div>'}</div>
+      <div id="ib-reply-err"></div>
+      <div class="sp-reply">
+        <textarea id="ib-text" placeholder="اكتب ردّك... (Ctrl+Enter للإرسال)"></textarea>
+        <button type="button" class="sp-btn primary" id="ib-send" style="padding:10px 20px">إرسال</button>
+      </div>`;
+    const msgs = $('ib-msgs'); msgs.scrollTop = msgs.scrollHeight;
+    $('ib-send').onclick = send;
+    $('ib-text').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(); });
+  }
+
+  async function send() {
+    const ta = $('ib-text'), btn = $('ib-send'), text = ta.value.trim();
+    if (!text || !openConv) return;
+    btn.disabled = true; btn.textContent = '⏳';
+    $('ib-reply-err').innerHTML = '';
+    let js;
+    try {
+      js = await (await fetch(`${PREFIX}/api/inbox/reply`, {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+        body: JSON.stringify({platform: openConv.platform, recipient_id: openConv.user_id, text}),
+      })).json();
+    } catch (e) { js = {ok: false, error: 'ما قدرناش نوصلو للسيرفر'}; }
+    btn.disabled = false; btn.textContent = 'إرسال';
+    if (!js.ok) { $('ib-reply-err').innerHTML = `<div class="sp-ib-err">${esc(js.error)}</div>`; return; }
+    await openThread(openConv.id);
+    load(true);
+  }
+
+  $('ib-list').addEventListener('click', (e) => { const b = e.target.closest('.sp-conv'); if (b) openThread(b.dataset.id); });
+  panel.querySelectorAll('.sp-chip').forEach(c => c.addEventListener('click', () => {
+    filter = c.dataset.f;
+    panel.querySelectorAll('.sp-chip').forEach(x => x.classList.toggle('is-active', x === c));
+    if (data) { renderNotes(); renderList(); }
+  }));
+  $('ib-refresh').addEventListener('click', () => load(true));
+
+  // تحميل كسول + تحديث تلقائي كل دقيقة غير وأنت فالتبويب
+  function active() { return panel.classList.contains('is-active'); }
+  function tick() { if (active() && !document.hidden) load(false); }
+  function maybeLoad() { if (active() && !loaded) load(false); }
+  document.querySelectorAll('.sp-tab[data-tab="inbox"]').forEach(t => t.addEventListener('click', () => setTimeout(maybeLoad, 0)));
+  window.addEventListener('hashchange', () => setTimeout(maybeLoad, 0));
+  setTimeout(maybeLoad, 0);
+  timer = setInterval(tick, 60000);
+})();
+</script>

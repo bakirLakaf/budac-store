@@ -9,11 +9,12 @@ from flask import (Blueprint, Response, abort, jsonify, redirect, render_templat
                    send_file)
 
 from . import db
+from . import inbox
 from . import media as M
 from . import service
 from .config import cfg, redact
 from .platforms import facebook, instagram, tiktok
-from .platforms.base import graph
+from .platforms.base import PlatformError, graph
 from .service import ACTIVE, PLATFORMS
 
 log = logging.getLogger("social_publisher")
@@ -251,6 +252,47 @@ def create_blueprint(admin_required, adapter):
         except Exception as e:  # noqa: BLE001
             return redirect(f"{P}/?err={redact(e)[:150]}#setup")
         return redirect(f"{P}/?msg=تيك توك تربط ✓#setup")
+
+    # ---------- صندوق الرسائل (فيسبوك + انستغرام) ----------
+    @bp.get(P + "/api/inbox")
+    @admin_required
+    def api_inbox():
+        """قائمة المحادثات. كل منصة مستقلة: لو وحدة فشلت الباقي يبقى يخدم."""
+        force = request.args.get("fresh") == "1"
+        out = {name: inbox.list_conversations(name, force=force) for name in inbox.PLATFORMS}
+        out["tiktok"] = {
+            "ok": False, "configured": False, "items": [], "unsupported": True,
+            "error": "تيك توك ما يعطيش API لقراءة الرسائل أو الرد عليها (متاح لشركاء معتمدين برك). "
+                     "شوفها من تطبيق تيك توك أو TikTok Business Suite.",
+        }
+        return jsonify(out)
+
+    @bp.get(P + "/api/inbox/messages")
+    @admin_required
+    def api_inbox_messages():
+        conv = request.args.get("id", "")
+        if not inbox.valid_id(conv):
+            return jsonify(ok=False, error="معرّف المحادثة غير صالح"), 400
+        try:
+            return jsonify(ok=True, messages=inbox.get_messages(conv))
+        except PlatformError as e:
+            return jsonify(ok=False, error=redact(e)), 502
+        except Exception as e:  # noqa: BLE001
+            log.exception("فشل جلب رسائل المحادثة")
+            return jsonify(ok=False, error=redact(e)), 500
+
+    @bp.post(P + "/api/inbox/reply")
+    @admin_required
+    def api_inbox_reply():
+        data = request.get_json(silent=True) or {}
+        try:
+            mid = inbox.send_reply(data.get("platform", ""), data.get("recipient_id", ""), data.get("text", ""))
+        except PlatformError as e:
+            return jsonify(ok=False, error=redact(e)), 400
+        except Exception as e:  # noqa: BLE001
+            log.exception("فشل إرسال الرد")
+            return jsonify(ok=False, error=redact(e)), 500
+        return jsonify(ok=True, message_id=mid)
 
     # ---------- الميديا العامة (فيسبوك/انستغرام يجبدو منها) ----------
     @bp.get("/sp/pub/<token>/<int:mid>.<ext>")
