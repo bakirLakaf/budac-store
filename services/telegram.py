@@ -15,6 +15,7 @@
 4. حط فمتغيرات Railway:
    TELEGRAM_BOT_TOKEN = 7123456789:ABCdef...
    TELEGRAM_CHAT_ID   = @budac_orders   ولا   -1001234567890
+   (لأكثر من وجهة: -1001234567890,123456789)
 
 ═══════════ الاستعمال ═══════════
 
@@ -39,16 +40,17 @@ import requests
 logger = logging.getLogger(__name__)
 
 _BOT_TOKEN = None
-_CHAT_ID = None
+_CHAT_IDS = []          # قائمة الوجهات (مجموعة + حساب خاص)
 _CONFIGURED = False
 
 
 def _load_config():
-    """نقرا الإعدادات من متغيرات البيئة مرة وحدة."""
-    global _BOT_TOKEN, _CHAT_ID, _CONFIGURED
+    """نقرا الإعدادات من متغيرات البيئة مرة وحدة. TELEGRAM_CHAT_ID تقبل أكثر من وجهة مفصولة بفاصلة."""
+    global _BOT_TOKEN, _CHAT_IDS, _CONFIGURED
     _BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-    _CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
-    _CONFIGURED = bool(_BOT_TOKEN and _CHAT_ID)
+    raw = os.environ.get("TELEGRAM_CHAT_ID", "")
+    _CHAT_IDS = [c.strip() for c in raw.split(",") if c.strip()]
+    _CONFIGURED = bool(_BOT_TOKEN and _CHAT_IDS)
 
 
 _load_config()
@@ -72,21 +74,23 @@ def _send(text: str):
         return
 
     def _do():
-        try:
-            resp = requests.post(
-                f"https://api.telegram.org/bot{_BOT_TOKEN}/sendMessage",
-                json={
-                    "chat_id": _CHAT_ID,
-                    "text": text,
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": True,
-                },
-                timeout=10,
-            )
-            if not resp.ok:
-                logger.warning("Telegram: %s — %s", resp.status_code, resp.text[:200])
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Telegram send failed: %s", exc)
+        # نبعثو لكل وجهة، وإذا فشلت وحدة ما توقفش الباقي
+        for chat_id in _CHAT_IDS:
+            try:
+                resp = requests.post(
+                    f"https://api.telegram.org/bot{_BOT_TOKEN}/sendMessage",
+                    json={
+                        "chat_id": chat_id,
+                        "text": text,
+                        "parse_mode": "HTML",
+                        "disable_web_page_preview": True,
+                    },
+                    timeout=10,
+                )
+                if not resp.ok:
+                    logger.warning("Telegram [%s]: %s — %s", chat_id, resp.status_code, resp.text[:200])
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Telegram send failed [%s]: %s", chat_id, exc)
 
     threading.Thread(target=_do, daemon=True).start()
 
