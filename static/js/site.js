@@ -562,8 +562,50 @@ var BudacSafe = (function () {
         pagerInf.hidden = false;
     }
 
+    /* ---------- تحميل مسبق لصور الصفحة السابقة والتالية ----------
+       ⚠️ البطاقات المخبّية بـhidden ما تحمّلش صورها (loading="lazy")،
+       فكل تبديل صفحة كان يبان وكأنو «رفرش»: الصور تظهر وحدة وحدة.
+       درك نحمّلو صور الصفحتين المجاورتين فالخلفية، باش التبديل فوري. */
+    var preloaded = {};
+
+    function preloadPage(visible, page, totalPages) {
+        if (page < 1 || page > totalPages) return;
+        visible.slice((page - 1) * perPage, page * perPage).forEach(function (card) {
+            var img = card.querySelector('img');
+            if (!img) return;
+            var src = img.currentSrc || img.getAttribute('src');
+            if (!src || preloaded[src]) return;
+            preloaded[src] = true;
+            img.loading = 'eager';
+            var pre = new Image();
+            pre.src = src;
+        });
+    }
+
+    /* ⚠️ ارتفاع الشبكة يبقى ثابت (ارتفاع صفحة كاملة) — بلاه، الصفحة
+       الأخيرة (فيها منتجات أقل) تقصّر والترقيم يقفز لفوق. */
+    function lockGridHeight(fullPageShown) {
+        if (fullPageShown) {
+            grid.style.minHeight = '';
+            grid.style.minHeight = grid.offsetHeight + 'px';
+        }
+    }
+
+    window.addEventListener('resize', function () { grid.style.minHeight = ''; });
+
+    /* ---------- أنيميشن خفيف عند التبديل ---------- */
+    var reduceMotion = window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function animate(direction) {
+        if (reduceMotion || !direction) return;
+        grid.classList.remove('grid-enter-next', 'grid-enter-prev');
+        void grid.offsetWidth;   // إعادة تشغيل الأنيميشن
+        grid.classList.add(direction === 'next' ? 'grid-enter-next' : 'grid-enter-prev');
+    }
+
     /* ---------- العرض ---------- */
-    function render() {
+    function render(direction) {
         var visible = matching();
         var totalPages = Math.max(1, Math.ceil(visible.length / perPage));
 
@@ -575,18 +617,62 @@ var BudacSafe = (function () {
         // ⚠️ نخبّيو بـhidden ماشي بـdisplay فالـstyle: نخلّيو
         // التحكم للـCSS وما نكسروش أي تخطيط (grid).
         cards.forEach(function (card) { card.hidden = true; });
-        visible.slice(first, last).forEach(function (card) { card.hidden = false; });
+        var pageCards = visible.slice(first, last);
+        pageCards.forEach(function (card) { card.hidden = false; });
 
         if (countEl) countEl.textContent = plural(visible.length);
         if (emptyEl) emptyEl.hidden = visible.length > 0;
 
         renderPager(totalPages);
+        lockGridHeight(pageCards.length === perPage);
+        animate(direction);
+
+        preloadPage(visible, currentPage + 1, totalPages);
+        preloadPage(visible, currentPage - 1, totalPages);
     }
 
-    function goTo(page, scroll) {
+    /* ---------- السحب بالإصبع (هاتف) ----------
+       ⚠️ RTL: السحب نحو اليمين = الصفحة التالية، نحو اليسار = السابقة
+       (نفس اتجاه تصفّح الكتاب العربي). إذا حبيت تعكسها بدّل
+       SWIPE_RIGHT_IS_NEXT إلى false. */
+    var SWIPE_RIGHT_IS_NEXT = true;
+    var touchX = 0, touchY = 0, touchTime = 0, tracking = false;
+
+    grid.addEventListener('touchstart', function (e) {
+        if (e.touches.length !== 1) { tracking = false; return; }
+        tracking = true;
+        touchX = e.touches[0].clientX;
+        touchY = e.touches[0].clientY;
+        touchTime = Date.now();
+    }, { passive: true });
+
+    grid.addEventListener('touchend', function (e) {
+        if (!tracking) return;
+        tracking = false;
+
+        var t = e.changedTouches[0];
+        var dx = t.clientX - touchX;
+        var dy = t.clientY - touchY;
+
+        // ⚠️ سحب أفقي واضح فقط: ≥ 60px، وأفقي أكثر من العمودي بمرتين،
+        // وأقل من ثانية — بلا هاد الشروط التمرير العادي يبدّل الصفحة بالغلط.
+        if (Math.abs(dx) < 60) return;
+        if (Math.abs(dx) < Math.abs(dy) * 2) return;
+        if (Date.now() - touchTime > 1000) return;
+
+        var wantNext = (dx > 0) === SWIPE_RIGHT_IS_NEXT;
+        var totalPages = Math.max(1, Math.ceil(matching().length / perPage));
+        var target = currentPage + (wantNext ? 1 : -1);
+        if (target < 1 || target > totalPages) return;
+
+        goTo(target, true, wantNext ? 'next' : 'prev');
+    }, { passive: true });
+
+    function goTo(page, scroll, direction) {
+        direction = direction || (page > currentPage ? 'next' : 'prev');
         currentPage = page;
         writeUrl(false);
-        render();
+        render(direction);
 
         if (scroll && section) {
             // ⚠️ ماكانش إعادة تحميل، فالصفحة ما تقفزش. نمرّرو غير
@@ -605,6 +691,7 @@ var BudacSafe = (function () {
     function setCategory(slug) {
         currentCat = slug || null;
         currentPage = 1;
+        grid.style.minHeight = '';
         writeUrl(false);
         render();
 

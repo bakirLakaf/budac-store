@@ -4041,3 +4041,21 @@ button.pager-num.is-disabled {
 .hero-slide.is-image .hero-slide-text { display: block; }
 .hero-slide.is-image .hero-slide-media.has-banner > a > img { transition: transform 0.35s ease; }
 .hero-slide.is-image .hs-media-link:hover img { transform: scale(1.012); }
+
+
+/* ═══════════════════════════════════════════════════════
+   v189 — تبديل صفحات المنتجات بسلاسة + سحب بالإصبع
+   ═══════════════════════════════════════════════════════ */
+/* السحب الأفقي لقلب الصفحة، والتمرير العمودي يبقى عادي */
+.product-grid[data-client-paginated="1"] { touch-action: pan-y; }
+
+@keyframes gridEnterNext { from { opacity: .25; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+@keyframes gridEnterPrev { from { opacity: .25; transform: translateX(24px); }  to { opacity: 1; transform: none; } }
+
+.product-grid.grid-enter-next { animation: gridEnterNext .22s ease-out; }
+.product-grid.grid-enter-prev { animation: gridEnterPrev .22s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+    .product-grid.grid-enter-next,
+    .product-grid.grid-enter-prev { animation: none; }
+}
