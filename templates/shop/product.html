@@ -232,13 +232,13 @@
                  data-name="{{ product.name }}">
                 <span class="share-label">شارك:</span>
                 <a class="share-btn share-wa" id="shareWa" target="_blank" rel="noopener"
-                   href="https://wa.me/?text={{ (product.name + ' — ' + request.url) | urlencode }}"
+                   href="https://wa.me/?text={{ (product.name + ' — ' + url_for('shop.product_detail', slug=product.slug, _external=True)) | urlencode }}"
                    aria-label="شارك على واتساب">واتساب</a>
                 <a class="share-btn share-fb" id="shareFb" target="_blank" rel="noopener"
-                   href="https://www.facebook.com/sharer/sharer.php?u={{ request.url | urlencode }}"
+                   href="https://www.facebook.com/sharer/sharer.php?u={{ url_for('shop.product_detail', slug=product.slug, _external=True) | urlencode }}"
                    aria-label="شارك على فيسبوك">فيسبوك</a>
                 <button type="button" class="share-btn share-copy" id="copyLinkBtn"
-                        data-link="{{ request.url }}">نسخ الرابط</button>
+                        data-link="{{ url_for('shop.product_detail', slug=product.slug, _external=True) }}">نسخ الرابط</button>
             </div>
 
             <details class="product-faq">
@@ -816,8 +816,9 @@
         var vid = chip ? (chip.getAttribute("data-variant-id") || "") : "";
         var label = chip ? chip.textContent.trim() : "";
 
-        var link = vid ? base + "?v=" + encodeURIComponent(vid) : base;
-        // اسم الموديل فنص الواتساب — الصاحب يعرف على واش تهدر
+        // ⚠️ الرابط نظيف دايمًا: بلا ?v= — طلب صاحب المتجر.
+        //    (الموديل المختار يبان فنص الواتساب باسمو، ماشي فالرابط.)
+        var link = base;
         var text = name + (label ? " — " + label : "") + " — " + link;
 
         var wa = document.getElementById("shareWa");
@@ -828,11 +829,6 @@
         if (fb) fb.href = "https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(link);
         if (copy) copy.setAttribute("data-link", link);
 
-        // نبدّلو رابط الصفحة كذلك (بلا إعادة تحميل) — الزبون اللي
-        // ينسخ من شريط العنوان ياخذ الموديل الصحيح تاني
-        if (window.history && window.history.replaceState) {
-            window.history.replaceState(null, "", link);
-        }
     }
 
     /* ── الصورة ← الموديل ─────────────────────────────────────
