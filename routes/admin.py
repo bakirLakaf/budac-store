@@ -16,7 +16,7 @@ from functools import wraps
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
-    session, flash, abort, jsonify, current_app,
+    session, flash, abort, jsonify, current_app, Response,
 )
 from sqlalchemy import func
 from werkzeug.datastructures import MultiDict   # ⚠️ باش نبنيو args من حقول الفورم
@@ -41,6 +41,44 @@ from services.uploads import save_image, delete_image, UploadError
 from utils import html_to_text, slugify
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+@admin_bp.get("/manifest.webmanifest")
+def app_manifest():
+    """PWA metadata for installing the admin dashboard on a phone."""
+    return jsonify({
+        "id": "/admin/",
+        "name": "لوحة تحكم Budac",
+        "short_name": "Budac Admin",
+        "description": "لوحة إدارة متجر Budac",
+        "lang": "ar",
+        "dir": "rtl",
+        "start_url": "/admin/",
+        "scope": "/admin/",
+        "display": "standalone",
+        "background_color": "#ffffff",
+        "theme_color": "#2E1A47",
+        "icons": [
+            {"src": url_for("static", filename="img/brand/icon-192.png"),
+             "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": url_for("static", filename="img/brand/icon-512.png"),
+             "sizes": "512x512", "type": "image/png", "purpose": "any"},
+        ],
+    }), 200, {"Content-Type": "application/manifest+json; charset=utf-8"}
+
+
+@admin_bp.get("/sw.js")
+def admin_service_worker():
+    """A network-only worker makes the admin installable without caching private data."""
+    response = Response(
+        "self.addEventListener('fetch', function (event) {\n"
+        "  event.respondWith(fetch(event.request));\n"
+        "});\n",
+        mimetype="application/javascript",
+    )
+    response.headers["Service-Worker-Allowed"] = "/admin/"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @admin_bp.app_context_processor
