@@ -28,6 +28,18 @@
           href="{{ url_for('static', filename='img/brand/icon-192.png') }}">
     <link rel="apple-touch-icon"
           href="{{ url_for('static', filename='img/brand/apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('admin.app_manifest') }}">
+    <meta name="theme-color" content="#2E1A47">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Budac Admin">
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register("{{ url_for('admin.admin_service_worker') }}", { scope: '/admin/' })
+                .catch(function () {});
+        });
+    }
+    </script>
 </head>
 <body class="admin-body">
 
