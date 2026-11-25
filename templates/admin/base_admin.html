@@ -28,18 +28,7 @@
           href="{{ url_for('static', filename='img/brand/icon-192.png') }}">
     <link rel="apple-touch-icon"
           href="{{ url_for('static', filename='img/brand/apple-touch-icon.png') }}">
-    <link rel="manifest" href="{{ url_for('admin.app_manifest') }}">
-    <meta name="theme-color" content="#2E1A47">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="Budac Admin">
-    <script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-            navigator.serviceWorker.register("{{ url_for('admin.admin_service_worker') }}", { scope: '/admin/' })
-                .catch(function () {});
-        });
-    }
-    </script>
+    {% include "partials/admin_pwa.html" %}
 </head>
 <body class="admin-body">
 
@@ -137,6 +126,7 @@
         <button type="button" class="theme-toggle" id="theme-toggle" aria-label="تبديل المظهر">
             <span id="theme-toggle-icon">🌙</span> <span id="theme-toggle-label">المظهر الداكن</span>
         </button>
+        <button type="button" class="theme-toggle" data-pwa-install hidden>📲 ثبّت التطبيق فالهاتف</button>
         <a href="{{ url_for('shop.home') }}" target="_blank" class="admin-view-store">عرض المتجر ↗</a>
         <form method="post" action="{{ url_for('admin.logout') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

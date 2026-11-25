@@ -6,6 +6,7 @@
     <title>دخول لوحة التحكم — {{ store_name }}</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+    {% include "partials/admin_pwa.html" %}
 </head>
 <body class="login-body">
     <div class="login-card">
@@ -30,6 +31,7 @@
             </label>
             <button type="submit" class="btn-admin btn-block">دخول</button>
         </form>
+        <button type="button" class="btn-admin btn-ghost" data-pwa-install hidden style="width:100%;margin-top:12px">📲 ثبّت التطبيق فالهاتف</button>
     </div>
 </body>
 </html>

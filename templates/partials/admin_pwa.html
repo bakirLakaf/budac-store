@@ -1,0 +1,50 @@
+{# v190: PWA — يتحط فـ<head> تاع صفحات اللوحة (base_admin + login) #}
+<link rel="manifest" href="{{ url_for('admin.pwa_manifest') }}">
+<meta name="theme-color" content="#1a044d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Budac Admin">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script>
+(function () {
+    // تسجيل الـservice worker — شرط أساسي باش المتصفح يقترح «تثبيت التطبيق»
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register("{{ url_for('admin.pwa_service_worker') }}",
+                                             { scope: '/admin/' }).catch(function () {});
+        });
+    }
+
+    // زر «ثبّت التطبيق»: يبان غير إذا المتصفح يسمح بالتثبيت
+    var deferred = null;
+    var standalone = window.matchMedia('(display-mode: standalone)').matches
+                     || window.navigator.standalone;
+    window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferred = e;
+        document.querySelectorAll('[data-pwa-install]').forEach(function (b) { b.hidden = false; });
+    });
+    window.addEventListener('appinstalled', function () {
+        deferred = null;
+        document.querySelectorAll('[data-pwa-install]').forEach(function (b) { b.hidden = true; });
+    });
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-pwa-install]');
+        if (!btn) return;
+        if (deferred) {
+            deferred.prompt();
+            deferred.userChoice.finally(function () { deferred = null; btn.hidden = true; });
+        } else {
+            // iOS Safari ما عندوش prompt: نوريو الطريقة اليدوية
+            alert('باش تثبّت التطبيق: افتح قائمة المتصفح (⋮ ولا زر المشاركة) ثم «إضافة إلى الشاشة الرئيسية».');
+        }
+    });
+    // iOS / متصفح بلا prompt: نبقاو نوريو الزر (إلا إذا التطبيق مثبّت أصلاً)
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (ios && !standalone) {
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('[data-pwa-install]').forEach(function (b) { b.hidden = false; });
+        });
+    }
+})();
+</script>

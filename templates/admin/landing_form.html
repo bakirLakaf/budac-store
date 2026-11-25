@@ -12,6 +12,8 @@
 {% set cur_layout = form.get('layout') or (page.page_layout if page else 'split') %}
 {% set cur_product = form.get('product_id') or (page.product_id if page else none) %}
 {% set cur_bundle = form.get('bundle_product_id') or (page.bundle_product_id if page else none) %}
+{# v190: الخانات الإضافية — من الفورم المرفوض أولاً، وإلا من الصفحة المحفوظة #}
+{% set cur_cf = (form.get('custom_fields_json') | fromjson) if form.get('custom_fields_json') else (page.custom_fields if page else []) %}
 
 <div class="lpf-head">
     <div>
@@ -252,6 +254,54 @@
             </div>
         </section>
 
+        <section class="lpf-card" id="lpfCustom">
+            <h2>خانات إضافية فالفورم</h2>
+            <p class="lpf-hint">
+                مثلاً «حسب الطلب»: زيد خانة «الاسم اللي تحب نكتبو». الزبون يعمّرها،
+                وتبان لك فالطلبية تحت المنتج. (حتى {{ 5 }} خانات)
+            </p>
+
+            <div id="cfRows">
+                {% for f in cur_cf %}
+                <div class="cf-row">
+                    <input type="text" name="cf_label" maxlength="60" value="{{ f.label }}"
+                           placeholder="اسم الخانة (مثلاً: الاسم اللي تحب نكتبو)">
+                    <input type="text" name="cf_placeholder" maxlength="80" value="{{ f.placeholder }}"
+                           placeholder="مثال يبان داخل الخانة (اختياري)">
+                    <select name="cf_required" aria-label="إجباري ولا اختياري">
+                        <option value="1" {{ 'selected' if f.required }}>إجبارية</option>
+                        <option value="0" {{ 'selected' if not f.required }}>اختيارية</option>
+                    </select>
+                    <button type="button" class="cf-del" title="حيّد الخانة" aria-label="حيّد الخانة">×</button>
+                </div>
+                {% endfor %}
+            </div>
+
+            <button type="button" class="btn-admin btn-sm btn-ghost" id="cfAdd">➕ زيد خانة</button>
+
+            {# قالب صف فارغ — يتنسخ بالجافاسكريبت #}
+            <template id="cfTpl">
+                <div class="cf-row">
+                    <input type="text" name="cf_label" maxlength="60"
+                           placeholder="اسم الخانة (مثلاً: الاسم اللي تحب نكتبو)">
+                    <input type="text" name="cf_placeholder" maxlength="80"
+                           placeholder="مثال يبان داخل الخانة (اختياري)">
+                    <select name="cf_required" aria-label="إجباري ولا اختياري">
+                        <option value="1" selected>إجبارية</option>
+                        <option value="0">اختيارية</option>
+                    </select>
+                    <button type="button" class="cf-del" title="حيّد الخانة" aria-label="حيّد الخانة">×</button>
+                </div>
+            </template>
+            <style>
+                .cf-row{display:grid;grid-template-columns:1fr auto;gap:6px;padding:10px;margin-bottom:8px;
+                        border:1px solid var(--border,#3a3350);border-radius:10px}
+                .cf-row input[name=cf_label],.cf-row input[name=cf_placeholder]{grid-column:1 / -1}
+                .cf-row select{min-width:0}
+                .cf-del{border:0;background:transparent;color:#ef6b6b;font-size:22px;line-height:1;cursor:pointer}
+            </style>
+        </section>
+
         <section class="lpf-card">
             <h2>الباقة والموديلات</h2>
 
@@ -285,6 +335,27 @@
 
 <script>
 (function () {
+    // ─── خانات إضافية: زيادة وحذف صفوف (حد أقصى 5) ───
+    var cfRows = document.getElementById('cfRows');
+    var cfAdd = document.getElementById('cfAdd');
+    var cfTpl = document.getElementById('cfTpl');
+    var CF_MAX = 5;
+    function cfRefresh() { cfAdd.hidden = cfRows.children.length >= CF_MAX; }
+    cfAdd.addEventListener('click', function () {
+        if (cfRows.children.length >= CF_MAX) return;
+        cfRows.appendChild(cfTpl.content.cloneNode(true));
+        var last = cfRows.lastElementChild.querySelector('input');
+        if (last) last.focus();
+        cfRefresh();
+    });
+    cfRows.addEventListener('click', function (e) {
+        var btn = e.target.closest('.cf-del');
+        if (!btn) return;
+        btn.closest('.cf-row').remove();
+        cfRefresh();
+    });
+    cfRefresh();
+
     var product = document.getElementById('lpfProduct');
     var picker = document.getElementById('lpfPicker');
     var count = document.getElementById('lpfVariantCount');

@@ -291,6 +291,17 @@ fbq('track', 'ViewContent', {
                    placeholder="قرب مسجد X، عمارة رقم Y">
         </label>
 
+        {# v190: خانات إضافية يحدّدها الأدمن (مثلاً: الاسم اللي تحب نكتبو) #}
+        {% for f in page.custom_fields %}
+        <label class="lp-field lp-custom-field">
+            <span>{{ f.label }}{% if not f.required %} <em>(اختياري)</em>{% endif %}</span>
+            <input type="text" name="cf_{{ loop.index0 }}" maxlength="200"
+                   value="{{ form.get('custom', {}).get(loop.index0, '') }}"
+                   {{ 'required' if f.required }}
+                   placeholder="{{ f.placeholder }}">
+        </label>
+        {% endfor %}
+
         <!-- ملخّص الحساب -->
         <div class="lp-summary">
             <div><span>المنتج</span><span id="sumProduct">{{ '{:,}'.format(page.unit_price) }} دج</span></div>

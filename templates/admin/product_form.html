@@ -923,25 +923,125 @@
 
 <div class="add-variant-box">
     <h3>زيد موديل جديد</h3>
-    <form method="post" action="{{ url_for('admin.variant_add', product_id=product.id) }}"
-          class="inline-form">
+    {# v190: بطاقة موديل بصورة — صوّر بالكاميرا ولا اختار من الاستوديو #}
+    <form method="post" enctype="multipart/form-data" id="newVariantForm"
+          action="{{ url_for('admin.variant_add', product_id=product.id) }}"
+          class="nv-card">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="nv-photo" id="nvPhoto">
+            <img id="nvPreview" alt="" hidden>
+            <span id="nvEmpty">📷<br><small>صورة الموديل</small></span>
+        </div>
+
+        <div class="nv-pick">
+            <label class="btn-admin btn-sm">📷 صوّر
+                {# capture=environment يفتح الكاميرا الخلفية مباشرة فالهاتف #}
+                <input type="file" id="nvCamera" accept="image/*" capture="environment" hidden>
+            </label>
+            <label class="btn-admin btn-sm btn-ghost">🖼️ من الاستوديو
+                <input type="file" id="nvGallery" accept="image/*" hidden>
+            </label>
+            <button type="button" class="btn-admin btn-sm btn-ghost" id="nvClear" hidden>× حيّد الصورة</button>
+        </div>
+
         <input type="text" name="label" placeholder="اسم الموديل (مثلاً: دوري / الجزيرة)" required>
-        <input type="number" name="price" placeholder="السعر العادي (اختياري)" min="0">
+        <input type="number" name="price" placeholder="السعر العادي (اختياري)" min="0" inputmode="numeric">
         <input type="text" name="sku" placeholder="SKU (اختياري)">
 
         {% if product.images %}
-        <select name="image_filename" class="variant-img-select">
-            <option value="">— اختر صورة (اختياري) —</option>
+        <select name="image_filename" class="variant-img-select" id="nvExisting">
+            <option value="">— أو اختر من صور المنتج (اختياري) —</option>
             {% for img in product.images %}
             <option value="{{ img.image_filename }}">صورة {{ loop.index }}</option>
             {% endfor %}
         </select>
         {% endif %}
 
-        <button type="submit" class="btn-admin btn-sm">+ زيد الموديل</button>
+        <button type="submit" class="btn-admin" id="nvSubmit">+ زيد الموديل</button>
+        <p class="nv-state" id="nvState" role="status"></p>
     </form>
-    <p class="hint">بعد ما تزيدو، تقدر تختار صورتو وتحط أسعار الجملة.</p>
+    <p class="hint">الصورة الجديدة تتزاد لصور المنتج وتتربط بالموديل أوتوماتيكيًا. بعدها تقدر تحط أسعار الجملة.</p>
+    <style>
+        .nv-card{display:grid;gap:10px;max-width:460px}
+        .nv-card input[type=text],.nv-card input[type=number],.nv-card select{width:100%}
+        .nv-photo{width:150px;height:150px;border:2px dashed #8a7cc0;border-radius:14px;display:grid;
+                  place-items:center;text-align:center;overflow:hidden;font-size:34px;justify-self:center}
+        .nv-photo img{width:100%;height:100%;object-fit:cover}
+        .nv-pick{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+        .nv-pick label{cursor:pointer}
+        .nv-state{margin:0;font-size:13px;min-height:1em}
+    </style>
+    <script>
+    (function () {
+        var form = document.getElementById('newVariantForm');
+        if (!form) return;
+        var cam = document.getElementById('nvCamera');
+        var gal = document.getElementById('nvGallery');
+        var prev = document.getElementById('nvPreview');
+        var empty = document.getElementById('nvEmpty');
+        var clear = document.getElementById('nvClear');
+        var state = document.getElementById('nvState');
+        var existing = document.getElementById('nvExisting');
+        var submit = document.getElementById('nvSubmit');
+        var chosen = null;          // الملف المختار (كاميرا ولا استوديو)
+
+        function setFile(f) {
+            chosen = f || null;
+            if (prev.src && prev.src.indexOf('blob:') === 0) URL.revokeObjectURL(prev.src);
+            if (chosen) {
+                prev.src = URL.createObjectURL(chosen);
+                prev.hidden = false; empty.hidden = true; clear.hidden = false;
+                if (existing) existing.value = '';     // الصورة الجديدة تغلب
+            } else {
+                prev.hidden = true; empty.hidden = false; clear.hidden = true;
+            }
+        }
+        [cam, gal].forEach(function (inp) {
+            inp.addEventListener('change', function () {
+                if (inp.files && inp.files[0]) setFile(inp.files[0]);
+                inp.value = '';
+            });
+        });
+        clear.addEventListener('click', function () { setFile(null); });
+        if (existing) existing.addEventListener('change', function () { if (existing.value) setFile(null); });
+
+        // تصغير الصورة قبل الرفع (صور الكاميرا 8–12 ميغا) — نفس منطق رفع صور المنتج
+        function shrink(file) {
+            return new Promise(function (resolve) {
+                if (file.size < 900 * 1024 || /gif/i.test(file.type)) return resolve(file);
+                var url = URL.createObjectURL(file), img = new Image();
+                img.onload = function () {
+                    URL.revokeObjectURL(url);
+                    var MAX = 2400, w = img.width, h = img.height;
+                    if (w > MAX || h > MAX) { var k = Math.min(MAX / w, MAX / h); w = Math.round(w * k); h = Math.round(h * k); }
+                    var c = document.createElement('canvas'); c.width = w; c.height = h;
+                    c.getContext('2d').drawImage(img, 0, 0, w, h);
+                    c.toBlob(function (b) { resolve(b && b.size < file.size ? b : file); }, 'image/webp', 0.9);
+                };
+                img.onerror = function () { URL.revokeObjectURL(url); resolve(file); };
+                img.src = url;
+            });
+        }
+
+        form.addEventListener('submit', function (e) {
+            if (!chosen) return;               // بلا صورة جديدة: إرسال عادي
+            e.preventDefault();
+            submit.disabled = true; state.textContent = 'جاري رفع الصورة…';
+            shrink(chosen).then(function (blob) {
+                var fd = new FormData(form);
+                fd.set('new_image', blob, chosen.name || 'variant.jpg');
+                return fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin',
+                                            headers: { 'X-Requested-With': 'fetch' } });
+            }).then(function (r) {
+                window.location.href = r.url || window.location.href;   // يتبع التحويل ويوري رسالة النجاح
+            }).catch(function () {
+                submit.disabled = false;
+                state.textContent = '⚠️ انقطع الاتصال — عاود جرّب';
+            });
+        });
+    })();
+    </script>
 </div>
 {% endif %}
 

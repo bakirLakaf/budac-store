@@ -123,7 +123,7 @@
     <div class="items">
         <ul>
             {% for it in o.items[:5] %}
-            <li>{{ it.quantity }}× {{ it.item_name }}{% if it.variant_label %} ({{ it.variant_label }}){% endif %}</li>
+            <li>{{ it.quantity }}× {{ it.item_name }}{% if it.variant_label %} ({{ it.variant_label }}){% endif %}{% for lbl, val in it.custom_lines %}<br><small>✍️ {{ lbl }}: {{ val }}</small>{% endfor %}</li>
             {% endfor %}
             {% if o.items|length > 5 %}<li>… و{{ o.items|length - 5 }} أصناف أخرى</li>{% endif %}
         </ul>

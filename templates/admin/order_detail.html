@@ -71,6 +71,12 @@
                         {{ item.item_name }}
                         {% if item.variant_label %}<br><small class="muted-cell">{{ item.variant_label }}</small>{% endif %}
                         {% if item.offer_id %}<span class="tag tag-gold">باقة</span>{% endif %}
+                        {# v190: خانات إضافية عمّرها الزبون (مثلاً الاسم المطلوب كتابتو) #}
+                        {% for lbl, val in item.custom_lines %}
+                        <div class="item-custom" style="margin-top:6px;padding:6px 10px;border-radius:8px;background:rgba(245,179,1,.14);border:1px dashed #f5b301">
+                            ✍️ {% if lbl %}<small>{{ lbl }}:</small> {% endif %}<strong class="copyable" data-copy="{{ val }}" title="اضغط باش تنسخو">{{ val }}</strong>
+                        </div>
+                        {% endfor %}
                     </td>
                     {# ⚠️ السعر والكمية قابلين للتعديل فمكانهم — الزبون
                        يتصل ويقول «زيدلي 2» ولا «نقّصلي وحدة»، ولازم
@@ -203,6 +209,35 @@
             <div class="summary-row"><span>المنتجات</span><span>{{ "{:,}".format(order.subtotal) }} دج</span></div>
             {% if order.discount_amount %}
             <div class="summary-row summary-discount"><span>خصم ({{ order.coupon_code }})</span><span>-{{ "{:,}".format(order.discount_amount) }} دج</span></div>
+            {% endif %}
+            {# ═══ v190: كود برومو — الأدمن يطبّقو للزبون اللي ما يعرفش يستعملو ═══ #}
+            {% if order.is_editable %}
+            <div class="summary-row coupon-row" style="flex-wrap:wrap;gap:8px">
+                <span>🎟️ كود برومو</span>
+                <span>
+                {% if order.coupon_code %}
+                    <form method="post" class="ship-edit" style="display:inline-flex;gap:6px;align-items:center"
+                          action="{{ url_for('admin.order_apply_coupon', order_id=order.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="remove">
+                        <code>{{ order.coupon_code }}</code>
+                        <button type="submit" class="btn-admin btn-sm btn-danger" title="حيّد الكود">× حيّدو</button>
+                    </form>
+                {% else %}
+                    <form method="post" class="ship-edit" style="display:inline-flex;gap:6px;align-items:center"
+                          action="{{ url_for('admin.order_apply_coupon', order_id=order.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="text" name="code" dir="ltr" autocomplete="off" autocapitalize="characters"
+                               style="width:150px;text-transform:uppercase"
+                               value="{{ suggested_coupon or '' }}" placeholder="اكتب الكود" aria-label="كود البرومو">
+                        <button type="submit" class="btn-admin btn-sm" title="طبّق الكود">طبّق</button>
+                    </form>
+                {% endif %}
+                </span>
+                {% if suggested_coupon and not order.coupon_code %}
+                <small style="flex-basis:100%;opacity:.8">💡 لقينا هاد الكود فملاحظة الزبون — ضغط «طبّق».</small>
+                {% endif %}
+            </div>
             {% endif %}
             <div class="summary-row">
                 <span>التوصيل ({{ order.carrier_name or '—' }})</span>
