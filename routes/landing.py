@@ -39,7 +39,7 @@ def _resolve_variant(page, form):
     return page.variant
 
 
-def _build_lines(page, quantity, variant):
+def _build_lines(page, quantity, variant, custom_text=None):
     """
     يبني سطور الطلبية من صفحة الهبوط — بلا مرور بالـsession.
 
@@ -67,6 +67,7 @@ def _build_lines(page, quantity, variant):
         available_stock=(
             variant.stock_quantity if variant else product.stock_quantity
         ),
+        custom_text=custom_text,   # v190: الخانات الإضافية تتسجّل على السطر الأساسي
     )]
 
     if page.has_bundle:
@@ -169,7 +170,8 @@ def submit(slug):
     wilaya = next((w for w in wilayas if w["code"] == form["wilaya_code"]), None)
     wilaya_name = wilaya["name"] if wilaya else form["wilaya_code"]
 
-    lines = _build_lines(page, form["quantity"], variant)
+    lines = _build_lines(page, form["quantity"], variant,
+                         custom_text=_custom_text(page, form))
 
     try:
         order = create_order(
@@ -293,7 +295,27 @@ def _read_form(data):
         "carrier_code": (data.get("carrier_code") or "").strip(),
         "delivery_type": (data.get("delivery_type") or "").strip(),
         "note": (data.get("note") or "").strip(),
+        # v190: قيم الخانات الإضافية — cf_0، cf_1... (مفاتيحها بالترتيب)
+        "custom": {
+            i: (data.get(f"cf_{i}") or "").strip()[:200]
+            for i in range(LandingPage.MAX_CUSTOM_FIELDS)
+        },
     }
+
+
+def _custom_text(page, form):
+    """
+    يبني نص الخانات الإضافية للتخزين: سطر لكل خانة «التسمية: القيمة».
+
+    ⚠️ التسميات تجي من إعدادات الصفحة (ماشي من الزبون) — الزبون يبعث
+    القيمة برك، فما يقدرش يبدّل اسم الخانة.
+    """
+    lines = []
+    for i, field in enumerate(page.custom_fields):
+        value = (form.get("custom") or {}).get(i, "").replace("\n", " ").strip()
+        if value:
+            lines.append(f"{field['label']}: {value}")
+    return "\n".join(lines) or None
 
 
 def _validate(form, page, variant=None):
@@ -352,6 +374,11 @@ def _validate(form, page, variant=None):
         )
         if bundle_error:
             errors.append(bundle_error)
+
+    # ---------- الخانات الإضافية (v190) ----------
+    for i, field in enumerate(page.custom_fields):
+        if field["required"] and not (form.get("custom") or {}).get(i):
+            errors.append(f"اكتب «{field['label']}»")
 
     # ---------- التوصيل ----------
     if not form["wilaya_code"]:

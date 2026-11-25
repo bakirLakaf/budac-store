@@ -16,7 +16,7 @@ from functools import wraps
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
-    session, flash, abort, jsonify, current_app, Response,
+    session, flash, abort, jsonify, current_app,
 )
 from sqlalchemy import func
 from werkzeug.datastructures import MultiDict   # ⚠️ باش نبنيو args من حقول الفورم
@@ -41,44 +41,6 @@ from services.uploads import save_image, delete_image, UploadError
 from utils import html_to_text, slugify
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
-
-
-@admin_bp.get("/manifest.webmanifest")
-def app_manifest():
-    """PWA metadata for installing the admin dashboard on a phone."""
-    return jsonify({
-        "id": "/admin/",
-        "name": "لوحة تحكم Budac",
-        "short_name": "Budac Admin",
-        "description": "لوحة إدارة متجر Budac",
-        "lang": "ar",
-        "dir": "rtl",
-        "start_url": "/admin/",
-        "scope": "/admin/",
-        "display": "standalone",
-        "background_color": "#ffffff",
-        "theme_color": "#2E1A47",
-        "icons": [
-            {"src": url_for("static", filename="img/brand/icon-192.png"),
-             "sizes": "192x192", "type": "image/png", "purpose": "any"},
-            {"src": url_for("static", filename="img/brand/icon-512.png"),
-             "sizes": "512x512", "type": "image/png", "purpose": "any"},
-        ],
-    }), 200, {"Content-Type": "application/manifest+json; charset=utf-8"}
-
-
-@admin_bp.get("/sw.js")
-def admin_service_worker():
-    """A network-only worker makes the admin installable without caching private data."""
-    response = Response(
-        "self.addEventListener('fetch', function (event) {\n"
-        "  event.respondWith(fetch(event.request));\n"
-        "});\n",
-        mimetype="application/javascript",
-    )
-    response.headers["Service-Worker-Allowed"] = "/admin/"
-    response.headers["Cache-Control"] = "no-cache"
-    return response
 
 
 @admin_bp.app_context_processor
@@ -1263,6 +1225,28 @@ def variant_add(product_id):
         variant.image_filename = chosen
 
     db.session.add(variant)
+
+    # v190: صورة جديدة (من الكاميرا ولا الاستوديو) — تتحفظ كصورة منتج
+    # وتتربط بالموديل مباشرة. تغلب الاختيار من الصور الموجودة.
+    new_file = request.files.get("new_image")
+    if new_file and new_file.filename:
+        try:
+            filename = save_image(new_file, "products", base_name=product.slug)
+        except UploadError as e:
+            db.session.rollback()
+            flash(f"الموديل ما تزادش — {e}", "error")
+            return redirect(url_for("admin.product_form", product_id=product_id))
+
+        main_imgs = [i for i in product.images if not i.is_extra]
+        last = max((i.sort_order for i in main_imgs), default=-1)
+        db.session.add(ProductImage(
+            product_id=product.id, image_filename=filename,
+            sort_order=last + 1, is_extra=False,
+        ))
+        if not product.image_filename:
+            product.image_filename = filename
+        variant.image_filename = filename
+
     db.session.commit()
 
     flash(f"تمت إضافة التنويعة «{label}»", "success")
@@ -1928,6 +1912,67 @@ def orders_all_parcels_data(carrier):
     return jsonify(out)
 
 
+# ══════════════════════════════════════════════════════════════
+# v190: تثبيت اللوحة كتطبيق فالهاتف (PWA)
+#
+# ⚠️ الثلاث مسارات هادو **بلا login_required** عن قصد: المتصفح يطلب
+# manifest و sw.js بلا كوكيز أحيانًا، ولو حوّلناه لصفحة الدخول (HTML)
+# يفشل التثبيت بصمت. ما فيهم حتى بيانات حساسة.
+#
+# ⚠️ الـservice worker **ما يخزّنش صفحات اللوحة أبدًا** (طلبيات، أرقام
+# زبائن...) — يخزّن غير صفحة «ما كاينش اتصال» والأيقونات.
+# ══════════════════════════════════════════════════════════════
+
+@admin_bp.route("/manifest.webmanifest")
+def pwa_manifest():
+    icon = lambda f: url_for("static", filename=f"img/brand/{f}")
+    data = {
+        "name": "لوحة تحكم Budac",
+        "short_name": "Budac Admin",
+        "description": "إدارة طلبيات ومنتجات متجر Budac",
+        "lang": "ar",
+        "dir": "rtl",
+        "id": "/admin/",
+        "start_url": "/admin/?source=pwa",
+        "scope": "/admin/",
+        "display": "standalone",
+        "orientation": "portrait",
+        "background_color": "#1a044d",
+        "theme_color": "#1a044d",
+        "icons": [
+            {"src": icon("icon-192.png"), "sizes": "192x192",
+             "type": "image/png", "purpose": "any"},
+            {"src": icon("icon-512.png"), "sizes": "512x512",
+             "type": "image/png", "purpose": "any"},
+            {"src": icon("icon-maskable-192.png"), "sizes": "192x192",
+             "type": "image/png", "purpose": "maskable"},
+            {"src": icon("icon-maskable-512.png"), "sizes": "512x512",
+             "type": "image/png", "purpose": "maskable"},
+        ],
+    }
+    resp = jsonify(data)
+    resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@admin_bp.route("/sw.js")
+def pwa_service_worker():
+    """⚠️ لازم يتخدم من /admin/ باش نطاقو يغطي /admin/ كامل."""
+    path = os.path.join(current_app.static_folder, "js", "admin-sw.js")
+    with open(path, encoding="utf-8") as f:
+        body = f.read()
+    resp = current_app.response_class(body, mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache"          # التحديثات توصل بسرعة
+    resp.headers["Service-Worker-Allowed"] = "/admin/"
+    return resp
+
+
+@admin_bp.route("/offline")
+def pwa_offline():
+    return render_template("admin/offline.html")
+
+
 @admin_bp.route("/orders/<int:order_id>")
 @login_required
 def order_detail(order_id):
@@ -1947,9 +1992,20 @@ def order_detail(order_id):
     if not order.track_token:           # طلبية قديمة: نعمّرو رابط التتبّع
         order.ensure_track_token()
         db.session.commit()
+    # v190: إذا الزبون كتب كود فالملاحظة (وكاين فعلاً)، نقترحوه فالخانة
+    suggested_coupon = None
+    if order.customer_note and not order.coupon_code:
+        import re
+        tokens = {t.upper() for t in re.findall(r"[A-Za-z0-9][A-Za-z0-9\-_]{2,}",
+                                                order.customer_note)}
+        if tokens:
+            hit = Coupon.query.filter(Coupon.code.in_(tokens)).first()
+            suggested_coupon = hit.code if hit else None
+
     return render_template(
         "admin/order_detail.html",
         order=order,
+        suggested_coupon=suggested_coupon,
         status_labels=Order.STATUS_LABELS,
         products=products,
         prev_order=prev_o,
@@ -2122,6 +2178,94 @@ def order_item_add(order_id):
     flash(f"اتزاد «{label}» × {quantity} — المجموع الجديد {order.total_display}",
           "success")
     return redirect(url_for("admin.order_detail", order_id=order_id))
+
+
+@admin_bp.route("/orders/<int:order_id>/coupon", methods=["POST"])
+@login_required
+def order_apply_coupon(order_id):
+    """
+    يطبّق (ولا يحيّد) كود برومو على طلبية موجودة.
+
+    ⚠️ علاش؟ كاين زبائن ما يعرفوش يستعملوا خانة الكوبون فالموقع ويكتبو
+    الكود فملاحظة الطلبية. الأدمن يطبّقو هو من هنا.
+
+    ⚠️ عدّاد الاستعمال: نحسبو الكوبون الجديد، ونرجّعو القديم (إذا كان).
+    الزيادة ذرّية (UPDATE مشروط) كيما فـcreate_order — باش كوبون بحد
+    استعمال ما يتعداش الحد.
+    """
+    from sqlalchemy import update
+    from services.orders import find_coupon
+
+    back = redirect(url_for("admin.order_detail", order_id=order_id))
+    order = Order.query.get_or_404(order_id)
+
+    blocked = _guard_editable(order)
+    if blocked:
+        flash(blocked, "error")
+        return back
+
+    action = request.form.get("action", "apply")
+    old_code = order.coupon_code
+
+    def _release(code):
+        """يرجّع استعمالاً واحدًا للكوبون القديم (ما ينزلش تحت 0)."""
+        if not code:
+            return
+        db.session.execute(
+            update(Coupon).where(Coupon.code == code, Coupon.used_count > 0)
+            .values(used_count=Coupon.used_count - 1)
+        )
+
+    # ---------- تحييد ----------
+    if action == "remove":
+        if not old_code:
+            return back
+        _release(old_code)
+        order.coupon_code = None
+        order.discount_amount = 0
+        order.shipping_discount = 0
+        order.recalculate()
+        db.session.commit()
+        flash(f"اتحيّد الكود {old_code} — المجموع الجديد {order.total_display}",
+              "success")
+        return back
+
+    # ---------- تطبيق ----------
+    code = (request.form.get("code") or "").strip().upper()
+    if not code:
+        flash("اكتب كود البرومو", "error")
+        return back
+    if code == (old_code or "").upper():
+        flash("هاد الكود مطبّق من قبل", "info")
+        return back
+
+    coupon, reason = find_coupon(code, order.subtotal, phone=order.customer_phone)
+    if coupon is None:
+        flash(reason, "error")
+        return back
+
+    # نحجزو الاستعمال أولاً (ذرّي)، ونرجّعو القديم بعد ما ننجحو
+    stmt = update(Coupon).where(Coupon.id == coupon.id)
+    if coupon.usage_limit is not None:
+        stmt = stmt.where(Coupon.used_count < coupon.usage_limit)
+    stmt = stmt.values(used_count=Coupon.used_count + 1)
+    if db.session.execute(stmt).rowcount == 0:
+        db.session.rollback()
+        flash("هذا الكوبون استُعمل بالكامل", "error")
+        return back
+
+    _release(old_code)
+    order.coupon_code = coupon.code
+    # نصفّرو الخصم القديم، recalculate يحسب الجديد
+    order.discount_amount = 0
+    order.shipping_discount = 0
+    order.recalculate()
+    db.session.commit()
+
+    saved = (order.discount_amount or 0) + (order.shipping_discount or 0)
+    flash(f"تطبّق الكود {coupon.code} ({coupon.value_display}) — "
+          f"خصم {saved:,} دج، المجموع الجديد {order.total_display}", "success")
+    return back
 
 
 @admin_bp.route("/orders/<int:order_id>/shipping", methods=["POST"])
@@ -3506,7 +3650,36 @@ def _read_landing_form(data):
         "offer_ends_on": _parse_iso_date(data.get("offer_ends_on")),
         "stock_left": data.get("stock_left", type=int) or None,
         "layout": _pick(data.get("layout"), LandingPage.LAYOUTS, "split"),
+        # ---------- خانات إضافية فالفورم (v190) ----------
+        "custom_fields_json": _read_custom_fields(data),
     }
+
+
+def _read_custom_fields(data):
+    """
+    يقرا الخانات الإضافية من الفورم (صفوف موازية cf_label[] / cf_placeholder[]
+    / cf_required[]) ويرجّع JSON نظيف، أو None إذا ماكانش حتى خانة.
+
+    ⚠️ cf_required فيه "1" أو "0" لكل صف (select) — checkbox ما يصلحش هنا
+    لأنو المتصفح ما يبعثش غير المحدّدة، فالصفوف تتخلط.
+    """
+    import json
+    labels = data.getlist("cf_label")
+    holders = data.getlist("cf_placeholder")
+    requireds = data.getlist("cf_required")
+    fields = []
+    for i, label in enumerate(labels):
+        label = (label or "").strip()[:60]
+        if not label:
+            continue
+        fields.append({
+            "label": label,
+            "placeholder": (holders[i] if i < len(holders) else "").strip()[:80],
+            "required": (requireds[i] if i < len(requireds) else "1") != "0",
+        })
+        if len(fields) >= LandingPage.MAX_CUSTOM_FIELDS:
+            break
+    return json.dumps(fields, ensure_ascii=False) if fields else None
 
 
 def _parse_iso_date(value):

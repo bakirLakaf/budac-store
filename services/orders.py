@@ -210,6 +210,7 @@ def create_order(lines, customer_data, shipping_info, coupon=None, customer_note
                 unit_price=line.unit_price,
                 quantity=line.quantity,
                 image_filename=line.image_filename,
+                custom_text=getattr(line, "custom_text", None),
             ))
 
         if coupon:

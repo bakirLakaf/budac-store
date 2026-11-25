@@ -25,7 +25,7 @@ class CartLine:
     def __init__(self, key, kind, name, unit_price, quantity,
                  image_filename=None, variant_label=None, slug=None,
                  product_id=None, variant_id=None, offer_id=None,
-                 available_stock=None):
+                 available_stock=None, custom_text=None):
         self.key = key                  # المفتاح فالـsession
         self.kind = kind                # "product" أو "offer"
         self.name = name
@@ -38,6 +38,7 @@ class CartLine:
         self.variant_id = variant_id
         self.offer_id = offer_id
         self.available_stock = available_stock
+        self.custom_text = custom_text   # v190: خانات إضافية من صفحة الهبوط
 
     @property
     def line_total(self):

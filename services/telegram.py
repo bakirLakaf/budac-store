@@ -107,10 +107,11 @@ def notify_new_order(order):
     delivery_icon = "🏢" if getattr(order, "delivery_type", "") == "office" else "🏠"
     items_summary = ""
     try:
-        lines = [
-            f"  • {item.item_name} × {item.quantity}"
-            for item in (order.items or [])[:5]
-        ]
+        lines = []
+        for item in (order.items or [])[:5]:
+            lines.append(f"  • {item.item_name} × {item.quantity}")
+            for lbl, val in item.custom_lines:      # v190: خانات إضافية
+                lines.append(f"     ✍️ {lbl}: {val}" if lbl else f"     ✍️ {val}")
         if lines:
             extra = len(order.items) - 5
             if extra > 0:
