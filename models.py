@@ -1462,6 +1462,8 @@ class Order(db.Model):
             if item.variant_label:
                 name += f" ({item.variant_label})"
             lines.append(f"• {name} × {item.quantity}")
+            for lbl, val in item.custom_lines:      # v190: خانات إضافية
+                lines.append(f"  ✍️ {lbl}: {val}" if lbl else f"  ✍️ {val}")
 
             # ⚠️ `OrderItem` ما عندوش علاقة `product` — نجيبو المنتج
             # بالـid. وممكن يكون انمحى، فنتحققو قبل.
@@ -1582,7 +1584,24 @@ class OrderItem(db.Model):
     quantity = db.Column(db.Integer, nullable=False, default=1)
     image_filename = db.Column(db.String(255), nullable=True)
 
+    # v190: خانات إضافية عمّرها الزبون فصفحة الهبوط (مثلاً «الاسم اللي تحب نكتبو»).
+    # نص جاهز للعرض، سطر لكل خانة: «الاسم اللي تحب نكتبو: محمد».
+    # ⚠️ nullable: الطلبيات القديمة تبقى NULL، والهجرة التلقائية تزيد العمود.
+    custom_text = db.Column(db.Text, nullable=True)
+
     order = db.relationship("Order", back_populates="items")
+
+    @property
+    def custom_lines(self):
+        """الخانات الإضافية كقائمة (تسمية، قيمة) — للعرض فاللوحة."""
+        out = []
+        for raw in (self.custom_text or "").splitlines():
+            label, sep, value = raw.partition(":")
+            if sep:
+                out.append((label.strip(), value.strip()))
+            elif raw.strip():
+                out.append(("", raw.strip()))
+        return out
 
     @property
     def line_total(self):
@@ -1851,6 +1870,11 @@ class LandingPage(db.Model):
     stock_left = db.Column(db.Integer, nullable=True)       # الكمية المتبقية (اختياري)
     layout = db.Column(db.String(10), nullable=True, default="split")
 
+    # ---------- v190: خانات إضافية فالفورم ----------
+    # JSON: [{"label": "الاسم اللي تحب نكتبو", "placeholder": "", "required": true}]
+    # nullable: الصفحات القديمة = بلا خانات إضافية.
+    custom_fields_json = db.Column(db.Text, nullable=True)
+
     # ---------- إحصائيات ----------
     view_count = db.Column(db.Integer, nullable=False, default=0)
     order_count = db.Column(db.Integer, nullable=False, default=0)
@@ -1881,6 +1905,30 @@ class LandingPage(db.Model):
         ("blur", "كاملة + خلفية مموّهة", "كاملة، والجوانب تتعبّى بنفس الصورة"),
         ("cover", "ملء الإطار", "تملأ الإطار وممكن تتقصّ من الجوانب"),
     )
+
+    MAX_CUSTOM_FIELDS = 5
+
+    @property
+    def custom_fields(self):
+        """الخانات الإضافية كقائمة dict نظيفة (تحمي من JSON فاسد)."""
+        import json
+        try:
+            data = json.loads(self.custom_fields_json or "[]")
+        except (TypeError, ValueError):
+            return []
+        out = []
+        for item in data if isinstance(data, list) else []:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get("label") or "").strip()[:60]
+            if not label:
+                continue
+            out.append({
+                "label": label,
+                "placeholder": str(item.get("placeholder") or "").strip()[:80],
+                "required": bool(item.get("required", True)),
+            })
+        return out[: self.MAX_CUSTOM_FIELDS]
 
     @property
     def theme(self):

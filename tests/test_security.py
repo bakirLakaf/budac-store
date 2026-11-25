@@ -101,7 +101,10 @@ def test_all_admin_routes_require_login(app):
     ⚠️ اختبار وقائي: أي مسار أدمن جديد بلا @login_required
     يفشل هنا فورًا، بدل ما يوصل للإنتاج مفتوحًا.
     """
-    public = {"admin.login", "admin.logout", "admin.static"}
+    # v190: مسارات PWA مفتوحة عن قصد — المتصفح يطلبها بلا كوكيز، وما فيها
+    # حتى بيانات حساسة (manifest، service worker، صفحة «ما كاينش اتصال»).
+    public = {"admin.login", "admin.logout", "admin.static",
+              "admin.pwa_manifest", "admin.pwa_service_worker", "admin.pwa_offline"}
     client = app.test_client()
 
     unprotected = []

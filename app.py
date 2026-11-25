@@ -175,6 +175,15 @@ def create_app():
     from services.images import thumb_name
     app.jinja_env.filters["thumb"] = thumb_name
 
+    def _fromjson(value):
+        """يحوّل نص JSON لقائمة/قاموس (فارغ أو فاسد = قائمة فارغة)."""
+        import json
+        try:
+            return json.loads(value) if value else []
+        except (TypeError, ValueError):
+            return []
+    app.jinja_env.filters["fromjson"] = _fromjson
+
     def offer_url(offer):
         """رابط العرض: صفحة الهبوط إذا مربوطة، وإلا صفحة العرض العادية."""
         from flask import url_for
